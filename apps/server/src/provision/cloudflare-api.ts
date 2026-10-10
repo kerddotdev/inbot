@@ -11,7 +11,7 @@ export const DnsRecord = Schema.Struct({
   priority: Schema.optionalKey(Schema.Int),
   ttl: Schema.optionalKey(Schema.Int),
   proxied: Schema.optionalKey(Schema.Boolean),
-  comment: Schema.optionalKey(Schema.String),
+  comment: Schema.optionalKey(Schema.NullOr(Schema.String)),
 });
 export type DnsRecord = typeof DnsRecord.Type;
 export const Zone = Schema.Struct({

@@ -85,7 +85,7 @@ test("process adapter uses a private token file and terminates only its own chil
     expect(state.args).toEqual([
       "tunnel",
       "--no-autoupdate",
-      "--logformat",
+      "--output",
       "json",
       "--metrics",
       "127.0.0.1:0",

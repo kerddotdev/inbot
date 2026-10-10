@@ -223,7 +223,22 @@ test("paginates zones, DNS, queues and subscriptions and follows R2 cursors", as
     if (url.pathname.endsWith("/zones")) return response(second ? [zone] : [], info);
     if (url.pathname.endsWith("/dns_records"))
       return response(
-        second ? [{ id: "dns", type: "TXT", name: domain, content: "v=spf1 -all" }] : [],
+        second
+          ? [
+              {
+                id: "dns",
+                type: "TXT",
+                name: domain,
+                content: "v=spf1 -all",
+                proxiable: false,
+                proxied: false,
+                ttl: 1,
+                comment: null,
+                tags: [],
+                meta: {},
+              },
+            ]
+          : [],
         info,
       );
     if (url.pathname.endsWith("/queues"))

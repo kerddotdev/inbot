@@ -83,7 +83,13 @@ export function makeRemote(options: {
   const marker = (row: RemoteRow) => `inbot:${row.tunnel_name}`;
   const dnsMatches = (
     row: RemoteRow,
-    record: { name: string; type: string; content: string; proxied?: boolean; comment?: string },
+    record: {
+      name: string;
+      type: string;
+      content: string;
+      proxied?: boolean;
+      comment?: string | null;
+    },
   ) =>
     record.name === row.hostname &&
     record.type === "CNAME" &&
