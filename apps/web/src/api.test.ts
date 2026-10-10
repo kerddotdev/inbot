@@ -141,3 +141,181 @@ test("encoded identifiers and repeated sends retain the supplied idempotency key
     expect(new Headers(options?.headers).get("Idempotency-Key")).toBe("retry-key");
   }
 });
+
+const domain = {
+  domain_id: "domain/a",
+  domain: "agents.example.test",
+  inbound_enabled: true,
+  feedback_enabled: false,
+  tracking_enabled: false,
+  subdomains_enabled: false,
+  created_at: stamp,
+  updated_at: stamp,
+  status: "NOT_STARTED",
+  reason: "DNS preview is incomplete until apply.",
+  records: [
+    {
+      type: "TXT",
+      name: "key.agents.example.test",
+      value: "",
+      status: "MISSING",
+      reason: "Assigned during apply.",
+    },
+    {
+      type: "MX",
+      name: "agents.example.test",
+      value: "mx.example.test",
+      priority: 10,
+      status: "INVALID",
+      reason: "Wrong priority.",
+    },
+  ],
+};
+
+test("decodes domain records, paginates registrations, and rejects unknown verification states", async () => {
+  const fetcher = vi
+    .fn<typeof fetch>()
+    .mockResolvedValueOnce(json({ count: 1, domains: [domain], next_page_token: "next/+" }))
+    .mockResolvedValueOnce(json({ count: 0, domains: [] }))
+    .mockResolvedValueOnce(json(domain))
+    .mockResolvedValueOnce(json({ ...domain, status: "SENT" }));
+  const client = new ApiClient(fetcher);
+  expect(await client.domains(signal())).toHaveLength(1);
+  expect(fetcher.mock.calls[1]?.[0]).toBe("/v0/domains?limit=50&page_token=next%2F%2B");
+  expect(await client.domain(domain.domain_id, signal())).toEqual(domain);
+  await expect(client.domain(domain.domain_id)).rejects.toMatchObject({
+    code: "service_unavailable",
+  });
+});
+
+test("verify accepts an empty 200 then retrieves observed state with session CSRF", async () => {
+  const fetcher = vi
+    .fn<typeof fetch>()
+    .mockResolvedValueOnce(
+      json(
+        { setup_required: false, authenticated: true, locked: false },
+        { headers: { "X-Inbot-CSRF": "csrf" } },
+      ),
+    )
+    .mockResolvedValueOnce(new Response(null, { status: 200 }))
+    .mockResolvedValueOnce(
+      json({
+        ...domain,
+        status: "VERIFYING",
+        reason: "Waiting for the encrypted self-test message.",
+      }),
+    );
+  const client = new ApiClient(fetcher);
+  await client.status();
+  expect(await client.verifyDomain(domain.domain_id)).toMatchObject({
+    status: "VERIFYING",
+    reason: "Waiting for the encrypted self-test message.",
+  });
+  expect(fetcher.mock.calls.slice(1).map(([path, options]) => [path, options?.method])).toEqual([
+    ["/v0/domains/domain%2Fa/verify", "POST"],
+    ["/v0/domains/domain%2Fa", "GET"],
+  ]);
+  expect(new Headers(fetcher.mock.calls[1]?.[1]?.headers).get("X-Inbot-CSRF")).toBe("csrf");
+});
+
+test("domain actions preserve transport and action-required fixes without claiming success", async () => {
+  const wire = {
+    name: "ProvisionError",
+    code: "action_required",
+    message: "Apex DNS changed.",
+    fix: "Restore the recorded snapshot.",
+  };
+  const fetcher = vi
+    .fn<typeof fetch>()
+    .mockResolvedValueOnce(json(wire, { status: 409 }))
+    .mockResolvedValueOnce(
+      json(
+        {
+          ...wire,
+          code: "service_unavailable",
+          message: "Transport is not configured.",
+          fix: "Configure Cloudflare transport.",
+        },
+        { status: 503 },
+      ),
+    );
+  const client = new ApiClient(fetcher);
+  await expect(client.applyDomain(domain.domain_id)).rejects.toMatchObject({
+    code: wire.code,
+    message: wire.message,
+    fix: wire.fix,
+  });
+  await expect(client.createDomain({ domain: domain.domain })).rejects.toMatchObject({
+    code: "service_unavailable",
+    fix: "Configure Cloudflare transport.",
+  });
+  expect(fetcher.mock.calls).toHaveLength(2);
+});
+
+test("zone files are authenticated blobs and use the same error and session-expiry decoding", async () => {
+  const fetcher = vi
+    .fn<typeof fetch>()
+    .mockResolvedValueOnce(
+      new Response("; BIND export\n", { headers: { "Content-Type": "text/plain; charset=utf-8" } }),
+    )
+    .mockResolvedValueOnce(
+      json(
+        {
+          name: "Unauthorized",
+          code: "unauthorized",
+          message: "Session expired.",
+          fix: "Sign in again.",
+        },
+        { status: 401 },
+      ),
+    )
+    .mockResolvedValueOnce(
+      new Response("<html>Sign in</html>", { headers: { "Content-Type": "text/html" } }),
+    );
+  const client = new ApiClient(fetcher);
+  const listener = vi.fn();
+  client.subscribeSession(listener);
+  expect(await (await client.domainZoneFile(domain.domain_id)).text()).toBe("; BIND export\n");
+  expect(fetcher.mock.calls[0]?.[1]).toMatchObject({
+    credentials: "same-origin",
+    cache: "no-store",
+  });
+  await expect(client.domainZoneFile(domain.domain_id)).rejects.toMatchObject({
+    code: "unauthorized",
+    fix: "Sign in again.",
+  });
+  expect(listener).toHaveBeenCalledExactlyOnceWith("unauthorized");
+  await expect(client.domainZoneFile(domain.domain_id)).rejects.toMatchObject({
+    code: "service_unavailable",
+  });
+});
+
+test("decodes provisioning plans with warnings and unknown records, and preserves missing-route errors", async () => {
+  const plan = {
+    domain: domain.domain,
+    steps: ["Verify token", "Create sending subdomain"],
+    warnings: ["DNS preview is incomplete."],
+    records: domain.records,
+  };
+  const fetcher = vi
+    .fn<typeof fetch>()
+    .mockResolvedValueOnce(json(plan))
+    .mockResolvedValueOnce(
+      json(
+        {
+          name: "InbotError",
+          code: "not_found",
+          message: "The requested route was not found.",
+          fix: "Use a declared /v0 API route.",
+        },
+        { status: 404 },
+      ),
+    );
+  const client = new ApiClient(fetcher);
+  expect(await client.domainPlan(domain.domain_id)).toEqual(plan);
+  expect(fetcher.mock.calls[0]?.[0]).toBe("/v0/domains/domain%2Fa/plan");
+  await expect(client.domainPlan(domain.domain_id)).rejects.toMatchObject({
+    code: "not_found",
+    message: "The requested route was not found.",
+  });
+});

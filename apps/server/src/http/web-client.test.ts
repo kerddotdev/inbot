@@ -81,6 +81,25 @@ test("browser client uses real owner sessions for mail, keys, approvals, transpo
     await reloaded.reject(first, "Synthetic rejection");
     expect(await reloaded.pendingDrafts(signal())).toHaveLength(0);
     await api.run(api.transport.set({ account_id: "fake", api_token: "fake" }));
+    const registered = await reloaded.createDomain({ domain: "agents.example.test" });
+    expect(registered.status).toBe("NOT_STARTED");
+    expect((await reloaded.domains(signal()))[0]?.domain_id).toBe(registered.domain_id);
+    expect(await reloaded.domain(registered.domain_id, signal())).toEqual(registered);
+    expect(await (await reloaded.domainZoneFile(registered.domain_id)).text()).toContain(" IN MX ");
+    expect(
+      await reloaded.updateDomain(registered.domain_id, { inbound_enabled: true }),
+    ).toMatchObject({ inbound_enabled: true });
+    await expect(
+      reloaded.updateDomain(registered.domain_id, { tracking_enabled: true }),
+    ).rejects.toMatchObject({ code: "validation_error" });
+    expect((await reloaded.applyDomain(registered.domain_id)).status).toBe("VERIFYING");
+    expect((await reloaded.verifyDomain(registered.domain_id)).status).toBe("VERIFYING");
+    await expect(reloaded.deleteDomain(registered.domain_id)).rejects.toMatchObject({
+      code: "validation_error",
+    });
+    expect((await reloaded.teardownDomain(registered.domain_id)).status).toBe("NOT_STARTED");
+    await reloaded.deleteDomain(registered.domain_id);
+    expect(await reloaded.domains(signal())).toEqual([]);
     const scheduled = await api.request("/v0/inboxes/agent@example.test/drafts", {
       token: created.api_key,
       method: "POST",

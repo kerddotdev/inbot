@@ -5,6 +5,7 @@ import * as Threads from "@inbot/contracts/src/threads.js";
 import * as Messages from "@inbot/contracts/src/messages.js";
 import * as Keys from "@inbot/contracts/src/api-keys.js";
 import * as Drafts from "@inbot/contracts/src/drafts.js";
+import * as Domains from "@inbot/contracts/src/domains.js";
 import { ErrorResponse, type ErrorCode } from "@inbot/contracts/src/errors.js";
 
 export class ApiError extends Error {
@@ -97,22 +98,7 @@ export class ApiClient {
       );
     }
     if (!response.ok) {
-      let wire: ErrorResponse;
-      try {
-        wire = Schema.decodeUnknownSync(ErrorResponse)(body);
-      } catch {
-        throw new ApiError(
-          "service_unavailable",
-          "The service returned an invalid error response.",
-          "Retry the request.",
-        );
-      }
-      const publicAuth = /\/owner\/(status|setup|login|login-links\/redeem)$/.test(path);
-      if (!publicAuth && (wire.code === "unauthorized" || wire.code === "locked")) {
-        this.csrfToken = undefined;
-        for (const listener of this.sessionListeners) listener(wire.code);
-      }
-      throw new ApiError(wire.code, wire.message, wire.fix);
+      this.throwResponseError(path, body);
     }
     try {
       const value = Schema.decodeUnknownSync(schema)(body);
@@ -126,6 +112,25 @@ export class ApiClient {
         "Update the UI and service together, then retry.",
       );
     }
+  }
+
+  private throwResponseError(path: string, body: unknown): never {
+    let wire: ErrorResponse;
+    try {
+      wire = Schema.decodeUnknownSync(ErrorResponse)(body);
+    } catch {
+      throw new ApiError(
+        "service_unavailable",
+        "The service returned an invalid error response.",
+        "Retry the request.",
+      );
+    }
+    const publicAuth = /\/owner\/(status|setup|login|login-links\/redeem)$/.test(path);
+    if (!publicAuth && (wire.code === "unauthorized" || wire.code === "locked")) {
+      this.csrfToken = undefined;
+      for (const listener of this.sessionListeners) listener(wire.code);
+    }
+    throw new ApiError(wire.code, wire.message, wire.fix);
   }
 
   status = (signal?: AbortSignal) =>
@@ -213,6 +218,69 @@ export class ApiClient {
 
   revokeKey = (id: string) =>
     this.request(`/v0/api-keys/${segment(id)}`, Schema.Undefined, { method: "DELETE" });
+
+  domains = (signal: AbortSignal) =>
+    allPages(
+      (token) =>
+        this.request(`/v0/domains${pageQuery(token)}`, Domains.ListDomainsResponse, { signal }),
+      (page) => page.domains,
+    );
+
+  domain = (id: string, signal?: AbortSignal) =>
+    this.request(`/v0/domains/${segment(id)}`, Domains.Domain, signal ? { signal } : {});
+
+  domainPlan = (id: string) =>
+    this.request(`/v0/domains/${segment(id)}/plan`, Domains.ProvisionPlan);
+
+  createDomain = (body: Domains.CreateDomainRequest) =>
+    this.request("/v0/domains", Domains.Domain, { method: "POST", body });
+
+  updateDomain = (id: string, body: Domains.UpdateDomainRequest) =>
+    this.request(`/v0/domains/${segment(id)}`, Domains.Domain, { method: "PATCH", body });
+
+  applyDomain = (id: string) =>
+    this.request(`/v0/domains/${segment(id)}/apply`, Domains.Domain, { method: "POST" });
+
+  async verifyDomain(id: string) {
+    await this.request(`/v0/domains/${segment(id)}/verify`, Schema.Undefined, { method: "POST" });
+    return this.domain(id);
+  }
+
+  teardownDomain = (id: string) =>
+    this.request(`/v0/domains/${segment(id)}/teardown`, Domains.Domain, { method: "POST" });
+
+  deleteDomain = (id: string) =>
+    this.request(`/v0/domains/${segment(id)}`, Schema.Undefined, { method: "DELETE" });
+
+  async domainZoneFile(id: string) {
+    const path = `/v0/domains/${segment(id)}/zone-file`;
+    const response = await this.fetcher(path, {
+      method: "GET",
+      headers: { Accept: "text/plain" },
+      credentials: "same-origin",
+      cache: "no-store",
+    });
+    if (!response.ok) {
+      let body: unknown;
+      try {
+        body = await response.json();
+      } catch {
+        throw new ApiError(
+          "service_unavailable",
+          "The service returned an invalid error response.",
+          "Retry the request.",
+        );
+      }
+      this.throwResponseError(path, body);
+    }
+    if (!response.headers.get("Content-Type")?.startsWith("text/plain"))
+      throw new ApiError(
+        "service_unavailable",
+        "The service did not return a zone file.",
+        "Update the UI and service together, then retry.",
+      );
+    return response.blob();
+  }
 
   pendingDrafts = async (signal: AbortSignal) => {
     const drafts = await allPages(
