@@ -1,12 +1,18 @@
 import { createServer } from "node:http";
 import { NodeHttpServer } from "@effect/platform-node";
-import { Cause, Effect, Layer, Result, Schema } from "effect";
+import { Cause, Context, Effect, Layer, Redacted, Result, Schema } from "effect";
 import { HttpRouter, HttpServerError, HttpServerRequest, HttpServerResponse } from "effect/http";
 import { HttpApiBuilder, HttpApiError } from "effect/http-api";
 import { ApiKeys } from "../auth/api-keys.js";
 import { OwnerAuth } from "../auth/owner.js";
 import { Home } from "../home.js";
 import { Mailbox } from "../mailbox/mailbox.js";
+import { AgentOperations } from "../agent/operations.js";
+import { Outbox } from "../outbound/outbox.js";
+import { TransportConfig } from "../outbound/transport-config.js";
+import { startOutboxLoop } from "../outbound/runtime.js";
+import { mcpRoutes } from "../mcp/server.js";
+import { authenticate } from "./middleware.js";
 import { ServerApi } from "./api.js";
 import { DownloadRoutes, Downloads } from "./downloads.js";
 import { errorResponse, unavailable, wireError } from "./errors.js";
@@ -14,7 +20,11 @@ import { HandlersLive } from "./handlers.js";
 import { AuthLive, OwnerOnlyLive, WireErrorsLive } from "./middleware.js";
 
 export function startHttpServer(
-  options: { readonly port?: number; readonly ready?: (url: string) => void } = {},
+  options: {
+    readonly port?: number;
+    readonly ready?: (url: string) => void;
+    readonly runOutbox?: boolean;
+  } = {},
 ) {
   return Effect.gen(function* () {
     const port = yield* Schema.decodeUnknownEffect(
@@ -23,6 +33,8 @@ export function startHttpServer(
     const home = yield* Home;
     const mailbox = yield* Mailbox;
     const keys = yield* ApiKeys;
+    const outbox = yield* Outbox;
+    const config = yield* TransportConfig;
     const nodeServer = createServer();
     const server = yield* NodeHttpServer.make(() => nodeServer, {
       host: "127.0.0.1",
@@ -37,16 +49,22 @@ export function startHttpServer(
       Layer.succeed(Home, home),
       Layer.succeed(Mailbox, mailbox),
       Layer.succeed(ApiKeys, keys),
+      Layer.succeed(Outbox, outbox),
+      Layer.succeed(TransportConfig, config),
       Downloads.layer(url),
       OwnerAuth.layer(url).pipe(Layer.provide(Layer.succeed(Home, home))),
     );
+    const context = yield* Layer.build(services);
+    const owner = Context.get(context, OwnerAuth);
+    const shared = AgentOperations.Live.pipe(Layer.provideMerge(Layer.succeedContext(context)));
     const handlers = HandlersLive.pipe(
       Layer.provide(Layer.mergeAll(AuthLive, OwnerOnlyLive, WireErrorsLive)),
     );
     const routes = Layer.mergeAll(
       HttpApiBuilder.layer(ServerApi).pipe(Layer.provide(handlers)),
       DownloadRoutes,
-    ).pipe(Layer.provide(services));
+      mcpRoutes(url),
+    ).pipe(Layer.provide(shared));
     const app = yield* HttpRouter.toHttpEffect(routes).pipe(
       Effect.provideService(HttpRouter.RouterConfig, { maxParamLength: 8192 }),
     );
@@ -61,6 +79,11 @@ export function startHttpServer(
             "Use the server's own origin for browser requests.",
           ),
         );
+      if (request.url.split("?")[0] === "/mcp") {
+        const bearer = request.headers.authorization?.match(/^Bearer\s+(.+)$/i)?.[1] ?? "";
+        const principal = yield* authenticate(Redacted.make(bearer), owner, keys);
+        if (HttpServerResponse.isHttpServerResponse(principal)) return principal;
+      }
       return yield* app.pipe(
         Effect.catchCause((cause) => {
           const error =
@@ -126,7 +149,8 @@ export function startHttpServer(
       }),
     );
     yield* server.serve(guarded);
+    const runner = options.runOutbox === false ? undefined : yield* startOutboxLoop();
     yield* Effect.sync(() => options.ready?.(url));
-    return { url };
+    return { url, runner };
   }).pipe(Effect.provide(NodeHttpServer.layerHttpServices));
 }

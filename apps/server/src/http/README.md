@@ -38,14 +38,22 @@ override are 4.0.2, matching the installed Effect version.
 - Inboxes: list, search, create, get, update, delete.
 - Threads: inbox and organization list, search, get, update, delete, attachment.
 - Messages: list, search, get, update, delete, batch-get, batch-update, raw,
-  attachment.
+  attachment, send, reply, reply-all, forward.
 - API keys: owner-only organization CRUD and inbox-scoped create, list, update,
   delete. The contract has no inbox-scoped key-get route.
 
-Send, reply, reply-all, forward, drafts, lists, webhooks, and domains return
-HTTP 501 `not_supported` after authentication and authorization. Validated input
-is still required. No mail is sent, no Cloudflare resource is provisioned, and
-there is no tunnel, MCP server, web UI, or event stream in this layer.
+Send endpoints return `{ message_id, thread_id }` after the outbox transaction
+commits, with the message initially `queued`. The `idempotency-key` header is
+passed to the durable inbox-scoped replay ledger. Provider acceptance later
+changes the label to `sent`; it does not prove delivery. No configured transport
+returns 503 `service_unavailable` with fix `Configure the Cloudflare mail transport`
+and does not enqueue. Transport settings have only an internal service for now.
+
+Drafts, lists, webhooks, and domains return HTTP 501 `not_supported` after
+authentication and authorization. Validated input is still required. Provisioning,
+tunnels, the web UI, OAuth, and event streams remain planned. The same server
+exposes authenticated streamable HTTP MCP at `/mcp`; see
+[the MCP reference](../mcp/README.md).
 
 Raw and attachment endpoints return the declared metadata and a signed
 five-minute URL under `/v0/downloads/:token`. Downloads still require a bearer
@@ -84,7 +92,16 @@ corresponding `label_*_read` permission is required. Without it, the respective
 `include_*` flag is treated as false, direct resources return 404, and batch-get
 omits hidden messages. Thread checks cover the union of member labels.
 Search retains Mailbox's existing behavior of excluding all hidden labels.
-No send-policy side effects exist yet because every send operation is unsupported.
+Sending requires `message_send` for send/forward or `message_reply` for replies.
+Parent-based operations also require `message_read` and a visible parent. Owners
+always send directly. Agent `read_only` grants fail with 403 `missing_permission`;
+`approval` grants fail with 403 `approval_required` and fix `Drafts and owner approval
+arrive in a later release`. No draft or queued message is created. Approval will
+create pending drafts when the draft and owner approval workflow is implemented.
+
+REST and MCP use `AgentOperations`, the shared authorization helpers, and the
+same Mailbox/Outbox methods. The middleware checks contract permission annotations
+through that same authorization function. Scope remains checked before permissions.
 
 Browser requests with an `Origin` different from the server's exact origin,
 including `null`, return 403. Requests without `Origin` and same-origin requests
@@ -95,16 +112,19 @@ are allowed; both still need authentication. Responses use `no-store`.
 Errors use `{ name, code, message, fix }`, with no Effect `_tag`, and the status
 from the contracts' `ErrorStatus` mapping:
 
-| Failure                                                             | Code                  | HTTP status |
-| ------------------------------------------------------------------- | --------------------- | ----------- |
-| Request schema, JSON syntax, or content type                        | `validation_error`    | 400         |
-| Missing, invalid, expired, or deleted bearer key                    | `unauthorized`        | 401         |
-| Missing endpoint permission, owner-only route, or foreign Origin    | `missing_permission`  | 403         |
-| Missing resource, excluded scope/label, or invalid/expired download | `not_found`           | 404         |
-| Duplicate mailbox identity                                          | `already_exists`      | 409         |
-| Invalid or mismatched pagination token                              | `page_token_stale`    | 409         |
-| Unimplemented capability                                            | `not_supported`       | 501         |
-| Storage failure, unexpected defect, or response encoding failure    | `service_unavailable` | 503         |
+| Failure                                                             | Code                   | HTTP status |
+| ------------------------------------------------------------------- | ---------------------- | ----------- |
+| Request schema, JSON syntax, or content type                        | `validation_error`     | 400         |
+| Missing, invalid, expired, or deleted bearer key                    | `unauthorized`         | 401         |
+| Missing endpoint permission, owner-only route, or foreign Origin    | `missing_permission`   | 403         |
+| Missing resource, excluded scope/label, or invalid/expired download | `not_found`            | 404         |
+| Approval send policy                                                | `approval_required`    | 403         |
+| Conflicting send replay                                             | `idempotency_conflict` | 409         |
+| Invalid composition or attachment size                              | `payload_too_large`    | 413         |
+| Duplicate mailbox identity                                          | `already_exists`       | 409         |
+| Invalid or mismatched pagination token                              | `page_token_stale`     | 409         |
+| Unimplemented capability                                            | `not_supported`        | 501         |
+| Storage failure, unexpected defect, or response encoding failure    | `service_unavailable`  | 503         |
 
 `HttpApiMiddleware.layerSchemaErrorTransform` maps `HttpApiSchemaError` for
 params, headers, query, and payload to 400, naming the affected request part
@@ -113,3 +133,10 @@ The outer server guard catches remaining failures and replaces Effect's plain
 415 response with a 400 wire error. Mailbox typed failures keep their contract
 code and actionable fix. Unexpected details, mail content, and credentials are
 never returned or logged.
+
+The outbox loop belongs to the server's Effect scope. It checks configuration and
+runs `processDue()` every 2 seconds after processing work, backing off to 30 seconds
+when idle or unconfigured. Settings are reread on each dispatch. Shutdown interrupts
+the runner before releasing its resources; `serve` observes runner failures and
+stops rather than leaving a broken background task. Integration tests disable the
+automatic loop when they need to call the fake provider's `processDue()` explicitly.

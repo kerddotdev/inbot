@@ -2,8 +2,10 @@
 
 The outbound service composes contract request schemas, persists mail and an
 outbox in the encrypted Store, sends through an injected Effect provider, and
-applies delivery events. It is not wired to a runnable service or any public
-transport. Tests use fake providers and fake fetch only. No dependency was added.
+applies delivery events. REST send/reply/reply-all/forward handlers and the MCP
+send tools now enqueue through the same authorized operations. `serve` runs a
+scoped adaptive outbox loop with the configured Cloudflare provider. Tests use
+fake providers and fake fetch only; no real delivery was tested or dependency added.
 
 ## Service API
 
@@ -24,10 +26,14 @@ from `packages/contracts/src/outbound.ts`:
 ```
 
 These wrappers are service inputs, not new REST wire formats. Parents are read
-only from the specified inbox. Public adapters must enforce grants, inbox scope,
-`message_send`, parent `message_read`, and send policies before calling this
-service. Approval requests must become drafts; read-only grants cannot enqueue.
-Those authentication and policy adapters are still unimplemented.
+only from the specified inbox. `AgentOperations` enforces grants, inbox scope, `message_send` for send/forward
+or `message_reply` for replies, parent `message_read`, hidden labels, and send
+policies before enqueueing. Owners use direct sending. `read_only` returns
+`missing_permission`; `approval` returns `approval_required` with fix `Drafts and
+owner approval arrive in a later release`. Both are HTTP 403 and create nothing.
+Approval will create pending drafts once drafts and owner approval are implemented.
+Without configured transport, adapters return 503 `service_unavailable` with fix
+`Configure the Cloudflare mail transport`, without enqueueing.
 
 `get(inbox_id, message_id)` returns the typed `OutboxEntry`, including state,
 attempts, scheduling, provider id, and `last_error_code`. `processDue()` recovers
@@ -36,6 +42,12 @@ Paused inboxes remain queued until resumed. `start(interval_ms = 1000)` returns
 a scoped, interruptible Effect fiber. An idle iteration performs indexed queries
 without loading bodies or calling the provider. Storage failures end the fiber;
 its owner must observe it, rather than silently continuing a broken store.
+The server instead uses `startOutboxLoop()`: 2 seconds after processing work,
+30 seconds while idle or unconfigured. No provider call occurs without due mail.
+The server scope interrupts it on shutdown, and `serve` observes its failures.
+Configuration is reread each iteration and before each provider dispatch; clearing
+it suspends processing. A clear during an active batch leaves unaccepted attempts
+retryable. It cannot recall mail already handed to the provider.
 
 ## Composition and size
 
@@ -169,18 +181,20 @@ Source: [event subscriptions](https://developers.cloudflare.com/email-service/pl
 
 ## Migration and integration boundary
 
-This branch uses migration **3 locally**, as explicitly permitted by the task:
-`migrate` requires contiguous versions and rejects holes. Its strictness is
-unchanged. Integration with the other agent's migration 3 must renumber this
-outbox migration to **4** and append it after that migration. Databases created
-with this branch's local version 3 are not interchangeable with databases using
-the other migration 3; no real home was accessed or upgraded.
+The contiguous migration list uses **4** for the durable outbox and **5** for the
+singleton Cloudflare transport settings. `TransportConfig.Live` depends on Store
+and exposes only `get()`, `set({ account_id, api_token })`, and `clear()`. Settings
+and the token reside inside the encrypted database, including its encrypted WAL.
+Reads wrap the token in `Redacted`; no token is logged. There is no transport HTTP
+route, MCP tool, or owner UI yet. A later provisioning unit will add owner setup.
+`ConfiguredProvider` reads those settings to select the existing live Cloudflare
+adapter. Test servers inject a fake provider instead.
 
-Contract, service, events, inbox boundaries, crash states, and documentation
-apply to this change. REST, MCP, CLI, web, tunnel allowlists, grants/send-policy
-middleware, and delivery event publishing remain unimplemented adapters. No
-owner-only operation was added to an agent surface. `skills/inbot` does not yet
-exist in this worktree, so no nonexistent command guidance was created.
+The existing schemas, service, REST, MCP, permissions, idempotency, reverse states,
+and documentation apply. Delivery events still apply through the existing internal
+service; Queue pulling, event publishing, CLI resource commands, the web UI, and
+tunnel allowlists remain planned. `skills/inbot` does not exist, so no guidance for
+nonexistent commands was added. No real home or cloud resource was accessed.
 
 ## Questions requiring an authorized real-account check
 

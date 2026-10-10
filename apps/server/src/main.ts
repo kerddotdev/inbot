@@ -2,13 +2,16 @@ import { realpath } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { Effect, Layer } from "effect";
+import { Effect, Fiber, Layer } from "effect";
 import { ApiKeys } from "./auth/api-keys.js";
 import { Home, resolveHome, type HomeOptions } from "./home.js";
 import { startHttpServer } from "./http/server.js";
 import { KeychainStore } from "./keychain.js";
 import { KeyManager } from "./keys.js";
 import { Mailbox } from "./mailbox/mailbox.js";
+import { Outbox } from "./outbound/outbox.js";
+import { TransportConfig } from "./outbound/transport-config.js";
+import { ConfiguredProvider } from "./outbound/runtime.js";
 import { Store } from "./store.js";
 
 function options():
@@ -94,14 +97,23 @@ async function serve() {
       const dek = yield* unlock;
       yield* Effect.addFinalizer(() => Effect.sync(() => dek.fill(0)));
       const store = Store.layer(dek);
-      const services = Layer.mergeAll(Mailbox.Live, ApiKeys.Live).pipe(Layer.provide(store));
+      const config = TransportConfig.Live.pipe(Layer.provideMerge(store));
+      const outbound = Outbox.Live.pipe(
+        Layer.provide(ConfiguredProvider),
+        Layer.provideMerge(config),
+      );
+      const services = Layer.mergeAll(Mailbox.Live, ApiKeys.Live, outbound).pipe(
+        Layer.provide(store),
+      );
       yield* Effect.gen(function* () {
-        yield* startHttpServer({
+        const server = yield* startHttpServer({
           port: input.port,
           ready: (url) =>
             process.stdout.write(`${JSON.stringify({ event: "server.ready", url })}\n`),
         });
-        yield* stopped;
+        yield* server.runner === undefined
+          ? stopped
+          : Effect.raceFirst(stopped, Fiber.join(server.runner));
       }).pipe(Effect.provide(services));
     }).pipe(Effect.provide(manager), Effect.scoped),
   );
