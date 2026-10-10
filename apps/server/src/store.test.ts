@@ -539,13 +539,16 @@ test("advances migrations transactionally and repeated migrations preserve data"
     withStore(home, dek, (store) =>
       Effect.gen(function* () {
         const database = yield* store.use((connection) => connection);
-        expect(database.pragma("user_version", { simple: true })).toBe(1);
+        expect(database.pragma("user_version", { simple: true })).toBe(migrations.length);
         const ordered = [
           ...migrations,
-          { version: 2, sql: "CREATE TABLE migration_probe (value TEXT NOT NULL)" },
+          {
+            version: migrations.length + 1,
+            sql: "CREATE TABLE migration_probe (value TEXT NOT NULL)",
+          },
         ];
         yield* migrate(database, ordered);
-        expect(database.pragma("user_version", { simple: true })).toBe(2);
+        expect(database.pragma("user_version", { simple: true })).toBe(migrations.length + 1);
         database.prepare("INSERT INTO migration_probe (value) VALUES (?)").run("keep-me");
         yield* migrate(database, ordered);
         expect(database.prepare("SELECT value FROM migration_probe").all()).toEqual([
@@ -570,12 +573,12 @@ test("rolls back a failed migration batch including its schema version", async (
         const failure = yield* Effect.flip(
           migrate(database, [
             ...migrations,
-            { version: 2, sql: "CREATE TABLE rolled_back (value TEXT)" },
-            { version: 3, sql: "INVALID SQL" },
+            { version: migrations.length + 1, sql: "CREATE TABLE rolled_back (value TEXT)" },
+            { version: migrations.length + 2, sql: "INVALID SQL" },
           ]),
         );
         expect(failure).toBeInstanceOf(DatabaseError);
-        expect(database.pragma("user_version", { simple: true })).toBe(1);
+        expect(database.pragma("user_version", { simple: true })).toBe(migrations.length);
         expect(
           database.prepare("SELECT name FROM sqlite_master WHERE name = ?").all("rolled_back"),
         ).toEqual([]);
@@ -591,7 +594,7 @@ test("refuses a database from a newer schema version", async ({ home, keychain }
   await Effect.runPromise(
     withStore(home, dek, (store) =>
       store.use((database) => {
-        database.pragma("user_version = 2");
+        database.pragma(`user_version = ${migrations.length + 1}`);
       }),
     ),
   );

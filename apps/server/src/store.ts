@@ -3,6 +3,7 @@ import { join } from "node:path";
 import Database from "better-sqlite3-multiple-ciphers";
 import { Context, Effect, Layer, Schema } from "effect";
 import { Home } from "./home.js";
+import { mailboxSchema } from "./mailbox/schema.js";
 
 export class DatabaseKeyInvalid extends Schema.TaggedError<DatabaseKeyInvalid>()(
   "DatabaseKeyInvalid",
@@ -30,6 +31,7 @@ export const migrations: readonly Migration[] = [
     version: 1,
     sql: "CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)",
   },
+  { version: 2, sql: mailboxSchema },
 ];
 
 export function migrate(database: Database.Database, ordered: readonly Migration[] = migrations) {
