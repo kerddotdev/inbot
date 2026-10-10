@@ -5,6 +5,7 @@ import { Context, Effect, Layer, Schema } from "effect";
 import { Home } from "./home.js";
 import { apiKeysSchema } from "./auth/schema.js";
 import { mailboxSchema } from "./mailbox/schema.js";
+import { outboxSchema } from "./outbound/schema.js";
 
 export class DatabaseKeyInvalid extends Schema.TaggedError<DatabaseKeyInvalid>()(
   "DatabaseKeyInvalid",
@@ -34,6 +35,7 @@ export const migrations: readonly Migration[] = [
   },
   { version: 2, sql: mailboxSchema },
   { version: 3, sql: apiKeysSchema },
+  { version: 4, sql: outboxSchema },
 ];
 
 export function migrate(database: Database.Database, ordered: readonly Migration[] = migrations) {

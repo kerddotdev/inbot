@@ -53,3 +53,9 @@ They do not implement those resource families. Event types are limited to the
 supported mail and domain events. Open tracking requests (`track_opens`) and
 tracking events are not modeled. Providers, domains, keys, and webhook secrets
 are not provisioned by this package.
+
+`outbound.ts` adds shared service-only `OutboundRequest` wrappers, `OutboxEntry`,
+and `DeliveryEvent` schemas. The wrappers reuse the existing requests
+and do not change REST wire formats. The outbound service persists replay keys
+and acceptance state, composes mail, and applies provider events; public handlers,
+grants/send policies, and webhook/WebSocket publication remain unimplemented.
