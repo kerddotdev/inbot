@@ -3,7 +3,9 @@
 `inbot` is an authenticated REST client. It uses the shared endpoint declarations
 and validates JSON with their schemas. Resource commands never open the database.
 `inbot serve` imports the existing server entry point and preserves its flags,
-startup, and shutdown behavior.
+startup, and shutdown behavior. Packaged commands default to production flavor;
+packaged `serve` also defaults `--web-root` to the included UI. Explicit flags
+override both defaults.
 
 ## Run
 
@@ -21,6 +23,29 @@ package is linked or installed, use `inbot` directly. In a source checkout, use
 `pnpm start:cli` or `node dist/apps/cli/src/main.js` with the same arguments.
 The compiled entry imports `dist/apps/server/src/main.js` for `serve`; runtime
 dependencies resolve from the root package. No additional dependency is needed.
+
+## Packaged installation
+
+Release archives include Node 24.21.0, production dependencies with the target's
+native prebuilds, the server, CLI, inbound Worker bundle, and owner UI. No external
+Node runtime is required. Releases have not been published yet. See the root
+[install and packaging guide](../../README.md#install) for the checksum-verifying
+`install.sh` and `install.ps1`, supported platforms and local verification.
+
+```sh
+inbot serve --init
+# Later starts:
+inbot serve
+# Override package defaults when needed:
+inbot serve --home /absolute/path/to/home --web-root /absolute/path/to/ui
+```
+
+Packaged owner commands use `~/.inbot` by default. Source-checkout commands still
+use development flavor and `~/.inbot-dev`. Use explicit `--flavor development`
+with `INBOT_TEST_MEMORY_KEYCHAIN=1` and a temporary `--home` in smoke tests.
+No installer registers a service; `service install|uninstall|status` remains
+planned. Keep the complete extracted package intact. The Unix installer uses a
+shim, since directly symlinking the package-relative shell launcher is unsupported.
 
 ## Connect
 
