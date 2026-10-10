@@ -59,7 +59,7 @@ and does not enqueue. Transport settings have only an internal service for now.
 
 Lists and webhooks return HTTP 501 `not_supported` after
 authentication and authorization. Validated input is still required. Tunnels,
-owner UI API wiring, OAuth, and event streams remain planned. The same server
+OAuth, and event streams remain planned. The same server
 exposes authenticated streamable HTTP MCP at `/mcp`; see
 [the MCP reference](../mcp/README.md).
 
@@ -241,8 +241,8 @@ consumes the in-memory setup code after success. The setup code is entered from
 the startup stdout line; it is never returned by status or stored on disk.
 Login links are hashed in a bounded in-memory map, expire after two minutes,
 are consumed before redemption, and disappear on restart or password change.
-The future web UI should redeem the URL token immediately and remove it from
-browser history. A future `inbot open` command can request links with the local
+The owner UI redeems the URL token once and removes it from
+browser history before rendering. A future `inbot open` command can request links with the local
 owner bearer; that CLI command is not implemented here.
 
 `locked` is currently false because HTTP starts only after the database unlocks.
@@ -255,8 +255,8 @@ Pass `serve --web-root /absolute/path/to/apps/web/dist` to serve a prebuilt UI.
 The path is resolved explicitly; there is no automatic repository or `dist`
 discovery and no UI when the flag is omitted. An invalid root or missing `index.html` fails startup.
 Build the React bundle with `pnpm web:build`. The bundle and owner authentication
-API share the loopback origin. The UI has presentational screens with mock data;
-API wiring and owner sign-in screens remain planned.
+API share the loopback origin. The UI connects owner authentication, mail, API keys, and approvals to these routes.
+Domains, remote access, and settings still use mock data. See [owner UI](../../../web/README.md).
 
 GET requests first try files under the canonical web root, then fall back to
 `index.html`. `/v0`, `/mcp`, `/oauth`, and `/.well-known`, including their

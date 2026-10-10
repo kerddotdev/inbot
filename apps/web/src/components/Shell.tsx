@@ -1,18 +1,16 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Icon, type IconName } from "../icons";
 import { links, type Route } from "../router";
-import { DOMAIN } from "../mock";
+import type { Inbox } from "@inbot/contracts/src/inboxes.js";
 import { IconButton } from "./ui";
-
-export interface SidebarInbox {
-  id: string;
-  unread: number;
-}
 
 interface ShellProps {
   route: Route;
-  inboxes: SidebarInbox[];
-  approvalsCount: number;
+  inboxes: readonly Inbox[];
+  approvalsCount: number | undefined;
+  onLogout: () => void;
+  loggingOut: boolean;
+  inboxFeedback: ReactNode;
   children: ReactNode;
 }
 
@@ -27,7 +25,15 @@ const manage: { key: Route["name"]; icon: IconName; label: string; href: string 
 const itemClasses =
   "flex w-full items-center gap-[9px] rounded-[7px] px-2.5 py-1.5 text-left transition-colors duration-150 hover:bg-hover aria-[current=page]:bg-sel aria-[current=page]:font-semibold aria-[current=page]:[&_svg:first-child]:text-accent";
 
-export function Shell({ route, inboxes, approvalsCount, children }: ShellProps) {
+export function Shell({
+  route,
+  inboxes,
+  approvalsCount,
+  children,
+  onLogout,
+  loggingOut,
+  inboxFeedback,
+}: ShellProps) {
   const [navOpen, setNavOpen] = useState(false);
 
   useEffect(() => setNavOpen(false), [route]);
@@ -71,26 +77,23 @@ export function Shell({ route, inboxes, approvalsCount, children }: ShellProps) 
         </div>
         <div className="mt-2.5">
           <h3 className="px-2.5 py-1 text-xs font-semibold text-ink2">Inboxes</h3>
+          {inboxFeedback}
           {inboxes.map((inbox) => (
             <a
-              key={inbox.id}
-              href={links.inbox(inbox.id)}
+              key={inbox.inbox_id}
+              href={links.inbox(inbox.inbox_id)}
               aria-current={
-                route.name === "inbox" && route.inboxId === inbox.id ? "page" : undefined
+                route.name === "inbox" && route.inboxId === inbox.inbox_id ? "page" : undefined
               }
               className={itemClasses}
             >
               <Icon name="inbox" />
               <span className="flex min-w-0 flex-col leading-tight">
-                {inbox.id}
-                <small className="text-[11px] whitespace-nowrap text-ink2">@{DOMAIN}</small>
+                <span className="truncate">{inbox.display_name ?? inbox.email}</span>
+                {inbox.display_name === undefined ? null : (
+                  <small className="truncate text-[11px] text-ink2">{inbox.email}</small>
+                )}
               </span>
-              {inbox.unread > 0 ? (
-                <span className="ml-auto text-xs text-ink2 tabular-nums">
-                  {inbox.unread}
-                  <span className="sr-only"> unread</span>
-                </span>
-              ) : null}
             </a>
           ))}
         </div>
@@ -105,7 +108,7 @@ export function Shell({ route, inboxes, approvalsCount, children }: ShellProps) 
             >
               <Icon name={item.icon} />
               {item.label}
-              {item.key === "approvals" && approvalsCount > 0 ? (
+              {item.key === "approvals" && approvalsCount !== undefined && approvalsCount > 0 ? (
                 <span className="ml-auto text-xs font-[650] text-accent tabular-nums">
                   {approvalsCount}
                   <span className="sr-only"> pending</span>
@@ -116,14 +119,16 @@ export function Shell({ route, inboxes, approvalsCount, children }: ShellProps) 
         </div>
         <div className="mt-auto flex items-center gap-2 border-t border-line py-1.5 pr-1 pl-2.5 text-[11.5px] text-ink2">
           <span className="flex-1 whitespace-nowrap">Unlocked - encrypted at rest</span>
-          <a
-            href={links.locked}
-            aria-label="Lock Inbot"
-            title="Lock Inbot"
+          <button
+            type="button"
+            aria-label="Sign out"
+            title="Sign out"
             className="grid size-7 place-items-center rounded-[7px] hover:bg-hover hover:text-ink"
+            onClick={onLogout}
+            disabled={loggingOut}
           >
             <Icon name="lock" />
-          </a>
+          </button>
         </div>
       </nav>
       <main className="flex min-h-0 min-w-0 flex-col">{children}</main>

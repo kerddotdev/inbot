@@ -84,82 +84,75 @@ function ErrorLine({ message }: { message: string | undefined }) {
 }
 
 interface AuthProps {
-  onSubmit: () => void;
+  onSubmit: (data: FormData) => void;
   error?: string | undefined;
+  busy?: boolean;
 }
 
-function submitHandler(onSubmit: () => void) {
-  return (event: FormEvent) => {
+function submitHandler(onSubmit: AuthProps["onSubmit"]) {
+  return (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    onSubmit();
+    onSubmit(new FormData(event.currentTarget));
   };
 }
 
-export function Setup({ onSubmit, error }: AuthProps) {
+export function Setup({ onSubmit, error, busy }: AuthProps) {
   return (
     <AuthLayout
       icon="key"
       title="Set up Inbot"
       lead="Enter the setup code printed in the terminal, then choose a password for this web interface."
     >
-      <form onSubmit={submitHandler(onSubmit)}>
-        <Field label="Setup code" name="code" hint="Shown once when the service first started." />
-        <Field label="New password" name="password" type="password" autoComplete="new-password" />
-        <Field label="Repeat password" name="confirm" type="password" autoComplete="new-password" />
-        <ErrorLine message={error} />
-        <Button variant="primary" type="submit" icon="check-circle" className="mt-3 w-full p-2.5">
-          Create account
-        </Button>
+      <form onSubmit={submitHandler(onSubmit)} aria-busy={busy}>
+        <fieldset disabled={busy}>
+          <Field label="Setup code" name="code" hint="Shown once when the service first started." />
+          <Field label="New password" name="password" type="password" autoComplete="new-password" />
+          <Field
+            label="Repeat password"
+            name="confirm"
+            type="password"
+            autoComplete="new-password"
+          />
+          <ErrorLine message={error} />
+          <Button variant="primary" type="submit" icon="check-circle" className="mt-3 w-full p-2.5">
+            {busy ? "Creating account..." : "Create account"}
+          </Button>
+        </fieldset>
       </form>
     </AuthLayout>
   );
 }
 
-export function Login({ onSubmit, error }: AuthProps) {
+export function Login({ onSubmit, error, busy }: AuthProps) {
   return (
     <AuthLayout
       icon="inbox"
       title="Sign in to Inbot"
       lead="Use the password you chose during setup."
     >
-      <form onSubmit={submitHandler(onSubmit)}>
-        <Field label="Password" name="password" type="password" autoComplete="current-password" />
-        <ErrorLine message={error} />
-        <Button variant="primary" type="submit" className="mt-3 w-full p-2.5">
-          Sign in
-        </Button>
+      <form onSubmit={submitHandler(onSubmit)} aria-busy={busy}>
+        <fieldset disabled={busy}>
+          <Field label="Password" name="password" type="password" autoComplete="current-password" />
+          <ErrorLine message={error} />
+          <Button variant="primary" type="submit" className="mt-3 w-full p-2.5">
+            {busy ? "Signing in..." : "Sign in"}
+          </Button>
+        </fieldset>
       </form>
     </AuthLayout>
   );
 }
 
-export function Locked({ onSubmit, error }: AuthProps) {
-  const id = useId();
+export function Locked({ onRetry }: { onRetry: () => void }) {
   return (
     <AuthLayout
       icon="lock"
       title="Inbot is locked"
-      lead="Your mail is encrypted on this machine. Enter your passphrase to read it."
-      fine="Agents can still receive mail while locked. It is stored encrypted and becomes readable after you unlock."
+      lead="Unlock the database on the machine running Inbot, then check again."
     >
-      <form onSubmit={submitHandler(onSubmit)}>
-        <label htmlFor={id} className="sr-only">
-          Passphrase
-        </label>
-        <input
-          id={id}
-          type="password"
-          required
-          placeholder="Passphrase"
-          autoComplete="off"
-          autoFocus
-          className={`${inputClasses} p-[11px] text-center`}
-        />
-        <ErrorLine message={error} />
-        <Button variant="primary" type="submit" icon="unlock" className="mt-3 w-full p-2.5">
-          Unlock
-        </Button>
-      </form>
+      <Button variant="primary" icon="refresh" className="mt-3 w-full p-2.5" onClick={onRetry}>
+        Check again
+      </Button>
     </AuthLayout>
   );
 }

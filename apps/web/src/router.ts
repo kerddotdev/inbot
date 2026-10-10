@@ -1,13 +1,15 @@
 import { useMemo, useSyncExternalStore } from "react";
 
-export type ViewState = "ready" | "loading" | "empty" | "error";
-
 export type Route =
   | { name: "setup" }
   | { name: "login" }
   | { name: "locked" }
-  | { name: "inbox"; inboxId: string; threadId: string | undefined; state: ViewState | undefined }
-  | { name: "approvals"; draftId: string | undefined; state: ViewState | undefined }
+  | {
+      name: "inbox";
+      inboxId: string | undefined;
+      threadId: string | undefined;
+    }
+  | { name: "approvals"; draftId: string | undefined }
   | { name: "domains" }
   | { name: "keys" }
   | { name: "remote" }
@@ -17,29 +19,29 @@ export const links = {
   setup: "#/setup",
   login: "#/login",
   locked: "#/locked",
-  inbox: (inboxId: string, threadId?: string) =>
-    threadId ? `#/inbox/${inboxId}/${threadId}` : `#/inbox/${inboxId}`,
-  approvals: (draftId?: string) => (draftId ? `#/approvals/${draftId}` : "#/approvals"),
+  inbox: (inboxId?: string, threadId?: string) =>
+    inboxId
+      ? `#/inbox/${encodeURIComponent(inboxId)}${threadId ? `/${encodeURIComponent(threadId)}` : ""}`
+      : "#/inbox",
+  approvals: (draftId?: string) =>
+    draftId ? `#/approvals/${encodeURIComponent(draftId)}` : "#/approvals",
   domains: "#/domains",
   keys: "#/keys",
   remote: "#/remote",
   settings: "#/settings",
 } as const;
 
-export const defaultRoute = links.inbox("billing-bot", "northwind-invoice");
-
-function readViewState(query: URLSearchParams): ViewState | undefined {
-  const value = query.get("state");
-  if (value === "ready" || value === "loading" || value === "empty" || value === "error") {
-    return value;
-  }
-  return undefined;
-}
+export const defaultRoute = links.inbox();
 
 export function parseRoute(hash: string): Route | undefined {
-  const [path = "", search = ""] = hash.replace(/^#\/?/, "").split("?");
-  const [head, first, second] = path.split("/");
-  const state = readViewState(new URLSearchParams(search));
+  const [path = ""] = hash.replace(/^#\/?/, "").split("?");
+  let parts: string[];
+  try {
+    parts = path.split("/").map(decodeURIComponent);
+  } catch {
+    return undefined;
+  }
+  const [head, first, second] = parts;
   switch (head) {
     case "setup":
     case "login":
@@ -50,9 +52,9 @@ export function parseRoute(hash: string): Route | undefined {
     case "settings":
       return { name: head };
     case "inbox":
-      return first ? { name: "inbox", inboxId: first, threadId: second, state } : undefined;
+      return { name: "inbox", inboxId: first || undefined, threadId: second };
     case "approvals":
-      return { name: "approvals", draftId: first, state };
+      return { name: "approvals", draftId: first };
     default:
       return undefined;
   }
