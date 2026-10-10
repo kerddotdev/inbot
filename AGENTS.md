@@ -2,7 +2,7 @@
 
 Inbot is self-hosted, privacy-first email for AI agents. It gives each agent its own inbox on the owner's custom domain and runs on the owner's machine, with mail stored in an encrypted local database. Agents use it through MCP, a CLI, and a REST API. The owner manages it through a local web UI. An optional Cloudflare Tunnel lets cloud-hosted agents reach the local instance with scoped credentials.
 
-The repository is at the bootstrap stage: no application code exists yet. Sections that describe code layout, commands, or runtime behavior describe the agreed design. Update them as the code lands, and never present a planned capability as implemented.
+The workspace and the home, key management, and encrypted SQLite storage services in `apps/server/src` are implemented. There is no runnable email service or public transport yet. Other sections that describe runtime behavior and packages describe the agreed design. Update them as the code lands, and never present a planned capability as implemented.
 
 ## What we never compromise on
 
@@ -105,9 +105,9 @@ The planned runtime has one local `inbot` service. It serves REST under `/v0`, M
 
 ## Where code lives
 
-Planned layout. Create a package only when it has a real implementation.
+`apps/server/src` currently contains the storage foundation. The remaining layout is planned. Create a package only when it has a real implementation.
 
-- `apps/server` - local service: HTTP API, MCP, OAuth, store, inbound and outbound pipelines, provisioning, tunnel supervision.
+- `apps/server` - implemented home, key management, and encrypted store; planned HTTP API, MCP, OAuth, inbound and outbound pipelines, provisioning, and tunnel supervision.
 - `apps/cli` - the `inbot` entry point: service commands and resource commands.
 - `apps/web` - React, Vite, and Tailwind owner UI.
 - `apps/worker` - Cloudflare Email Worker that encrypts inbound mail into the buffer.
