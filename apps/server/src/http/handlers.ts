@@ -3,77 +3,47 @@ import { HttpApiBuilder } from "effect/http-api";
 import { CurrentPrincipal } from "../../../../packages/contracts/src/security.js";
 import { ApiKeys } from "../auth/api-keys.js";
 import { Mailbox } from "../mailbox/mailbox.js";
-import { notFound, validationError } from "../mailbox/errors.js";
+import { notFound } from "../mailbox/errors.js";
+import { AgentOperations } from "../agent/operations.js";
 import { ServerApi } from "./api.js";
-import { inboxAllowlist, labelsAllowed, visible, visibleQuery } from "./authorization.js";
+import { labelsAllowed, visible } from "../agent/authorization.js";
 import { Downloads } from "./downloads.js";
 import { respond, unsupported } from "./errors.js";
 
 const InboxesLive = HttpApiBuilder.group(ServerApi, "inboxes", (handlers) =>
   Effect.gen(function* () {
-    const mailbox = yield* Mailbox;
+    const operations = yield* AgentOperations;
     return handlers
-      .handle("inboxes_list", ({ query }) =>
-        respond(
-          Effect.gen(function* () {
-            return yield* mailbox.listInboxes(query, yield* inboxAllowlist);
-          }),
-        ),
-      )
-      .handle("inboxes_search", ({ query: { q, ...query } }) =>
-        respond(
-          Effect.gen(function* () {
-            return yield* mailbox.searchInboxes(q, query, yield* inboxAllowlist);
-          }),
-        ),
-      )
-      .handle("inboxes_create", ({ payload }) =>
-        respond(
-          Effect.gen(function* () {
-            if (payload.domain === undefined)
-              return yield* validationError("A mailbox domain is required.");
-            return yield* mailbox.createInbox(
-              { ...payload, domain: payload.domain },
-              yield* inboxAllowlist,
-            );
-          }),
-        ),
-      )
-      .handle("inboxes_get", ({ params }) => respond(mailbox.getInbox(params.inbox_id)))
+      .handle("inboxes_list", ({ query }) => respond(operations.listInboxes(query)))
+      .handle("inboxes_search", ({ query }) => respond(operations.searchInboxes(query)))
+      .handle("inboxes_create", ({ payload }) => respond(operations.createInbox(payload)))
+      .handle("inboxes_get", ({ params }) => respond(operations.getInbox(params.inbox_id)))
       .handle("inboxes_update", ({ params, payload }) =>
-        respond(mailbox.updateInbox(params.inbox_id, payload)),
+        respond(operations.updateInbox(params.inbox_id, payload)),
       )
-      .handle("inboxes_delete", ({ params }) => respond(mailbox.deleteInbox(params.inbox_id)));
+      .handle("inboxes_delete", ({ params }) => respond(operations.deleteInbox(params.inbox_id)));
   }),
 );
 
 const MessagesLive = HttpApiBuilder.group(ServerApi, "messages", (handlers) =>
   Effect.gen(function* () {
     const mailbox = yield* Mailbox;
+    const operations = yield* AgentOperations;
     const downloads = yield* Downloads;
     const message = (inboxId: string, messageId: string) =>
       visible(mailbox.getMessage(inboxId, messageId));
     return handlers
       .handle("inboxes_messages_list", ({ params, query }) =>
-        respond(
-          Effect.gen(function* () {
-            return yield* mailbox.listMessages(params.inbox_id, yield* visibleQuery(query));
-          }),
-        ),
+        respond(operations.listMessages(params.inbox_id, query)),
       )
-      .handle("inboxes_messages_search", ({ params, query: { q, ...query } }) =>
-        respond(mailbox.searchMessages(params.inbox_id, q, query)),
+      .handle("inboxes_messages_search", ({ params, query }) =>
+        respond(operations.searchMessages(params.inbox_id, query)),
       )
       .handle("inboxes_messages_get", ({ params }) =>
-        respond(message(params.inbox_id, params.message_id)),
+        respond(operations.getMessage(params.inbox_id, params.message_id)),
       )
       .handle("inboxes_messages_update", ({ params, payload }) =>
-        respond(
-          Effect.gen(function* () {
-            yield* message(params.inbox_id, params.message_id);
-            return yield* mailbox.updateMessage(params.inbox_id, params.message_id, payload);
-          }),
-        ),
+        respond(operations.updateMessage(params.inbox_id, params.message_id, payload)),
       )
       .handle("inboxes_messages_delete", ({ params }) =>
         respond(
@@ -134,142 +104,80 @@ const MessagesLive = HttpApiBuilder.group(ServerApi, "messages", (handlers) =>
           }),
         ),
       )
-      .handle("inboxes_messages_send", unsupported)
-      .handle("inboxes_messages_reply", unsupported)
-      .handle("inboxes_messages_replyAll", unsupported)
-      .handle("inboxes_messages_forward", unsupported);
+      .handle("inboxes_messages_send", ({ params, payload, headers }) =>
+        respond(
+          operations.send(
+            params.inbox_id,
+            { kind: "send", request: payload },
+            headers["idempotency-key"],
+          ),
+        ),
+      )
+      .handle("inboxes_messages_reply", ({ params, payload, headers }) =>
+        respond(
+          operations.send(
+            params.inbox_id,
+            { kind: "reply", message_id: params.message_id, request: payload },
+            headers["idempotency-key"],
+          ),
+        ),
+      )
+      .handle("inboxes_messages_replyAll", ({ params, payload, headers }) =>
+        respond(
+          operations.send(
+            params.inbox_id,
+            { kind: "reply-all", message_id: params.message_id, request: payload },
+            headers["idempotency-key"],
+          ),
+        ),
+      )
+      .handle("inboxes_messages_forward", ({ params, payload, headers }) =>
+        respond(
+          operations.send(
+            params.inbox_id,
+            { kind: "forward", message_id: params.message_id, request: payload },
+            headers["idempotency-key"],
+          ),
+        ),
+      );
   }),
 );
 
 const ThreadsLive = HttpApiBuilder.group(ServerApi, "threads", (handlers) =>
   Effect.gen(function* () {
-    const mailbox = yield* Mailbox;
-    const downloads = yield* Downloads;
-    const resolve = (threadId: string) =>
-      Effect.gen(function* () {
-        const inboxIds = yield* inboxAllowlist;
-        return yield* mailbox.resolveThreadInbox(
-          threadId,
-          inboxIds === undefined ? {} : { inbox_ids: inboxIds },
-        );
-      });
-    const thread = (inboxId: string, threadId: string) =>
-      visible(mailbox.getThread(inboxId, threadId, { limit: 1 }));
-    const attachment = (inboxId: string, threadId: string, attachmentId: string) =>
-      respond(
-        Effect.gen(function* () {
-          yield* thread(inboxId, threadId);
-          const { attachment } = yield* mailbox.getThreadAttachment(
-            inboxId,
-            threadId,
-            attachmentId,
-          );
-          return {
-            ...attachment,
-            ...(yield* downloads.link({
-              inbox_id: inboxId,
-              thread_id: threadId,
-              attachment_id: attachmentId,
-            })),
-          };
-        }),
-      );
+    const operations = yield* AgentOperations;
     return handlers
       .handle("inboxes_threads_list", ({ params, query }) =>
-        respond(
-          Effect.gen(function* () {
-            return yield* mailbox.listThreads(
-              { inbox_id: params.inbox_id },
-              yield* visibleQuery(query),
-            );
-          }),
-        ),
+        respond(operations.listThreads(params.inbox_id, query)),
       )
-      .handle("inboxes_threads_search", ({ params, query: { q, ...query } }) =>
-        respond(mailbox.searchThreads({ inbox_id: params.inbox_id }, q, query)),
+      .handle("inboxes_threads_search", ({ params, query }) =>
+        respond(operations.searchThreads(params.inbox_id, query)),
       )
       .handle("inboxes_threads_get", ({ params, query }) =>
-        respond(visible(mailbox.getThread(params.inbox_id, params.thread_id, query))),
+        respond(operations.getThread(params.inbox_id, params.thread_id, query)),
       )
       .handle("inboxes_threads_update", ({ params, payload }) =>
-        respond(
-          Effect.gen(function* () {
-            yield* thread(params.inbox_id, params.thread_id);
-            return yield* mailbox.updateThread(params.inbox_id, params.thread_id, payload);
-          }),
-        ),
+        respond(operations.updateThread(params.inbox_id, params.thread_id, payload)),
       )
       .handle("inboxes_threads_delete", ({ params }) =>
-        respond(
-          Effect.gen(function* () {
-            yield* thread(params.inbox_id, params.thread_id);
-            return yield* mailbox.deleteThread(params.inbox_id, params.thread_id);
-          }),
-        ),
+        respond(operations.deleteThread(params.inbox_id, params.thread_id)),
       )
       .handle("inboxes_threads_getAttachment", ({ params }) =>
-        attachment(params.inbox_id, params.thread_id, params.attachment_id),
+        respond(operations.getAttachment(params.inbox_id, params.thread_id, params.attachment_id)),
       )
-      .handle("threads_list", ({ query }) =>
-        respond(
-          Effect.gen(function* () {
-            const inboxIds = yield* inboxAllowlist;
-            return yield* mailbox.listThreads(
-              inboxIds === undefined ? {} : { inbox_ids: inboxIds },
-              yield* visibleQuery(query),
-            );
-          }),
-        ),
-      )
-      .handle("threads_search", ({ query: { q, ...query } }) =>
-        respond(
-          Effect.gen(function* () {
-            const inboxIds = yield* inboxAllowlist;
-            return yield* mailbox.searchThreads(
-              inboxIds === undefined ? {} : { inbox_ids: inboxIds },
-              q,
-              query,
-            );
-          }),
-        ),
-      )
+      .handle("threads_list", ({ query }) => respond(operations.listThreads(undefined, query)))
+      .handle("threads_search", ({ query }) => respond(operations.searchThreads(undefined, query)))
       .handle("threads_get", ({ params, query }) =>
-        respond(
-          Effect.gen(function* () {
-            return yield* visible(
-              mailbox.getThread(yield* resolve(params.thread_id), params.thread_id, query),
-            );
-          }),
-        ),
+        respond(operations.getThread(undefined, params.thread_id, query)),
       )
       .handle("threads_update", ({ params, payload }) =>
-        respond(
-          Effect.gen(function* () {
-            const inboxId = yield* resolve(params.thread_id);
-            yield* thread(inboxId, params.thread_id);
-            return yield* mailbox.updateThread(inboxId, params.thread_id, payload);
-          }),
-        ),
+        respond(operations.updateThread(undefined, params.thread_id, payload)),
       )
       .handle("threads_delete", ({ params }) =>
-        respond(
-          Effect.gen(function* () {
-            const inboxId = yield* resolve(params.thread_id);
-            yield* thread(inboxId, params.thread_id);
-            return yield* mailbox.deleteThread(inboxId, params.thread_id);
-          }),
-        ),
+        respond(operations.deleteThread(undefined, params.thread_id)),
       )
       .handle("threads_getAttachment", ({ params }) =>
-        respond(
-          Effect.gen(function* () {
-            return yield* attachment(
-              yield* resolve(params.thread_id),
-              params.thread_id,
-              params.attachment_id,
-            );
-          }),
-        ),
+        respond(operations.getAttachment(undefined, params.thread_id, params.attachment_id)),
       );
   }),
 );

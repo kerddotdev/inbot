@@ -43,3 +43,10 @@ CREATE TABLE delivery_events (
   FOREIGN KEY (inbox_id, message_id) REFERENCES messages(inbox_id, message_id) ON DELETE CASCADE
 );
 `;
+
+export const transportConfigSchema = `
+CREATE TABLE transport_config (
+  id INTEGER PRIMARY KEY CHECK (id = 1),
+  account_id TEXT NOT NULL,
+  api_token TEXT NOT NULL
+);`;

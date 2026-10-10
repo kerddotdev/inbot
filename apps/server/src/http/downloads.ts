@@ -7,7 +7,7 @@ import { ApiKeys } from "../auth/api-keys.js";
 import { OwnerAuth } from "../auth/owner.js";
 import { notFound } from "../mailbox/errors.js";
 import { Mailbox } from "../mailbox/mailbox.js";
-import { inScope, permits, visible } from "./authorization.js";
+import { inScope, permits, visible } from "../agent/authorization.js";
 import { errorResponse, respond, wireError } from "./errors.js";
 import { authenticate } from "./middleware.js";
 

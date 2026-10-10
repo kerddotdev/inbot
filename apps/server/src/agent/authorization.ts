@@ -1,3 +1,4 @@
+import { wireError } from "../http/errors.js";
 import { Effect } from "effect";
 import type { Grant, Permission } from "../../../../packages/contracts/src/api-keys.js";
 import { CurrentPrincipal, type Principal } from "../../../../packages/contracts/src/security.js";
@@ -57,3 +58,36 @@ export function visibleQuery<
     include_trash: query.include_trash === true && permits(principal, "label_trash_read"),
   }));
 }
+
+export function authorize(permission: Permission, inboxId?: string) {
+  return Effect.gen(function* () {
+    const principal = yield* CurrentPrincipal;
+    if (inboxId !== undefined && !inScope(principal, inboxId)) return yield* notFound();
+    if (!permits(principal, permission))
+      return yield* Effect.fail(
+        wireError(
+          "missing_permission",
+          "The API key does not permit this operation.",
+          `Ask the owner for the ${permission} permission.`,
+        ),
+      );
+  });
+}
+
+export const authorizeSendPolicy = Effect.gen(function* () {
+  const principal = yield* CurrentPrincipal;
+  if (principal.kind === "owner" || principal.grant.send_policy === "direct") return;
+  return yield* Effect.fail(
+    principal.grant.send_policy === "approval"
+      ? wireError(
+          "approval_required",
+          "This API key requires owner approval before sending.",
+          "Drafts and owner approval arrive in a later release",
+        )
+      : wireError(
+          "missing_permission",
+          "This API key has a read-only send policy.",
+          "Ask the owner for a direct send policy before sending mail.",
+        ),
+  );
+});

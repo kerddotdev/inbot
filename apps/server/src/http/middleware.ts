@@ -1,4 +1,4 @@
-import { Context, Effect, Layer, Redacted } from "effect";
+import { Context, Effect, Layer, Redacted, Result } from "effect";
 import { HttpRouter, HttpServerResponse } from "effect/http";
 import { HttpApiMiddleware } from "effect/http-api";
 import {
@@ -7,32 +7,21 @@ import {
   OwnerOnly,
   RequiredPermission,
 } from "../../../../packages/contracts/src/security.js";
+import { authenticatePrincipal } from "../auth/bearer.js";
 import { ApiKeys, type ApiKeysService } from "../auth/api-keys.js";
 import { OwnerAuth } from "../auth/owner.js";
 import { WireErrors } from "./api.js";
-import { inScope, permits } from "./authorization.js";
-import { errorResponse, unavailable, wireError } from "./errors.js";
-
-const unauthorized = () =>
-  wireError(
-    "unauthorized",
-    "A valid bearer token is required.",
-    "Read the local owner token from connection.json or supply an active API key.",
-  );
+import { authorize } from "../agent/authorization.js";
+import { errorResponse, unavailable, wireError, wireFailure } from "./errors.js";
 
 export function authenticate(
   credential: Redacted.Redacted<string>,
   owner: OwnerAuth["Service"],
   keys: ApiKeysService,
 ) {
-  return Effect.gen(function* () {
-    const bearer = Redacted.value(credential);
-    if (owner.authenticate(bearer)) return { kind: "owner" as const };
-    const principal = yield* keys
-      .authenticate(bearer)
-      .pipe(Effect.catch(() => Effect.succeed(unavailable())));
-    return principal ?? errorResponse(unauthorized());
-  });
+  return authenticatePrincipal(credential, owner, keys).pipe(
+    Effect.catch((error) => Effect.succeed(errorResponse(wireFailure(error)))),
+  );
 }
 
 export const AuthLive = Layer.effect(
@@ -46,27 +35,19 @@ export const AuthLive = Layer.effect(
           const principal = yield* authenticate(credential, owner, keys);
           if (HttpServerResponse.isHttpServerResponse(principal)) return principal;
           const params = yield* HttpRouter.params;
-          if (
-            !endpoint.middlewares.has(OwnerOnly) &&
-            params.inbox_id !== undefined &&
-            !inScope(principal, params.inbox_id)
-          )
-            return errorResponse(
-              wireError(
-                "not_found",
-                "The requested mailbox resource was not found.",
-                "Check the inbox and resource identifiers.",
-              ),
-            );
           const permission = Context.get(endpoint.annotations, RequiredPermission);
-          if (permission !== undefined && !permits(principal, permission))
-            return errorResponse(
-              wireError(
-                "missing_permission",
-                "The API key does not permit this operation.",
-                `Ask the owner for the ${permission} permission.`,
-              ),
-            );
+          if (permission !== undefined) {
+            const authorization = yield* authorize(
+              permission,
+              endpoint.middlewares.has(OwnerOnly) ? undefined : params.inbox_id,
+            ).pipe(Effect.provideService(CurrentPrincipal, principal), Effect.result);
+            if (Result.isFailure(authorization)) {
+              const error = authorization.failure;
+              return errorResponse(
+                wireError(error.code, error.message, error.fix ?? "Check the API key grant."),
+              );
+            }
+          }
           return yield* Effect.provideService(httpEffect, CurrentPrincipal, principal);
         }),
     });

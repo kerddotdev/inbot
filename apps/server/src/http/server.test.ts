@@ -4,7 +4,7 @@ import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createInterface } from "node:readline";
-import { Clock, Context, Effect, Exit, Layer, Schema, Scope } from "effect";
+import { Effect, Schema } from "effect";
 import { expect, test as baseTest } from "vitest";
 import { InbotApi } from "../../../../packages/contracts/src/api.js";
 import {
@@ -35,146 +35,15 @@ import {
   Thread,
   UpdateThreadResponse,
 } from "../../../../packages/contracts/src/threads.js";
-import { ApiKeys } from "../auth/api-keys.js";
 import { Connection } from "../auth/owner.js";
-import { Home } from "../home.js";
-import { ingestInbound } from "../inbound/ingest.js";
-import { KeychainStore } from "../keychain.js";
-import { KeyManager } from "../keys.js";
-import { Mailbox } from "../mailbox/mailbox.js";
-import { DatabaseError, Store } from "../store.js";
-import { startHttpServer } from "./server.js";
+import { DatabaseError } from "../store.js";
 
-const initialTime = Date.parse("2026-10-10T12:00:00Z");
+import { fixture } from "./test-fixture.js";
+
 const inboxId = "agent@example.test";
 const otherInbox = "other@example.test";
 const messageId = "<first@example.test>";
 const messagePath = `/v0/inboxes/${inboxId}/messages/${encodeURIComponent(messageId)}`;
-
-async function fixture(home: string) {
-  const scope = Scope.makeUnsafe();
-  let now = initialTime;
-  const clock: Clock.Clock = {
-    ...Context.get(Context.empty(), Clock.Clock),
-    currentTimeMillisUnsafe: () => now,
-    currentTimeMillis: Effect.sync(() => now),
-    currentTimeNanosUnsafe: () => BigInt(now) * 1_000_000n,
-    currentTimeNanos: Effect.sync(() => BigInt(now) * 1_000_000n),
-  };
-  const run = <A, E, R>(
-    effect: Effect.Effect<A, E, R | Scope.Scope>,
-    context: Context.Context<R>,
-  ) =>
-    Effect.runPromise(
-      effect.pipe(
-        Effect.provideContext(context),
-        Effect.provideService(Scope.Scope, scope),
-        Effect.provideService(Clock.Clock, clock),
-      ),
-    );
-  try {
-    const foundation = await run(
-      Layer.buildWithScope(
-        KeyManager.Live.pipe(
-          Layer.provideMerge(Home.layer({ flag: home, flavor: "development" })),
-          Layer.provide(KeychainStore.memory()),
-        ),
-        scope,
-      ),
-      Context.empty(),
-    );
-    const dek = await run(
-      Context.get(foundation, KeyManager).initialize({ useKeychain: true }),
-      Context.empty(),
-    );
-    const services = await run(
-      Layer.buildWithScope(
-        Layer.mergeAll(Mailbox.Live, ApiKeys.Live).pipe(
-          Layer.provideMerge(Store.layer(dek)),
-          Layer.provideMerge(Layer.succeedContext(foundation)),
-        ),
-        scope,
-      ),
-      Context.empty(),
-    );
-    dek.fill(0);
-    const server = await run(startHttpServer(), services);
-    const connection = Schema.decodeUnknownSync(Schema.fromJsonString(Connection))(
-      await readFile(join(home, "connection.json"), "utf8"),
-    );
-    const mailbox = Context.get(services, Mailbox);
-    const keys = Context.get(services, ApiKeys);
-    await run(mailbox.createInbox({ username: "agent", domain: "example.test" }), Context.empty());
-    await run(mailbox.createInbox({ username: "other", domain: "example.test" }), Context.empty());
-    const raw = Buffer.from(
-      [
-        "Message-ID: <first@example.test>",
-        "Date: Sat, 10 Oct 2026 10:00:00 +0000",
-        "From: Alice <alice@example.test>",
-        `To: ${inboxId}`,
-        "Subject: Synthetic project update",
-        "Authentication-Results: mx.example.test; dkim=pass header.d=example.test",
-        "Content-Type: text/plain; charset=utf-8",
-        "",
-        "A searchable project message.",
-      ].join("\r\n"),
-    );
-    const ingested = await run(
-      ingestInbound(
-        {
-          raw,
-          mail_from: "alice@example.test",
-          rcpt_to: [inboxId],
-          received_at: "2026-10-10T10:00:01Z",
-        },
-        {
-          trusted_authserv_ids: ["mx.example.test"],
-        },
-      ),
-      services,
-    );
-    const stored = ingested[0];
-    if (stored?.status !== "stored") throw new Error("Expected a stored synthetic message");
-    return {
-      home,
-      url: server.url,
-      token: connection.token,
-      raw,
-      threadId: stored.thread_id,
-      mailbox,
-      keys,
-      store: Context.get(services, Store),
-      run: <A, E>(effect: Effect.Effect<A, E>) => run(effect, Context.empty()),
-      advance: (milliseconds: number) => {
-        now += milliseconds;
-      },
-      request: (
-        path: string,
-        options: {
-          token?: string | null;
-          method?: string;
-          body?: unknown;
-          headers?: Record<string, string>;
-        } = {},
-      ) =>
-        fetch(`${server.url}${path}`, {
-          method: options.method ?? "GET",
-          headers: {
-            ...(options.token === null
-              ? {}
-              : { authorization: `Bearer ${options.token ?? connection.token}` }),
-            ...(options.body === undefined ? {} : { "content-type": "application/json" }),
-            ...options.headers,
-          },
-          ...(options.body === undefined ? {} : { body: JSON.stringify(options.body) }),
-        }),
-      close: () => Effect.runPromise(Scope.close(scope, Exit.void)),
-    };
-  } catch (error) {
-    await Effect.runPromise(Scope.close(scope, Exit.void));
-    throw error;
-  }
-}
 
 type ApiFixture = Awaited<ReturnType<typeof fixture>>;
 const test = baseTest.extend<{ home: string; api: ApiFixture }>({
@@ -733,14 +602,7 @@ test("maps malformed requests, missing resources, stale tokens, and unsupported 
   await failure(await api.request("/v0/inboxes/missing@example.test"), 404, "not_found");
   await failure(await api.request("/v0/unknown"), 404, "not_found");
   await failure(await api.request("/v0/inboxes?page_token=invalid"), 409, "page_token_stale");
-  for (const path of [
-    `/v0/inboxes/${inboxId}/messages/send`,
-    `/v0/inboxes/${inboxId}/messages/${encodeURIComponent(messageId)}/reply`,
-    "/v0/drafts",
-    "/v0/lists/receive/allow",
-    "/v0/webhooks",
-    "/v0/domains",
-  ])
+  for (const path of ["/v0/drafts", "/v0/lists/receive/allow", "/v0/webhooks", "/v0/domains"])
     await failure(
       await api.request(path, path.includes("/messages/") ? { method: "POST", body: {} } : {}),
       501,
