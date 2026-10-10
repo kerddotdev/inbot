@@ -29,9 +29,13 @@ These wrappers are service inputs, not new REST wire formats. Parents are read
 only from the specified inbox. `AgentOperations` enforces grants, inbox scope, `message_send` for send/forward
 or `message_reply` for replies, parent `message_read`, hidden labels, and send
 policies before enqueueing. Owners use direct sending. `read_only` returns
-`missing_permission`; `approval` returns `approval_required` with fix `Drafts and
-owner approval arrive in a later release`. Both are HTTP 403 and create nothing.
-Approval will create pending drafts once drafts and owner approval are implemented.
+`missing_permission` without creating mail; `approval` stores a pending draft and
+returns HTTP 403 `approval_required`. Both `message` and `fix` identify the draft
+without changing the error shape. Owners approve or reject through the
+REST extension; no approval tools are exposed through MCP. Draft conversion
+shares the outbox transaction, including message insertion, replay recording,
+and draft deletion. See [the HTTP reference](../http/README.md) for scheduling
+and owner decisions.
 Without configured transport, adapters return 503 `service_unavailable` with fix
 `Configure the Cloudflare mail transport`, without enqueueing.
 

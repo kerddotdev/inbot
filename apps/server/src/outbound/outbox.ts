@@ -11,11 +11,13 @@ import {
 import { Store, type StoreService } from "../store.js";
 import { MailboxError, notFound } from "../mailbox/errors.js";
 import { insertMessage, updateMessage } from "../mailbox/messages.js";
-import { getInbox, getMessage } from "../mailbox/rows.js";
-import { getAttachment } from "../mailbox/threads.js";
+import { getInbox } from "../mailbox/rows.js";
 import { compose, decodeRequest } from "./compose.js";
 import { OutboundProvider, ProviderMessage, type OutboundProviderService } from "./cloudflare.js";
 import { invalid, OutboundError } from "./errors.js";
+import { prepare } from "./prepare.js";
+import { draftRequest, getDraft, saveDraft, sendLabels } from "../drafts/rows.js";
+import type { SendDraftRequest } from "../../../../packages/contracts/src/drafts.js";
 import { renderMime } from "./mime.js";
 
 const IDEMPOTENCY_TTL = 24 * 60 * 60 * 1000;
@@ -39,12 +41,8 @@ const ReplayRow = Schema.Struct({
   completed_at: Schema.NullOr(Schema.Finite),
 });
 const AliasRow = Schema.Struct({ inbox_id: Schema.String, message_id: Schema.String });
-const ProviderIdRow = Schema.Struct({
-  provider_message_id: Schema.NullOr(Schema.String),
-  state: OutboxEntry.fields.state,
-});
 
-function canonical(value: unknown): string {
+export function canonical(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map((item: unknown) => canonical(item)).join(",")}]`;
   if (value !== null && typeof value === "object")
     return `{${Object.entries(value)
@@ -217,139 +215,198 @@ function makeOutbox(store: StoreService, provider: OutboundProviderService) {
       return processed;
     });
 
-  return {
-    enqueue: (inboxId: string, input: OutboundRequest, idempotencyKey?: string) =>
-      run((db, now) => {
-        if (idempotencyKey !== undefined) {
-          try {
-            Schema.decodeUnknownSync(IdempotencyKey)(idempotencyKey);
-          } catch {
-            throw invalid("Idempotency-Key must contain 1 to 256 permitted characters.");
-          }
-        }
-        const request = decodeRequest(input);
-        const fingerprint = createHash("sha256").update(canonical(request)).digest("hex");
-        const inbox = getInbox(db, inboxId);
-        if (idempotencyKey !== undefined) {
-          const expired = db
-            .prepare(
-              "DELETE FROM outbound_idempotency WHERE inbox_id = ? AND idempotency_key = ? AND completed_at <= ?",
-            )
-            .run(inboxId, idempotencyKey, now - IDEMPOTENCY_TTL);
-          if (expired.changes)
-            db.prepare(
-              "UPDATE outbox SET idempotency_key = NULL WHERE inbox_id = ? AND idempotency_key = ?",
-            ).run(inboxId, idempotencyKey);
-          const existing = db
-            .prepare(
-              "SELECT * FROM outbound_idempotency WHERE inbox_id = ? AND idempotency_key = ?",
-            )
-            .get(inboxId, idempotencyKey);
-          if (existing !== undefined) {
-            const replay = Schema.decodeUnknownSync(ReplayRow)(existing);
-            if (replay.fingerprint !== fingerprint)
-              throw new OutboundError({
-                code: "idempotency_conflict",
-                message: "This idempotency key belongs to a different request.",
-                fix: "Use the original request or a new idempotency key.",
-                retryable: false,
-              });
-            return { message_id: replay.message_id, thread_id: replay.thread_id };
-          }
-        }
-        if (inbox.status === "paused")
+  function enqueue(
+    db: Database.Database,
+    now: number,
+    inboxId: string,
+    input: OutboundRequest,
+    idempotencyKey?: string,
+    draft = false,
+  ) {
+    if (idempotencyKey !== undefined) {
+      try {
+        Schema.decodeUnknownSync(IdempotencyKey)(idempotencyKey);
+      } catch {
+        throw invalid("Idempotency-Key must contain 1 to 256 permitted characters.");
+      }
+    }
+    const request = decodeRequest(input);
+    const fingerprint = createHash("sha256").update(canonical(request)).digest("hex");
+    const inbox = getInbox(db, inboxId);
+    if (idempotencyKey !== undefined) {
+      const expired = db
+        .prepare(
+          "DELETE FROM outbound_idempotency WHERE inbox_id = ? AND idempotency_key = ? AND completed_at <= ?",
+        )
+        .run(inboxId, idempotencyKey, now - IDEMPOTENCY_TTL);
+      if (expired.changes)
+        db.prepare(
+          "UPDATE outbox SET idempotency_key = NULL WHERE inbox_id = ? AND idempotency_key = ?",
+        ).run(inboxId, idempotencyKey);
+      const existing = db
+        .prepare("SELECT * FROM outbound_idempotency WHERE inbox_id = ? AND idempotency_key = ?")
+        .get(inboxId, idempotencyKey);
+      if (existing !== undefined) {
+        const replay = Schema.decodeUnknownSync(ReplayRow)(existing);
+        if (replay.fingerprint !== fingerprint)
           throw new OutboundError({
-            code: "inbox_paused",
-            message: "This inbox is paused.",
-            fix: "Resume the inbox before enqueueing mail.",
+            code: "idempotency_conflict",
+            message: "This idempotency key belongs to a different request.",
+            fix: "Use the original request or a new idempotency key.",
             retryable: false,
           });
-        const parent =
-          request.kind === "send" ? undefined : getMessage(db, inboxId, request.message_id);
-        const sourceId =
-          parent === undefined
-            ? undefined
-            : db
-                .prepare(
-                  "SELECT provider_message_id, state FROM outbox WHERE inbox_id = ? AND message_id = ?",
-                )
-                .get(inboxId, parent.message_id);
-        const source =
-          sourceId === undefined ? undefined : Schema.decodeUnknownSync(ProviderIdRow)(sourceId);
-        const parentRfcId =
-          source?.state === "sent" ? (source.provider_message_id ?? undefined) : undefined;
-        if (
-          (request.kind === "reply" || request.kind === "reply-all") &&
-          sourceId !== undefined &&
-          parentRfcId === undefined
-        )
-          throw invalid("Wait for the outgoing parent to be accepted before replying to it.");
-        const composed = compose(inboxId, request, {
-          ...(parent !== undefined ? { parent } : {}),
-          ...(parentRfcId !== undefined ? { parent_rfc_id: parentRfcId } : {}),
-          ...(request.kind === "forward" && parent
-            ? {
-                attachments: (parent.attachments ?? []).map((attachment) =>
-                  getAttachment(db, inboxId, parent.message_id, attachment.attachment_id),
-                ),
-              }
-            : {}),
-        });
-        const messageId = `<${randomUUID()}@inbot.local>`;
-        const timestamp = new Date(now).toISOString();
-        const raw = renderMime(composed.provider, messageId, timestamp);
-        const identity = insertMessage(
-          db,
-          {
-            inbox_id: inboxId,
-            message_id: messageId,
-            direction: "sent",
-            from: inboxId,
-            timestamp,
-            raw,
-            to: composed.to,
-            cc: composed.cc,
-            bcc: composed.bcc,
-            reply_to: composed.reply_to,
-            subject: composed.provider.subject,
-            ...(composed.provider.text !== undefined ? { text: composed.provider.text } : {}),
-            ...(composed.provider.html !== undefined ? { html: composed.provider.html } : {}),
-            ...(composed.in_reply_to !== undefined ? { in_reply_to: composed.in_reply_to } : {}),
-            references: composed.references,
-            headers: composed.provider.headers,
-            labels: [
-              ...(request.request.labels ?? []).filter((label) => !managedLabels.has(label)),
-              "queued",
-            ],
-            attachments: composed.provider.attachments.map((attachment) => ({
-              filename: attachment.filename,
-              content_type: attachment.type,
-              content_disposition: attachment.disposition,
-              ...(attachment.content_id !== undefined ? { content_id: attachment.content_id } : {}),
-              content: Buffer.from(attachment.content, "base64"),
-            })),
-          },
-          now,
-        );
-        db.prepare(`INSERT INTO outbox (id, inbox_id, idempotency_key, fingerprint, provider_message, state, next_attempt_at, message_id, thread_id, created_at, updated_at)
+        return { message_id: replay.message_id, thread_id: replay.thread_id };
+      }
+    }
+    if (inbox.status === "paused")
+      throw new OutboundError({
+        code: "inbox_paused",
+        message: "This inbox is paused.",
+        fix: "Resume the inbox before enqueueing mail.",
+        retryable: false,
+      });
+    const composed = draft
+      ? compose(inboxId, request, { draft: true })
+      : prepare(db, inboxId, request);
+    const messageId = `<${randomUUID()}@inbot.local>`;
+    const timestamp = new Date(now).toISOString();
+    const raw = renderMime(composed.provider, messageId, timestamp);
+    const identity = insertMessage(
+      db,
+      {
+        inbox_id: inboxId,
+        message_id: messageId,
+        direction: "sent",
+        from: inboxId,
+        timestamp,
+        raw,
+        to: composed.to,
+        cc: composed.cc,
+        bcc: composed.bcc,
+        reply_to: composed.reply_to,
+        subject: composed.provider.subject,
+        ...(composed.provider.text !== undefined ? { text: composed.provider.text } : {}),
+        ...(composed.provider.html !== undefined ? { html: composed.provider.html } : {}),
+        ...(composed.in_reply_to !== undefined ? { in_reply_to: composed.in_reply_to } : {}),
+        references: composed.references,
+        headers: composed.provider.headers,
+        labels: [
+          ...(request.request.labels ?? []).filter((label) => !managedLabels.has(label)),
+          "queued",
+        ],
+        attachments: composed.provider.attachments.map((attachment) => ({
+          filename: attachment.filename,
+          content_type: attachment.type,
+          content_disposition: attachment.disposition,
+          ...(attachment.content_id !== undefined ? { content_id: attachment.content_id } : {}),
+          content: Buffer.from(attachment.content, "base64"),
+        })),
+      },
+      now,
+    );
+    db.prepare(`INSERT INTO outbox (id, inbox_id, idempotency_key, fingerprint, provider_message, state, next_attempt_at, message_id, thread_id, created_at, updated_at)
         VALUES (?, ?, ?, ?, ?, 'queued', ?, ?, ?, ?, ?)`).run(
-          randomUUID(),
+      randomUUID(),
+      inboxId,
+      idempotencyKey ?? null,
+      fingerprint,
+      JSON.stringify(composed.provider),
+      now,
+      identity.message_id,
+      identity.thread_id,
+      now,
+      now,
+    );
+    if (idempotencyKey !== undefined)
+      db.prepare(
+        "INSERT INTO outbound_idempotency (inbox_id, idempotency_key, fingerprint, message_id, thread_id) VALUES (?, ?, ?, ?, ?)",
+      ).run(inboxId, idempotencyKey, fingerprint, identity.message_id, identity.thread_id);
+    return identity;
+  }
+
+  function sendDraft(
+    inboxId: string,
+    draftId: string,
+    input: SendDraftRequest = {},
+    idempotencyKey?: string,
+    approve = false,
+    excludedLabels: readonly string[] = [],
+  ) {
+    return run((db, now) => {
+      const fingerprint = createHash("sha256")
+        .update(canonical({ draft_id: draftId, ...input }))
+        .digest("hex");
+      if (idempotencyKey !== undefined) {
+        const value = db
+          .prepare("SELECT * FROM draft_send_replays WHERE inbox_id = ? AND idempotency_key = ?")
+          .get(inboxId, idempotencyKey);
+        if (value !== undefined) {
+          const replay = Schema.decodeUnknownSync(
+            Schema.Struct({
+              fingerprint: Schema.String,
+              message_id: Schema.String,
+              thread_id: Schema.String,
+            }),
+          )(value);
+          if (replay.fingerprint !== fingerprint)
+            throw new OutboundError({
+              code: "idempotency_conflict",
+              message: "This idempotency key belongs to a different draft send.",
+              fix: "Use the original draft and labels or a new idempotency key.",
+              retryable: false,
+            });
+          return { message_id: replay.message_id, thread_id: replay.thread_id };
+        }
+      }
+      const stored = getDraft(db, inboxId, draftId);
+      if (stored.labels.some((label) => excludedLabels.includes(label))) throw notFound();
+      if (stored.approval_state === "rejected")
+        throw new OutboundError({
+          code: "message_rejected",
+          message: "The owner rejected this draft.",
+          fix: "Create a new draft for the owner to review.",
+          retryable: false,
+        });
+      if (!approve && stored.approval_state === "pending")
+        throw new OutboundError({
+          code: "approval_required",
+          message: `Draft ${draftId} requires owner approval.`,
+          fix: `Ask the owner to approve draft ${draftId}.`,
+          retryable: false,
+        });
+      const draft = { ...stored, labels: sendLabels(stored.labels, input) };
+      const request = draftRequest(draft);
+      if (approve && draft.send_at !== undefined && Date.parse(draft.send_at) > now) {
+        compose(inboxId, request, { draft: true });
+        return saveDraft(db, {
+          ...draft,
+          approval_state: "approved",
+          pending_approval: false,
+          send_status: "scheduled",
+          ...(idempotencyKey === undefined ? {} : { send_idempotency_key: idempotencyKey }),
+          updated_at: new Date(now).toISOString(),
+        });
+      }
+      const response = enqueue(db, now, inboxId, request, idempotencyKey, true);
+      db.prepare("DELETE FROM drafts WHERE inbox_id = ? AND draft_id = ?").run(inboxId, draftId);
+      if (idempotencyKey !== undefined)
+        db.prepare(`INSERT INTO draft_send_replays
+        (inbox_id, idempotency_key, draft_id, fingerprint, message_id, thread_id) VALUES (?, ?, ?, ?, ?, ?)`).run(
           inboxId,
-          idempotencyKey ?? null,
+          idempotencyKey,
+          draftId,
           fingerprint,
-          JSON.stringify(composed.provider),
-          now,
-          identity.message_id,
-          identity.thread_id,
-          now,
-          now,
+          response.message_id,
+          response.thread_id,
         );
-        if (idempotencyKey !== undefined)
-          db.prepare(
-            "INSERT INTO outbound_idempotency (inbox_id, idempotency_key, fingerprint, message_id, thread_id) VALUES (?, ?, ?, ?, ?)",
-          ).run(inboxId, idempotencyKey, fingerprint, identity.message_id, identity.thread_id);
-        return identity;
-      }),
+      return response;
+    });
+  }
+
+  return {
+    enqueue: (inboxId: string, input: OutboundRequest, idempotencyKey?: string) =>
+      run((db, now) => enqueue(db, now, inboxId, input, idempotencyKey)),
+    sendDraft,
     get: (inboxId: string, messageId: string) =>
       run((db) => {
         const row = db

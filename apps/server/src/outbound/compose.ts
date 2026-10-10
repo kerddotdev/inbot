@@ -60,7 +60,7 @@ function unique(values: readonly string[], exclude: readonly string[] = []) {
   });
 }
 
-function attachment(input: SendAttachment): typeof ProviderAttachment.Type {
+export function attachment(input: SendAttachment): typeof ProviderAttachment.Type {
   if (input.url !== undefined)
     throw new OutboundError({
       code: "not_supported",
@@ -151,6 +151,7 @@ export interface ComposeContext {
   readonly parent?: Message;
   readonly attachments?: readonly StoredAttachment[];
   readonly parent_rfc_id?: string;
+  readonly draft?: boolean;
 }
 
 export function compose(inboxId: string, input: OutboundRequest, context: ComposeContext = {}) {
@@ -172,6 +173,7 @@ export function compose(inboxId: string, input: OutboundRequest, context: Compos
   const headers = { ...request.headers };
   validateHeaders(headers);
   if (
+    !context.draft &&
     (decoded.kind === "send" || decoded.kind === "forward") &&
     Object.keys(headers).some((name) => ["in-reply-to", "references"].includes(name.toLowerCase()))
   )
@@ -181,6 +183,10 @@ export function compose(inboxId: string, input: OutboundRequest, context: Compos
   const attachments = (request.attachments ?? []).map(attachment);
   let references: string[] = [];
   let inReplyTo: string | undefined;
+  if (context.draft) {
+    inReplyTo = headers["In-Reply-To"];
+    references = headers.References?.split(/ +/) ?? [];
+  }
   if ((decoded.kind === "reply" || decoded.kind === "reply-all") && parent) {
     const all =
       decoded.kind === "reply-all" || ("reply_all" in request && request.reply_all === true);

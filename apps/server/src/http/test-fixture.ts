@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { Clock, Context, Effect, Exit, Layer, Schema, Scope } from "effect";
+import { Drafts } from "../drafts/drafts.js";
 import { ApiKeys } from "../auth/api-keys.js";
 import { Connection } from "../auth/owner.js";
 import { Home } from "../home.js";
@@ -56,23 +57,25 @@ export async function fixture(home: string) {
       Context.get(foundation, KeyManager).initialize({ useKeychain: true }),
       Context.empty(),
     );
+    const outbound = Outbox.Live.pipe(
+      Layer.provide(
+        OutboundProvider.fake((message) =>
+          Effect.sync(() => {
+            sent.push(message);
+            return { provider_message_id: `<fake-${sent.length}@example.test>` };
+          }),
+        ),
+      ),
+    );
     const services = await run(
       Layer.buildWithScope(
         Layer.mergeAll(
           Mailbox.Live,
           ApiKeys.Live,
           TransportConfig.Live,
-          Outbox.Live.pipe(
-            Layer.provide(
-              OutboundProvider.fake((message) =>
-                Effect.sync(() => {
-                  sent.push(message);
-                  return { provider_message_id: `<fake-${sent.length}@example.test>` };
-                }),
-              ),
-            ),
-          ),
+          Drafts.Live.pipe(Layer.provideMerge(outbound)),
         ).pipe(
+          Layer.provideMerge(TransportConfig.Live),
           Layer.provideMerge(Store.layer(dek)),
           Layer.provideMerge(Layer.succeedContext(foundation)),
         ),
@@ -128,13 +131,14 @@ export async function fixture(home: string) {
       keys,
       store: Context.get(services, Store),
       outbox: Context.get(services, Outbox),
+      drafts: Context.get(services, Drafts),
       transport: Context.get(services, TransportConfig),
       sent,
-      start: async (outbox: OutboxService, clock: Clock.Clock) => {
+      start: async (outbox: OutboxService, clock: Clock.Clock, runScheduler = false) => {
         const serverScope = Scope.makeUnsafe();
         try {
           const started = await run(
-            startHttpServer().pipe(
+            startHttpServer({ runScheduler }).pipe(
               Effect.provideService(Outbox, outbox),
               Effect.provideService(Clock.Clock, clock),
               Effect.provideService(Scope.Scope, serverScope),

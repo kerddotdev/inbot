@@ -1233,7 +1233,9 @@ test("upgrades an encrypted version-one database without losing existing data", 
   const inboxId = await withMailbox(home, key, (mailbox, store) =>
     Effect.gen(function* () {
       yield* store.use((database) => {
-        expect(database.pragma("user_version", { simple: true })).toBe(migrations.length);
+        expect(database.pragma("user_version", { simple: true })).toBe(
+          migrations.at(-1)?.version ?? 0,
+        );
         expect(database.prepare("SELECT value FROM meta WHERE key = ?").get("original")).toEqual({
           value: "preserved",
         });

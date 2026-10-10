@@ -13,6 +13,7 @@ import {
   ListMessagesResponse,
 } from "../../../../packages/contracts/src/messages.js";
 import { ErrorResponse } from "../../../../packages/contracts/src/errors.js";
+import { client as connect } from "./test-client.js";
 import { fixture } from "../http/test-fixture.js";
 
 const inboxId = "agent@example.test";
@@ -47,71 +48,9 @@ const test = baseTest.extend<{ api: Awaited<ReturnType<typeof fixture>> }>({
 
 async function client(api: Awaited<ReturnType<typeof fixture>>, token?: string) {
   const key = token === undefined ? await api.run(api.keys.create(grant)) : undefined;
-  const initialCredential = token ?? key?.api_key;
-  if (initialCredential === undefined) throw new Error("Expected bearer credential");
-  let credential = initialCredential;
-  let id = 0;
-  let session: string | undefined;
-  async function rpc(method: string, params: unknown, notification = false) {
-    const response = await api.request("/mcp", {
-      token: credential,
-      method: "POST",
-      body: { jsonrpc: "2.0", ...(notification ? {} : { id: ++id }), method, params },
-      headers: {
-        accept: "application/json, text/event-stream",
-        ...(session === undefined
-          ? {}
-          : { "mcp-session-id": session, "mcp-protocol-version": "2025-06-18" }),
-      },
-    });
-    expect(response.status).toBe(notification ? 202 : 200);
-    session = response.headers.get("mcp-session-id") ?? session;
-    if (notification) return undefined;
-    const body = await response.text();
-    const json = response.headers.get("content-type")?.includes("text/event-stream")
-      ? body
-          .split("\n")
-          .filter((line) => line.startsWith("data: "))
-          .at(-1)
-          ?.slice(6)
-      : body;
-    const envelope = Schema.decodeUnknownSync(
-      Schema.fromJsonString(Schema.Struct({ result: Schema.Unknown })),
-    )(json);
-    return envelope.result;
-  }
-  const initialized = await rpc("initialize", {
-    protocolVersion: "2025-06-18",
-    capabilities: {},
-    clientInfo: { name: "inbot-test", version: "1.0.0" },
-  });
-  expect(
-    Schema.decodeUnknownSync(Schema.Struct({ protocolVersion: Schema.String }))(initialized)
-      .protocolVersion,
-  ).toBe("2025-06-18");
-  await rpc("notifications/initialized", {}, true);
-  return {
-    key,
-    list: async () =>
-      Schema.decodeUnknownSync(Schema.Struct({ tools: Schema.Array(McpSchema.Tool) }))(
-        await rpc("tools/list", {}),
-      ),
-    call: async (name: string, args: unknown) => {
-      const result = Schema.decodeUnknownSync(McpSchema.CallToolResult)(
-        await rpc("tools/call", { name, arguments: args }),
-      );
-      const text = result.content.find((block) => block.type === "text");
-      if (text?.type !== "text") throw new Error("Expected text content");
-      expect(Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Unknown))(text.text)).toEqual(
-        result.structuredContent,
-      );
-      expect(Buffer.byteLength(JSON.stringify(result))).toBeLessThan(20_000);
-      return result;
-    },
-    credential: (value: string) => {
-      credential = value;
-    },
-  };
+  const credential = token ?? key?.api_key;
+  if (credential === undefined) throw new Error("Expected bearer credential");
+  return { ...(await connect(api, credential)), key };
 }
 
 function failure(result: McpSchema.CallToolResult, code: string) {
@@ -148,6 +87,12 @@ test("initializes with an API key and lists only mailbox tools with object schem
       "reply_to_message",
       "forward_message",
       "update_message",
+      "create_draft",
+      "list_drafts",
+      "get_draft",
+      "update_draft",
+      "send_draft",
+      "delete_draft",
     ].sort(),
   );
   for (const tool of tools) {

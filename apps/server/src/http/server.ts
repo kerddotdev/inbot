@@ -8,8 +8,10 @@ import { OwnerAuth } from "../auth/owner.js";
 import { Home } from "../home.js";
 import { Mailbox } from "../mailbox/mailbox.js";
 import { AgentOperations } from "../agent/operations.js";
+import { Drafts } from "../drafts/drafts.js";
 import { Outbox } from "../outbound/outbox.js";
 import { TransportConfig } from "../outbound/transport-config.js";
+import { startDraftLoop } from "../drafts/runtime.js";
 import { startOutboxLoop } from "../outbound/runtime.js";
 import { mcpRoutes } from "../mcp/server.js";
 import { authenticate } from "./middleware.js";
@@ -24,6 +26,7 @@ export function startHttpServer(
     readonly port?: number;
     readonly ready?: (url: string) => void;
     readonly runOutbox?: boolean;
+    readonly runScheduler?: boolean;
   } = {},
 ) {
   return Effect.gen(function* () {
@@ -35,6 +38,7 @@ export function startHttpServer(
     const keys = yield* ApiKeys;
     const outbox = yield* Outbox;
     const config = yield* TransportConfig;
+    const drafts = yield* Drafts;
     const nodeServer = createServer();
     const server = yield* NodeHttpServer.make(() => nodeServer, {
       host: "127.0.0.1",
@@ -50,6 +54,7 @@ export function startHttpServer(
       Layer.succeed(Mailbox, mailbox),
       Layer.succeed(ApiKeys, keys),
       Layer.succeed(Outbox, outbox),
+      Layer.succeed(Drafts, drafts),
       Layer.succeed(TransportConfig, config),
       Downloads.layer(url),
       OwnerAuth.layer(url).pipe(Layer.provide(Layer.succeed(Home, home))),
@@ -149,8 +154,12 @@ export function startHttpServer(
       }),
     );
     yield* server.serve(guarded);
+    const scheduler =
+      options.runOutbox === false || options.runScheduler === false
+        ? undefined
+        : yield* startDraftLoop();
     const runner = options.runOutbox === false ? undefined : yield* startOutboxLoop();
     yield* Effect.sync(() => options.ready?.(url));
-    return { url, runner };
+    return { url, runner, scheduler };
   }).pipe(Effect.provide(NodeHttpServer.layerHttpServices));
 }

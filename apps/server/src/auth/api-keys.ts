@@ -161,6 +161,7 @@ function makeApiKeys(store: StoreService) {
           );
         return {
           kind: "agent",
+          api_key_id: key.api_key_id,
           grant: {
             ...(key.inbox_id === undefined ? {} : { inbox_id: key.inbox_id }),
             ...(key.inbox_ids === undefined ? {} : { inbox_ids: key.inbox_ids }),
