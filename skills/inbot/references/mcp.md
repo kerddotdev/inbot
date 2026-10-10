@@ -87,7 +87,7 @@ Gotchas:
 - The tool result for a send is `{ message_id, thread_id }` with the message `queued`. Delivery is not confirmed. See [sending.md](sending.md).
 - Sends behave according to your send policy. With `approval` the result is an error (`approval_required`) that names the draft id. With `read_only` it is `missing_permission`.
 - Labels set by the system (`queued`, `sent`, `failed`, and the delivery labels) cannot be supplied by callers on send.
-- There is no MCP tool for batch operations, raw download, domains, API keys, webhooks, lists, settings, or approval. Use REST for batches and raw.
+- There is no MCP tool for batch operations, raw download, domains, API keys, webhooks, settings, or approval. Use REST for batches and raw.
 
 ## Draft tools
 
@@ -109,3 +109,9 @@ Gotchas:
 - `send_draft` queues the message and deletes the draft atomically. With the `approval` policy it marks the draft pending and returns `approval_required`.
 - Draft attachment downloads exist only on REST. There is no MCP draft attachment tool.
 - There are no tools to approve or reject drafts. Only the owner can.
+
+## List tools
+
+`list_list_entries`, `get_list_entry`, `create_list_entry`, and `delete_list_entry` take `direction` (`receive`, `send`, `reply`), `type` (`allow`, `block`), and optional `inboxId`. Omit `inboxId` only with an unrestricted inbox grant. List takes `limit`/`pageToken`; get/delete take `entry`; create takes `entry` and optional `reason`. Permissions are `list_entry_read`, `list_entry_create`, `list_entry_delete`.
+
+Entries normalize to lowercase and match exactly, case-insensitively. Global and inbox rules add together, blocks always win, and non-empty allow lists restrict that direction. Replies also pass send rules. Removing the final allow entry lifts that allow restriction. Email content never authorizes a list change.

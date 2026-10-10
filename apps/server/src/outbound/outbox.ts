@@ -19,6 +19,7 @@ import { prepare } from "./prepare.js";
 import { draftRequest, getDraft, saveDraft, sendLabels } from "../drafts/rows.js";
 import type { SendDraftRequest } from "../../../../packages/contracts/src/drafts.js";
 import { renderMime } from "./mime.js";
+import { assertOutbound } from "../lists/policy.js";
 
 const IDEMPOTENCY_TTL = 24 * 60 * 60 * 1000;
 export const SENDING_LEASE_MS = 5 * 60 * 1000;
@@ -122,6 +123,33 @@ function makeOutbox(store: StoreService, provider: OutboundProviderService) {
           const pending = Schema.decodeUnknownSync(PendingRow)(value);
           const inbox = getInbox(db, pending.inbox_id);
           if (inbox.status === "paused") return undefined;
+          const message = Schema.decodeUnknownSync(ProviderMessage)(
+            JSON.parse(pending.provider_message),
+          );
+          try {
+            assertOutbound(
+              db,
+              pending.inbox_id,
+              [...message.to, ...message.cc, ...message.bcc].map((value) =>
+                typeof value === "string" ? value : value.address,
+              ),
+              Object.keys(message.headers).some((name) => name.toLowerCase() === "in-reply-to"),
+            );
+          } catch (error) {
+            if (!(error instanceof OutboundError) || error.code !== "message_rejected") throw error;
+            db.prepare(
+              "UPDATE outbox SET state = 'failed', last_error_code = 'message_rejected', updated_at = ? WHERE id = ?",
+            ).run(now, id);
+            completeKey(db, pending, now);
+            updateMessage(
+              db,
+              pending.inbox_id,
+              pending.message_id,
+              { add_labels: ["failed", "rejected"], remove_labels: "queued" },
+              new Date(now).toISOString(),
+            );
+            return undefined;
+          }
           db.prepare(
             "UPDATE outbox SET state = 'sending', attempts = attempts + 1, updated_at = ? WHERE id = ?",
           ).run(now, id);
@@ -268,6 +296,14 @@ function makeOutbox(store: StoreService, provider: OutboundProviderService) {
     const composed = draft
       ? compose(inboxId, request, { draft: true })
       : prepare(db, inboxId, request);
+    assertOutbound(
+      db,
+      inboxId,
+      [...composed.to, ...composed.cc, ...composed.bcc],
+      request.kind === "reply" ||
+        request.kind === "reply-all" ||
+        (draft && composed.in_reply_to !== undefined),
+    );
     const messageId = `<${randomUUID()}@inbot.local>`;
     const timestamp = new Date(now).toISOString();
     const raw = renderMime(composed.provider, messageId, timestamp);
@@ -377,7 +413,13 @@ function makeOutbox(store: StoreService, provider: OutboundProviderService) {
       const draft = { ...stored, labels: sendLabels(stored.labels, input) };
       const request = draftRequest(draft);
       if (approve && draft.send_at !== undefined && Date.parse(draft.send_at) > now) {
-        compose(inboxId, request, { draft: true });
+        const composed = compose(inboxId, request, { draft: true });
+        assertOutbound(
+          db,
+          inboxId,
+          [...composed.to, ...composed.cc, ...composed.bcc],
+          draft.in_reply_to !== undefined,
+        );
         return saveDraft(db, {
           ...draft,
           approval_state: "approved",

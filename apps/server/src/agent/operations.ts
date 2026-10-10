@@ -37,6 +37,12 @@ import { wireError } from "../http/errors.js";
 import { Outbox, type OutboxService } from "../outbound/outbox.js";
 import { TransportConfig } from "../outbound/transport-config.js";
 import { authorize, authorizeSendPolicy } from "./authorization.js";
+import { Lists } from "../lists/lists.js";
+import type {
+  CreateListEntryRequest,
+  Direction,
+  ListType,
+} from "../../../../packages/contracts/src/lists.js";
 
 function makeOperations(
   mailbox: MailboxService,
@@ -44,6 +50,7 @@ function makeOperations(
   config: TransportConfig["Service"],
   downloads: Downloads["Service"],
   drafts: DraftsService,
+  lists: Lists["Service"],
 ) {
   function checked<A, E, R>(
     permission: Permission,
@@ -96,7 +103,59 @@ function makeOperations(
     sendAt == null
       ? Effect.void
       : Effect.andThen(authorize("draft_send", inboxId), authorizeSendPolicy);
+  const listScope = (permission: Permission, inboxId: string | undefined) =>
+    Effect.gen(function* () {
+      yield* authorize(permission, inboxId);
+      if (inboxId === undefined && (yield* inboxAllowlist) !== undefined)
+        return yield* Effect.fail(
+          wireError(
+            "missing_permission",
+            "Global lists require an unrestricted inbox grant.",
+            "Use the list endpoints for an inbox in your grant, or ask the owner for an unrestricted grant.",
+          ),
+        );
+    });
   return {
+    listEntries: (
+      inboxId: string | undefined,
+      direction: Direction,
+      type: ListType,
+      query: typeof CursorQuery.Type = {},
+    ) =>
+      Effect.andThen(
+        listScope("list_entry_read", inboxId),
+        lists.list(inboxId, direction, type, query),
+      ),
+    getListEntry: (
+      inboxId: string | undefined,
+      direction: Direction,
+      type: ListType,
+      entry: string,
+    ) =>
+      Effect.andThen(
+        listScope("list_entry_read", inboxId),
+        lists.get(inboxId, direction, type, entry),
+      ),
+    createListEntry: (
+      inboxId: string | undefined,
+      direction: Direction,
+      type: ListType,
+      input: CreateListEntryRequest,
+    ) =>
+      Effect.andThen(
+        listScope("list_entry_create", inboxId),
+        lists.create(inboxId, direction, type, input),
+      ),
+    deleteListEntry: (
+      inboxId: string | undefined,
+      direction: Direction,
+      type: ListType,
+      entry: string,
+    ) =>
+      Effect.andThen(
+        listScope("list_entry_delete", inboxId),
+        lists.delete(inboxId, direction, type, entry),
+      ),
     createDraft: (inboxId: string, input: CreateDraftRequest) =>
       checked(
         "draft_create",
@@ -379,6 +438,7 @@ export class AgentOperations extends Context.Service<
         yield* TransportConfig,
         yield* Downloads,
         yield* Drafts,
+        yield* Lists,
       );
     }),
   );

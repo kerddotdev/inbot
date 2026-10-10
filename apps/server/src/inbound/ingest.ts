@@ -19,6 +19,11 @@ export const InboundRecipientResult = Schema.Union([
     recipient: Schema.String,
     status: Schema.Literals(["skipped_paused", "skipped_unknown"]),
   }),
+  Schema.Struct({
+    recipient: Schema.String,
+    status: Schema.Literal("skipped_blocked"),
+    reason_code: Schema.Literals(["blocked_sender", "sender_not_allowed"]),
+  }),
 ]);
 export type InboundRecipientResult = typeof InboundRecipientResult.Type;
 
@@ -81,6 +86,16 @@ export function ingestInbound(
       } else if (inbox.status === "paused") {
         results.push({ recipient: inboxId, status: "skipped_paused" });
       } else {
+        const reason = yield* mailbox.acceptInbound(
+          inboxId,
+          [parsed.from, metadata.mail_from].filter((sender) => sender.length > 0),
+          payload.raw,
+          metadata.received_at,
+        );
+        if (reason !== undefined) {
+          results.push({ recipient: inboxId, status: "skipped_blocked", reason_code: reason });
+          continue;
+        }
         const stored = yield* mailbox.insertMessage({
           ...message,
           ...extracted,

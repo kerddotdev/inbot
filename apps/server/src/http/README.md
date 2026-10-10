@@ -48,6 +48,8 @@ override are 4.0.2, matching the installed Effect version.
 - Domains: owner-only register, list, get, update, delete, verify, BIND zone-file,
   apply, and teardown. See [provisioning](../provision/README.md) for safety and states.
 - Mail transport: owner-only `GET`, `PUT`, and `DELETE /v0/owner/transport`.
+- Lists: global and inbox allow/block CRUD for `receive`, `send`, and `reply`.
+  See [list policy and enforcement](../lists/README.md).
 - API keys: owner-only organization CRUD and inbox-scoped create, list, update,
   delete. The contract has no inbox-scoped key-get route.
 
@@ -58,7 +60,7 @@ changes the label to `sent`; it does not prove delivery. No configured transport
 returns 503 `service_unavailable` with fix `Configure the Cloudflare mail transport`
 and does not enqueue. Configure the transport in Settings > Mail transport or through the owner routes below.
 
-Lists and webhooks return HTTP 501 `not_supported` after
+Webhooks return HTTP 501 `not_supported` after
 authentication and authorization. Validated input is still required. Tunnels,
 OAuth, and event streams remain planned. The same server
 exposes authenticated streamable HTTP MCP at `/mcp`; see
@@ -342,3 +344,9 @@ when idle or unconfigured. Settings are reread on each dispatch. Shutdown interr
 the runner before releasing its resources; `serve` observes runner failures and
 stops rather than leaving a broken background task. Integration tests disable the
 automatic loop when they need to call the fake provider's `processDue()` explicitly.
+
+## Allow and block lists
+
+`GET`/`POST /v0/lists/:direction/:type` and `GET`/`DELETE` with `/:entry` manage global entries. Prefix with `/v0/inboxes/:inbox_id` for inbox entries. Create accepts `{ entry, reason? }`; directions are `receive`, `send`, `reply`, types `allow`, `block`. Domains normalize to lowercase IDNA; email local parts remain exact. Lists paginate with `limit` and `page_token`, lexically ascending.
+
+Reads need `list_entry_read`, creation `list_entry_create`, deletion `list_entry_delete`. Global access requires owner authentication or an unrestricted inbox grant; inbox access enforces fixed scope. Global and inbox rules add together, blocks win, and non-empty allow lists restrict mail. Replies pass send and reply rules. Forbidden outbound recipients return `message_rejected` with nothing queued. Inbound rejection reasons are recorded durably before ciphertext cleanup. Settings uses these same routes with owner sessions and CSRF.

@@ -6,6 +6,7 @@ import { HttpApiBuilder, HttpApiError } from "effect/http-api";
 import { ApiKeys } from "../auth/api-keys.js";
 import { OwnerSessions } from "../auth/sessions.js";
 import { Store } from "../store.js";
+import { Lists } from "../lists/lists.js";
 import { ownerHandlers } from "./owner.js";
 import { CurrentOwnerSession, cookieName, matchesCsrf, sessionCookie } from "./owner-session.js";
 import { staticWeb, webSecurityHeaders } from "./static.js";
@@ -95,6 +96,7 @@ export function startHttpServer(
       ),
     );
     const services = Layer.mergeAll(
+      Lists.Live.pipe(Layer.provide(Layer.succeed(Store, store))),
       ownerTransport,
       Layer.succeed(Home, home),
       OwnerSessions.layer(options.setupRequired).pipe(Layer.provide(Layer.succeed(Store, store))),

@@ -255,3 +255,7 @@ and [ack](https://developers.cloudflare.com/api/resources/queues/subresources/me
 request formats. Tests reproduce the captured delivered-event structure with
 synthetic ids and content, including its extra source, metadata, and delivery
 fields; they do not read private spike files or contact Cloudflare.
+
+## Recipient lists
+
+Every To/CC/BCC recipient must pass global and inbox `send` lists; replies and reply drafts also pass `reply` lists. Blocks win and non-empty allow lists restrict recipients. Refusal returns `message_rejected` before queueing or approval, leaving existing drafts unchanged. Scheduled drafts and queued outbox messages recheck rules before sending; newly forbidden mail becomes failed without invoking the provider. See [list policy](../lists/README.md).

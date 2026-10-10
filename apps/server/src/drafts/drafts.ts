@@ -16,6 +16,9 @@ import { OutboundError } from "../outbound/errors.js";
 import { canonical, Outbox, type OutboxService } from "../outbound/outbox.js";
 import { TransportConfig } from "../outbound/transport-config.js";
 import * as Rows from "./rows.js";
+import { assertOutbound } from "../lists/policy.js";
+import { compose } from "../outbound/compose.js";
+import { prepare } from "../outbound/prepare.js";
 
 function addresses(value: string | readonly string[] | undefined) {
   return typeof value === "string" ? [value] : value;
@@ -243,6 +246,13 @@ function makeDrafts(
             fix: "Create a new draft for review.",
             retryable: false,
           });
+        const composed = compose(inboxId, Rows.draftRequest(draft), { draft: true });
+        assertOutbound(
+          db,
+          inboxId,
+          [...composed.to, ...composed.cc, ...composed.bcc],
+          draft.in_reply_to !== undefined,
+        );
         Rows.saveDraft(db, {
           ...draft,
           labels: Rows.sendLabels(draft.labels, input),
@@ -259,6 +269,13 @@ function makeDrafts(
         const fingerprint = createHash("sha256").update(canonical(input)).digest("hex");
         const replay = approvalReplay(db, inboxId, idempotencyKey, fingerprint);
         if (replay !== undefined) return replay;
+        const composed = prepare(db, inboxId, input);
+        assertOutbound(
+          db,
+          inboxId,
+          [...composed.to, ...composed.cc, ...composed.bcc],
+          input.kind === "reply" || input.kind === "reply-all",
+        );
         const request = input.request;
         const to = addresses("to" in request ? request.to : undefined);
         const cc = addresses("cc" in request ? request.cc : undefined);
