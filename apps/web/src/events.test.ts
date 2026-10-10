@@ -8,6 +8,15 @@ const cases: readonly { event: Event; changed: readonly string[] }[] = [
   {
     event: {
       type: "event",
+      event_type: "oauth.revoked",
+      event_id: "oauth",
+      oauth: { grant_id: "grant", client_id: "client", timestamp },
+    },
+    changed: ["oauth"],
+  },
+  {
+    event: {
+      type: "event",
       event_type: "message.sent",
       event_id: "sent",
       send: {

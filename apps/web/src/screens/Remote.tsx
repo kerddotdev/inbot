@@ -159,9 +159,9 @@ export function Remote() {
             </div>
           ) : null}
           <p className="mt-6 text-ink2">
-            Reachable: /mcp, agent /v0 routes, and the web UI with owner sign-in. /oauth and
-            /.well-known are reserved for future support. Local owner bearer tokens are rejected
-            remotely.
+            Reachable: /mcp, agent /v0 routes, OAuth discovery and authorization, and the web UI
+            with owner sign-in. Client management stays local. Local owner bearer tokens are
+            rejected remotely.
           </p>
         </div>
       ) : null}

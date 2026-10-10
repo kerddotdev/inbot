@@ -15,6 +15,7 @@ import { Button, ListMessage, Status } from "./components/ui";
 import { LoadError, ErrorNotice } from "./feedback";
 import { approvalsQuery, inboxesQuery } from "./queries";
 import { Approvals } from "./screens/Approvals";
+import { OAuthConsent } from "./screens/OAuth";
 import { ApiKeys } from "./screens/ApiKeys";
 import { Locked, Login, Setup } from "./screens/Auth";
 import { Domains } from "./screens/Domains";
@@ -161,7 +162,20 @@ function SessionApp({ loginToken }: { loginToken: string | null }) {
       .finally(() => setRedeeming(false));
   }, [loginToken]);
 
-  const redirect = status.data ? authRedirect(status.data, route) : undefined;
+  const pathname = window.location.pathname.replace(/\/$/, "") || "/";
+  const oauth = pathname === "/oauth/authorize";
+  const pendingAuthorization =
+    pathname === "/login" ? new URLSearchParams(window.location.search).get("authorize") : null;
+  const redirect =
+    status.data &&
+    !(oauth && status.data.authenticated) &&
+    !(pendingAuthorization !== null && status.data.authenticated)
+      ? authRedirect(status.data, route)
+      : undefined;
+  useEffect(() => {
+    if (pendingAuthorization !== null && status.data?.authenticated)
+      window.location.replace(`/oauth/authorize?${pendingAuthorization}`);
+  }, [pendingAuthorization, status.data?.authenticated]);
   useEffect(() => {
     if (redirect) navigate(redirect);
   }, [redirect]);
@@ -208,6 +222,9 @@ function SessionApp({ loginToken }: { loginToken: string | null }) {
     };
     return status.data.setup_required ? <Setup {...props} /> : <Login {...props} />;
   }
+  if (oauth) return <OAuthConsent />;
+  if (pendingAuthorization !== null)
+    return <ListMessage icon="lock" title="Opening authorization request" />;
   if (!route || route.name === "setup" || route.name === "login" || route.name === "locked")
     return <ListMessage icon="inbox" title="Loading mail" />;
   return <OwnerApp route={route} />;

@@ -18,3 +18,5 @@ export * from "./owner.js";
 export * from "./api/owner.js";
 export * from "./remote.js";
 export * from "./api/remote.js";
+export * from "./oauth.js";
+export * from "./api/oauth.js";

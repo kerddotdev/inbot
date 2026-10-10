@@ -1,3 +1,5 @@
+import { createHash, randomBytes } from "node:crypto";
+import * as OAuth from "../../../../packages/contracts/src/oauth.js";
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { request as httpRequest } from "node:http";
 import { tmpdir } from "node:os";
@@ -44,7 +46,10 @@ const remoteRequest = (
             if (value !== undefined)
               for (const item of Array.isArray(value) ? value : [value]) headers.append(name, item);
           resolve(
-            new Response(Buffer.concat(chunks), { status: response.statusCode ?? 500, headers }),
+            new Response(response.statusCode === 204 ? null : Buffer.concat(chunks), {
+              status: response.statusCode ?? 500,
+              headers,
+            }),
           );
         });
         response.on("error", reject);
@@ -292,8 +297,8 @@ test("tunnel allowlist rejects management, encoded bypasses and prefix lookalike
   for (const path of ["/v0evil", "/mcpevil", "/oauth-evil", "/.well-known-evil"]) {
     expect((await remoteRequest(f, path)).status, path).toBe(302);
   }
-  expect(tunnelRoute("/oauth")).toBe("agent");
-  expect(tunnelRoute("/.well-known/openid-configuration")).toBe("agent");
+  expect(tunnelRoute("/oauth")).toBe("blocked");
+  expect(tunnelRoute("/.well-known/openid-configuration")).toBe("blocked");
 });
 
 test("owner bearer is refused on every tunneled surface and loopback ignores forged proxy headers", async ({
@@ -305,8 +310,8 @@ test("owner bearer is refused on every tunneled surface and loopback ignores for
     "/mcp",
     "/v0/owner/status",
     "/",
-    "/oauth",
-    "/.well-known/openid-configuration",
+    "/oauth/register",
+    "/.well-known/oauth-protected-resource",
   ]) {
     const response = await remoteRequest(f, path, {
       headers: { authorization: `Bearer ${f.token}` },
@@ -668,5 +673,354 @@ test("valid tunnel owner sessions cannot access local management routes", async 
       code: "missing_permission",
       message: expect.stringContaining("management"),
     });
+  }
+});
+
+test("allows declared OAuth discovery and public endpoints while keeping owner management local", async ({
+  f,
+}) => {
+  await f.run(f.remote.enable({ hostname }));
+  for (const path of [
+    "/.well-known/oauth-authorization-server",
+    "/.well-known/oauth-protected-resource",
+    "/.well-known/oauth-protected-resource/mcp",
+    "/.well-known/oauth-protected-resource/v0",
+  ]) {
+    expect(tunnelRoute(path)).toBe("agent");
+    const response = await remoteRequest(f, path);
+    expect(response.status).toBe(200);
+    const metadata: unknown = await response.json();
+    expect(JSON.stringify(metadata)).toContain(publicOrigin);
+    expect(JSON.stringify(metadata)).not.toContain(f.url);
+  }
+  for (const path of ["/oauth/register", "/oauth/token", "/oauth/revoke"])
+    expect(tunnelRoute(path)).toBe("agent");
+  for (const path of ["/oauth/authorize", "/oauth/authorize/details"])
+    expect(tunnelRoute(path)).toBe("auth");
+  for (const path of [
+    "/oauth/admin",
+    "/oauth/authorize/evil",
+    "/.well-known/unknown",
+    "/v0/owner/oauth/clients",
+    "/v0/owner/oauth/grants/synthetic",
+  ])
+    expect((await remoteRequest(f, path)).status, path).toBe(403);
+  for (const path of [
+    "/.well-known/oauth-protected-resource",
+    "/oauth/register",
+    "/oauth/token",
+    "/oauth/revoke",
+    "/oauth/authorize",
+  ])
+    expect(
+      (await remoteRequest(f, path, { headers: { authorization: `Bearer ${f.token}` } })).status,
+      path,
+    ).toBe(403);
+  const registered = await remoteRequest(f, "/oauth/register", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      client_name: "Synthetic remote client",
+      redirect_uris: ["http://127.0.0.1:8765/callback"],
+    }),
+  });
+  expect(registered.status).toBe(201);
+  const { client_id } = Schema.decodeUnknownSync(Schema.Struct({ client_id: Schema.String }))(
+    await registered.json(),
+  );
+  const input = {
+    response_type: "code",
+    client_id,
+    redirect_uri: "http://127.0.0.1:8765/callback",
+    code_challenge_method: "S256",
+    code_challenge: "a".repeat(43),
+    resource: `${publicOrigin}/mcp`,
+  };
+  const session = await ownerSession(f);
+  const details = (headers: Record<string, string>) =>
+    remoteRequest(f, "/oauth/authorize/details", {
+      method: "POST",
+      headers,
+      body: JSON.stringify(input),
+    });
+  expect((await details(session)).status).toBe(200);
+  const { origin: _origin, ...missingOrigin } = session;
+  expect((await details(missingOrigin)).status).toBe(403);
+  expect((await details({ ...session, origin: "https://foreign.example.test" })).status).toBe(403);
+  expect((await details({ ...session, "x-inbot-csrf": "wrong" })).status).toBe(403);
+  expect((await details({ "content-type": "application/json", origin: publicOrigin })).status).toBe(
+    403,
+  );
+  const challenge = await remoteRequest(f, "/mcp");
+  expect(challenge.status).toBe(401);
+  expect(challenge.headers.get("www-authenticate")).toContain(
+    `${publicOrigin}/.well-known/oauth-protected-resource/mcp`,
+  );
+});
+
+test("each listener advertises its own OAuth identity and accepts only tokens bound to its resource", async ({
+  f,
+}) => {
+  await f.run(f.remote.enable({ hostname }));
+  const tunnelSession = await ownerSession(f);
+  const localLogin = await f.request("/v0/owner/login", {
+    token: null,
+    method: "POST",
+    body: { password },
+    headers: { origin: f.url },
+  });
+  expect(localLogin.status).toBe(200);
+  const { csrf_token } = Schema.decodeUnknownSync(Schema.Struct({ csrf_token: Schema.String }))(
+    await localLogin.json(),
+  );
+  const localSession = {
+    cookie: localLogin.headers.get("set-cookie")?.split(";")[0] ?? "",
+    origin: f.url,
+    "x-inbot-csrf": csrf_token,
+    "content-type": "application/json",
+  };
+  const listeners = [
+    {
+      origin: f.url,
+      session: localSession,
+      request: (path: string, options: Parameters<typeof remoteRequest>[2] = {}) =>
+        fetch(`${f.url}${path}`, { ...options, redirect: "manual" }),
+    },
+    {
+      origin: publicOrigin,
+      session: tunnelSession,
+      request: (path: string, options: Parameters<typeof remoteRequest>[2] = {}) =>
+        remoteRequest(f, path, options),
+    },
+  ];
+  for (const listener of listeners) {
+    const metadata = Schema.decodeUnknownSync(OAuth.AuthorizationServerMetadata)(
+      await (await listener.request("/.well-known/oauth-authorization-server")).json(),
+    );
+    expect(metadata.issuer).toBe(listener.origin);
+    expect(metadata.token_endpoint).toBe(`${listener.origin}/oauth/token`);
+    for (const path of ["", "/mcp", "/v0"]) {
+      const discovery = Schema.decodeUnknownSync(OAuth.ProtectedResourceMetadata)(
+        await (await listener.request(`/.well-known/oauth-protected-resource${path}`)).json(),
+      );
+      expect(discovery.resource).toBe(`${listener.origin}${path}`);
+      expect(discovery.authorization_servers).toEqual([listener.origin]);
+    }
+    const post = (path: string, body: unknown, headers: Record<string, string> = {}) =>
+      listener.request(path, {
+        method: "POST",
+        headers: { "content-type": "application/json", ...headers },
+        body: JSON.stringify(body),
+      });
+    const registered = Schema.decodeUnknownSync(OAuth.RegisteredClient)(
+      await (
+        await post("/oauth/register", { redirect_uris: ["com.example.remote:/callback"] })
+      ).json(),
+    );
+    for (const resource of ["/mcp", "/v0"]) {
+      const verifier = randomBytes(32).toString("base64url");
+      const input = {
+        client_id: registered.client_id,
+        redirect_uri: "com.example.remote:/callback",
+        response_type: "code",
+        code_challenge_method: "S256",
+        code_challenge: createHash("sha256").update(verifier).digest("base64url"),
+        resource: `${listener.origin}${resource}`,
+        state: "listener-state",
+      };
+      const wrongOrigin = listener.origin === f.url ? publicOrigin : f.url;
+      const wrongDetails = await post(
+        "/oauth/authorize/details",
+        { ...input, resource: `${wrongOrigin}${resource}` },
+        listener.session,
+      );
+      expect(wrongDetails.status).toBe(400);
+      expect(await wrongDetails.json()).toMatchObject({ error: "invalid_target" });
+      const approved = await post(
+        "/oauth/authorize",
+        {
+          ...input,
+          approved: true,
+          grant: {
+            inbox_ids: ["agent@example.test"],
+            permissions: { inbox_read: true },
+            send_policy: "read_only",
+          },
+        },
+        listener.session,
+      );
+      expect(approved.status).toBe(200);
+      const callback = new URL(
+        Schema.decodeUnknownSync(OAuth.ConsentResponse)(await approved.json()).redirect_uri,
+      );
+      expect(callback.searchParams.get("iss")).toBe(listener.origin);
+      const codeRequest = {
+        grant_type: "authorization_code",
+        client_id: input.client_id,
+        code: callback.searchParams.get("code"),
+        redirect_uri: input.redirect_uri,
+        code_verifier: verifier,
+        resource: input.resource,
+      };
+      const wrongExchange = await post("/oauth/token", {
+        ...codeRequest,
+        resource: `${wrongOrigin}${resource}`,
+      });
+      expect(wrongExchange.status).toBe(400);
+      const tokenResponse = await post("/oauth/token", codeRequest);
+      expect(tokenResponse.status).toBe(200);
+      const tokens = Schema.decodeUnknownSync(OAuth.TokenResponse)(await tokenResponse.json());
+      for (const target of listeners) {
+        const path = resource === "/mcp" ? "/mcp" : "/v0/inboxes";
+        const response = await target.request(path, {
+          headers: {
+            authorization: `Bearer ${tokens.access_token}`,
+            accept: "application/json, text/event-stream",
+            ...(resource === "/mcp" ? { "content-type": "application/json" } : {}),
+          },
+          ...(resource === "/mcp"
+            ? {
+                method: "POST",
+                body: JSON.stringify({
+                  jsonrpc: "2.0",
+                  id: 1,
+                  method: "initialize",
+                  params: {
+                    protocolVersion: "2025-06-18",
+                    capabilities: {},
+                    clientInfo: { name: "synthetic", version: "1" },
+                  },
+                }),
+              }
+            : {}),
+        });
+        expect(response.status, `${input.resource} -> ${target.origin}`).toBe(
+          target.origin === listener.origin ? 200 : 401,
+        );
+        if (response.status === 401) {
+          expect(response.headers.get("www-authenticate")).toContain(
+            `resource_metadata="${target.origin}/.well-known/oauth-protected-resource${resource}"`,
+          );
+          expect(response.headers.get("www-authenticate")).toContain('error="invalid_token"');
+        }
+      }
+      const other = listeners.find((entry) => entry.origin !== listener.origin);
+      if (!other) throw new Error("Missing other listener");
+      const foreignRefresh = await other.request("/oauth/token", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          grant_type: "refresh_token",
+          client_id: input.client_id,
+          refresh_token: tokens.refresh_token,
+          resource: input.resource,
+        }),
+      });
+      expect(foreignRefresh.status).toBe(400);
+      const refresh = await post("/oauth/token", {
+        grant_type: "refresh_token",
+        client_id: input.client_id,
+        refresh_token: tokens.refresh_token,
+        resource: input.resource,
+      });
+      expect(refresh.status).toBe(200);
+    }
+  }
+  await f.run(f.remote.disable());
+  expect(
+    await (await f.request("/.well-known/oauth-authorization-server", { token: null })).json(),
+  ).toMatchObject({ issuer: f.url });
+});
+
+test("tunnel rate buckets trust only CF-Connecting-IP on the dedicated listener and cannot exhaust loopback", async ({
+  f,
+}) => {
+  await f.run(f.remote.enable({ hostname }));
+  const register = (ip: string) =>
+    remoteRequest(f, "/oauth/register", {
+      method: "POST",
+      headers: { "content-type": "application/json", "cf-connecting-ip": ip },
+      body: JSON.stringify({ redirect_uris: ["http://127.0.0.1/callback"] }),
+    });
+  for (let index = 0; index < 20; index++) expect((await register("192.0.2.1")).status).toBe(201);
+  const rejected = await register("192.0.2.1");
+  expect(rejected.status).toBe(429);
+  expect(await rejected.json()).toMatchObject({ error: "temporarily_unavailable" });
+  expect((await register("192.0.2.2")).status).toBe(201);
+  for (let index = 0; index < 20; index++) {
+    const response = await f.request("/oauth/register", {
+      token: null,
+      method: "POST",
+      body: { redirect_uris: ["com.example.client:/callback"] },
+      headers: { "cf-connecting-ip": `192.0.2.${index + 1}` },
+    });
+    expect(response.status).toBe(201);
+  }
+  expect(
+    (
+      await f.request("/oauth/register", {
+        token: null,
+        method: "POST",
+        body: { redirect_uris: ["com.example.client:/callback"] },
+        headers: { "cf-connecting-ip": "192.0.2.250" },
+      })
+    ).status,
+  ).toBe(429);
+  f.advance(60 * 60_000);
+  expect((await register("192.0.2.1")).status).toBe(201);
+  expect(
+    (
+      await f.request("/oauth/register", {
+        token: null,
+        method: "POST",
+        body: { redirect_uris: ["com.example.client:/callback"] },
+      })
+    ).status,
+  ).toBe(201);
+  expect((await remoteRequest(f, "/v0/owner/oauth/clients/purge", { method: "POST" })).status).toBe(
+    403,
+  );
+});
+
+test("tunnel public OAuth CORS permits browser clients without exposing consent or owner routes", async ({
+  f,
+}) => {
+  await f.run(f.remote.enable({ hostname }));
+  const origin = "https://browser-client.example.test";
+  for (const path of [
+    "/.well-known/oauth-authorization-server",
+    "/.well-known/oauth-protected-resource/mcp",
+    "/oauth/register",
+    "/oauth/token",
+    "/oauth/revoke",
+  ]) {
+    const preflight = await remoteRequest(f, path, {
+      method: "OPTIONS",
+      headers: {
+        origin,
+        "access-control-request-method": path.startsWith("/.well-known/") ? "GET" : "POST",
+      },
+    });
+    expect(preflight.status).toBe(204);
+    expect(preflight.headers.get("access-control-allow-origin")).toBe("*");
+    expect(preflight.headers.has("access-control-allow-credentials")).toBe(false);
+    const response = await remoteRequest(f, path, {
+      headers: { origin, "content-type": "application/json" },
+      ...(path.startsWith("/.well-known/")
+        ? {}
+        : { method: "POST", body: JSON.stringify({ redirect_uris: ["http://[::1]/callback"] }) }),
+    });
+    expect(response.status).not.toBe(403);
+    expect(response.headers.get("access-control-allow-origin")).toBe("*");
+    expect(response.headers.has("set-cookie")).toBe(false);
+  }
+  for (const path of [
+    "/oauth/authorize",
+    "/oauth/authorize/details",
+    "/v0/owner/oauth/clients/purge",
+  ]) {
+    const response = await remoteRequest(f, path, { method: "OPTIONS", headers: { origin } });
+    expect(response.status).toBe(403);
+    expect(response.headers.has("access-control-allow-origin")).toBe(false);
   }
 });

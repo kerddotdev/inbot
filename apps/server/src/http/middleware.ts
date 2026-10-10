@@ -8,6 +8,7 @@ import {
   RequiredPermission,
 } from "../../../../packages/contracts/src/security.js";
 import { authenticatePrincipal } from "../auth/bearer.js";
+import { OAuth } from "../oauth/service.js";
 import { ApiKeys, type ApiKeysService } from "../auth/api-keys.js";
 import { OwnerAuth } from "../auth/owner.js";
 import { CurrentOwnerSession } from "./owner-session.js";
@@ -20,8 +21,9 @@ export function authenticate(
   credential: Redacted.Redacted<string>,
   owner: OwnerAuth["Service"],
   keys: ApiKeysService,
+  oauth: OAuth["Service"],
 ) {
-  return authenticatePrincipal(credential, owner, keys).pipe(
+  return authenticatePrincipal(credential, owner, keys, oauth).pipe(
     Effect.catch((error) => Effect.succeed(errorResponse(wireFailure(error)))),
   );
 }
@@ -31,6 +33,7 @@ export const AuthLive = Layer.effect(
   Effect.gen(function* () {
     const owner = yield* OwnerAuth;
     const keys = yield* ApiKeys;
+    const oauth = yield* OAuth;
     return BearerAuth.of({
       Bearer: (httpEffect, { credential, endpoint }) =>
         Effect.gen(function* () {
@@ -39,7 +42,7 @@ export const AuthLive = Layer.effect(
           const principal =
             request.headers.authorization === undefined && session !== undefined
               ? { kind: "owner" as const }
-              : yield* authenticate(credential, owner, keys);
+              : yield* authenticate(credential, owner, keys, oauth);
           if (HttpServerResponse.isHttpServerResponse(principal)) return principal;
           const params = yield* HttpRouter.params;
           const permission = Context.get(endpoint.annotations, RequiredPermission);

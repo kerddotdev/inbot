@@ -24,7 +24,7 @@ const Row = Schema.Struct({
   used_at: Schema.NullOr(Schema.String),
 });
 
-function keyRow(value: unknown): ApiKey {
+export function keyRow(value: unknown): ApiKey {
   const row = Schema.decodeUnknownSync(Row)(value);
   return Schema.decodeUnknownSync(ApiKey)(
     Object.fromEntries(Object.entries(row).filter(([, value]) => value !== null)),
@@ -35,7 +35,8 @@ function getKey(db: Database.Database, id: string, inboxId?: string) {
   const row = db.prepare("SELECT * FROM api_keys WHERE api_key_id = ?").get(id);
   if (row === undefined) throw notFound();
   const key = keyRow(row);
-  if (inboxId !== undefined && key.inbox_id !== inboxId) throw notFound();
+  if (key.prefix === "oauth" || (inboxId !== undefined && key.inbox_id !== inboxId))
+    throw notFound();
   return key;
 }
 
@@ -107,6 +108,7 @@ function makeApiKeys(store: StoreService) {
           ascending: query.ascending ?? false,
         });
         const where = new Where();
+        where.add("prefix <> ?", "oauth");
         if (inboxId !== undefined) where.add("inbox_id = ?", inboxId);
         keysetWhere(where, cursor, "created_at", "api_key_id", query.ascending ?? false);
         const order = query.ascending ? "ASC" : "DESC";
@@ -153,6 +155,7 @@ function makeApiKeys(store: StoreService) {
                 .secret_hash;
         if (!timingSafeEqual(hashToken(bearer), expected) || row === undefined) return undefined;
         const key = keyRow(row);
+        if (key.prefix === "oauth") return undefined;
         if (key.expires_at !== undefined && Date.parse(key.expires_at) <= now) return undefined;
         if (key.used_at === undefined || now - Date.parse(key.used_at) >= 60_000)
           db.prepare("UPDATE api_keys SET used_at = ? WHERE api_key_id = ?").run(

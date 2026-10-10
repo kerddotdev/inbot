@@ -48,6 +48,7 @@ export function humanOutput(value: unknown): string {
     threads: ["thread_id", "inbox_id", "subject", "labels"],
     messages: ["message_id", "inbox_id", "subject", "send_status", "send_reason", "labels"],
     drafts: ["draft_id", "inbox_id", "subject", "approval_state", "send_status"],
+    grants: ["grant_id", "client_name", "redirect_host", "resource", "send_policy", "inbox_ids"],
     api_keys: ["api_key_id", "name", "send_policy", "inbox_id", "inbox_ids"],
     entries: ["entry", "entry_type", "direction", "list_type", "inbox_id", "reason"],
   };

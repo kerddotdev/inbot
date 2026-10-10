@@ -3,6 +3,7 @@ import { Clock, Context, Effect, Layer, Schema } from "effect";
 import { HttpApiBuilder, HttpApiSecurity } from "effect/http-api";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
 import { CurrentPrincipal } from "../../../../packages/contracts/src/security.js";
+import { OAuth } from "../oauth/service.js";
 import { ApiKeys } from "../auth/api-keys.js";
 import { OwnerAuth } from "../auth/owner.js";
 import { notFound } from "../mailbox/errors.js";
@@ -76,6 +77,7 @@ export const DownloadRoutes = HttpRouter.use((router) =>
     const downloads = yield* Downloads;
     const owner = yield* OwnerAuth;
     const keys = yield* ApiKeys;
+    const oauth = yield* OAuth;
     const mailbox = yield* Mailbox;
     const drafts = yield* Drafts;
     yield* router.add(
@@ -89,7 +91,7 @@ export const DownloadRoutes = HttpRouter.use((router) =>
           const principal =
             request.headers.authorization === undefined && session !== undefined
               ? { kind: "owner" as const }
-              : yield* authenticate(credential, owner, keys);
+              : yield* authenticate(credential, owner, keys, oauth);
           if (HttpServerResponse.isHttpServerResponse(principal)) return principal;
           const params = yield* HttpRouter.params;
           const ticket = yield* downloads.read(params.token ?? "");

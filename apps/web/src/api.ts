@@ -1,4 +1,5 @@
 import { Schema } from "effect";
+import * as OAuth from "@inbot/contracts/src/oauth.js";
 import * as Remote from "@inbot/contracts/src/remote.js";
 import * as Owner from "@inbot/contracts/src/owner.js";
 import * as Inboxes from "@inbot/contracts/src/inboxes.js";
@@ -69,6 +70,34 @@ export class ApiClient {
     };
   }
 
+  oauthClients(signal?: AbortSignal) {
+    return this.request(
+      "/v0/owner/oauth/clients",
+      OAuth.OAuthClientsResponse,
+      signal === undefined ? {} : { signal },
+    );
+  }
+  purgeOAuthClients() {
+    return this.request("/v0/owner/oauth/clients/purge", OAuth.PurgeOAuthClientsResponse, {
+      method: "POST",
+    });
+  }
+  revokeOAuthGrant(id: string) {
+    return this.request(`/v0/owner/oauth/grants/${segment(id)}`, Schema.Undefined, {
+      method: "DELETE",
+    });
+  }
+  oauthDetails(input: OAuth.AuthorizationRequest, signal?: AbortSignal) {
+    return this.request("/oauth/authorize/details", OAuth.ConsentDetails, {
+      method: "POST",
+      body: input,
+      ...(signal === undefined ? {} : { signal }),
+    });
+  }
+  oauthConsent(input: OAuth.ConsentRequest) {
+    return this.request("/oauth/authorize", OAuth.ConsentResponse, { method: "POST", body: input });
+  }
+
   private async request<S extends Schema.Top & { readonly DecodingServices: never }>(
     path: string,
     schema: S,
@@ -121,6 +150,18 @@ export class ApiClient {
   }
 
   private throwResponseError(path: string, body: unknown): never {
+    if (path.startsWith("/oauth/") && Schema.is(OAuth.OAuthErrorResponse)(body)) {
+      const error = Schema.decodeUnknownSync(OAuth.OAuthErrorResponse)(body);
+      throw new ApiError(
+        error.error === "access_denied"
+          ? "missing_permission"
+          : error.error === "temporarily_unavailable"
+            ? "rate_limit_exceeded"
+            : "validation_error",
+        error.error_description,
+        "Sign in as the owner and restart authorization from your client if needed.",
+      );
+    }
     let wire: ErrorResponse;
     try {
       wire = Schema.decodeUnknownSync(ErrorResponse)(body);

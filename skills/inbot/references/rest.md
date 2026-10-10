@@ -34,7 +34,7 @@ Notes:
 
 Pod filters and URL attachments return 501 `not_supported` after authentication and validation.
 Domains exist but are owner-only; agents cannot use them.
-Signed webhooks, WebSocket events and the CLI are implemented; see [events](events.md) and [CLI](cli.md). OAuth is unavailable.
+Signed webhooks, WebSocket events and the CLI are implemented; see [events](events.md) and [CLI](cli.md). OAuth access tokens use the same grants as API keys and must target the listener's exact `/v0` resource. Owner OAuth management stays local.
 
 ## Pagination
 
