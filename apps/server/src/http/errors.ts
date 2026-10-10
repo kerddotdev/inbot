@@ -3,6 +3,7 @@ import { HttpServerResponse } from "effect/http";
 import { ErrorStatus, ErrorResponse } from "../../../../packages/contracts/src/errors.js";
 import { MailboxError } from "../mailbox/errors.js";
 import { OutboundError } from "../outbound/errors.js";
+import { ProvisionError } from "../provision/errors.js";
 
 export function wireError<const C extends ErrorResponse["code"]>(
   code: C,
@@ -20,7 +21,11 @@ export function errorResponse(error: ErrorResponse) {
 }
 
 export function wireFailure(error: unknown): ErrorResponse {
-  if (error instanceof MailboxError || error instanceof OutboundError)
+  if (
+    error instanceof MailboxError ||
+    error instanceof OutboundError ||
+    error instanceof ProvisionError
+  )
     return wireError(error.code, error.message, error.fix);
   if (Schema.is(ErrorResponse)(error)) return error;
   return wireError(

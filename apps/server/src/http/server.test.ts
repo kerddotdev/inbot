@@ -602,7 +602,7 @@ test("maps malformed requests, missing resources, stale tokens, and unsupported 
   await failure(await api.request("/v0/inboxes/missing@example.test"), 404, "not_found");
   await failure(await api.request("/v0/unknown"), 404, "not_found");
   await failure(await api.request("/v0/inboxes?page_token=invalid"), 409, "page_token_stale");
-  for (const path of ["/v0/lists/receive/allow", "/v0/webhooks", "/v0/domains"])
+  for (const path of ["/v0/lists/receive/allow", "/v0/webhooks"])
     await failure(
       await api.request(path, path.includes("/messages/") ? { method: "POST", body: {} } : {}),
       501,

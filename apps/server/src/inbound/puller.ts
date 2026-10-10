@@ -15,6 +15,8 @@ import type { InboundSettings } from "./config.js";
 import { ingestInbound } from "./ingest.js";
 import { configuredBuffer, loadBufferSettings } from "./settings.js";
 import { bufferState } from "./state.js";
+import type { StoreService } from "../store.js";
+import { observeSelfTest } from "../provision/selftest.js";
 
 export class InboundQuarantine extends Schema.TaggedError<InboundQuarantine>()(
   "InboundQuarantine",
@@ -47,6 +49,7 @@ function ingestObject(
   buffer: InboundBufferService,
   mailbox: MailboxService,
   state: ReturnType<typeof bufferState>,
+  store: StoreService,
 ) {
   return Effect.gen(function* () {
     const existing = yield* state.get(pointer.key);
@@ -72,15 +75,22 @@ function ingestObject(
           try: () => parseInbound(plaintext),
           catch: () => new InboundQuarantine({ code: "invalid_inbound_frame" }),
         });
-        yield* ingestInbound(
-          { ...framed.envelope, raw: framed.raw, received_at: pointer.received_at },
-          { trusted_authserv_ids: ["mx.cloudflare.net"] },
-        ).pipe(
-          Effect.provideService(Mailbox, mailbox),
-          Effect.catchTag("InboundError", (error) =>
-            Effect.fail(new InboundQuarantine({ code: error.code })),
-          ),
+        const selfTest = yield* observeSelfTest(
+          store,
+          framed.envelope,
+          framed.raw,
+          pointer.received_at,
         );
+        if (!selfTest)
+          yield* ingestInbound(
+            { ...framed.envelope, raw: framed.raw, received_at: pointer.received_at },
+            { trusted_authserv_ids: ["mx.cloudflare.net"] },
+          ).pipe(
+            Effect.provideService(Mailbox, mailbox),
+            Effect.catchTag("InboundError", (error) =>
+              Effect.fail(new InboundQuarantine({ code: error.code })),
+            ),
+          );
         yield* state.put(pointer.key, "committed");
       }).pipe(Effect.ensuring(Effect.sync(() => plaintext.fill(0))));
     }
@@ -125,7 +135,14 @@ export function processInbound(): Effect.Effect<InboundReport, DatabaseError | B
           return "quarantined" as const;
         }
         yield* state.put(pointer.key, "pending", null, now + visibilityTimeoutMs);
-        const outcome = yield* ingestObject(pointer, config, buffer, mailbox.value, state);
+        const outcome = yield* ingestObject(
+          pointer,
+          config,
+          buffer,
+          mailbox.value,
+          state,
+          loaded.store,
+        );
         yield* buffer.ack(config.inbound_queue_id, message.lease_id);
         return outcome;
       }).pipe(Effect.result);
@@ -186,6 +203,7 @@ export function reconcileInbound(): Effect.Effect<InboundReport, DatabaseError |
           buffer,
           mailbox.value,
           state,
+          loaded.store,
         ).pipe(Effect.result);
         if (Result.isFailure(result)) retried++;
         else {

@@ -20,6 +20,7 @@ export const ErrorStatus = {
   rate_limit_exceeded: 429,
   not_supported: 501,
   service_unavailable: 503,
+  action_required: 409,
 } as const satisfies Record<ErrorCode, number>;
 export const ErrorCode = Schema.Literals([
   "validation_error",
@@ -41,6 +42,7 @@ export const ErrorCode = Schema.Literals([
   "rate_limit_exceeded",
   "not_supported",
   "service_unavailable",
+  "action_required",
 ]);
 export type ErrorCode = typeof ErrorCode.Type;
 
@@ -96,6 +98,7 @@ export const ConflictError = Schema.Struct({
     "resource_taken",
     "idempotency_conflict",
     "page_token_stale",
+    "action_required",
   ]),
 }).annotate({ identifier: "ConflictError", httpApiStatus: 409 });
 export type ConflictError = typeof ConflictError.Type;

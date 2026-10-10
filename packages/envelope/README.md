@@ -9,6 +9,8 @@
 - `parseInbound(plaintext)` returns `{ envelope, raw }` after decryption; `raw` is a subarray and is limited to 25 MiB. `InboundEnvelope` is the Effect Schema and inferred type. Invalid frames or envelopes throw `InboundFrameError` with code `invalid_inbound_frame`, without exposing envelope values.
 - `@inbot/envelope/pointer` exports the Effect `InboundPointer` schema, its inferred type, and `createInboundKey()`.
 
+The Worker uses the runtime-only `crypto.ts`, `frame.ts`, and `key.ts` modules. Frame validation is a small hand-written validator with the same strict field and size boundaries; service consumers retain Effect schemas through the existing exports. These entry points keep Effect out of the Worker bundle.
+
 For strict pointer decoding, use `Schema.decodeUnknownSync(InboundPointer, { onExcessProperty: "error" })`. The pointer contains only `version`, `key`, ciphertext `size`, and a canonical ISO UTC `received_at`. Keys are `inbound/<UUIDv7>.age`, ordered by receipt millisecond, with 74 random bits from Web Crypto. Ordering within one millisecond is random.
 
 Inbound plaintext version 1 is the ASCII line `INBOT-INBOUND/1\n`, a 4-byte unsigned big-endian JSON byte length, UTF-8 JSON `{"mail_from": string, "rcpt_to": string[]}`, then the unchanged raw MIME bytes. The JSON header is capped at 16 KiB; invalid UTF-8, JSON, field types, excess properties, unsupported versions, and truncation are rejected. An empty `mail_from` is valid for SMTP's null reverse path. The SMTP envelope lives only inside the ciphertext, never in the pointer or R2 metadata. Legacy unframed MIME is not a version 1 inbound frame.

@@ -56,6 +56,11 @@ export function createInbox(
     throw validationError("A valid mailbox domain is required.");
   }
   const inboxId = `${username}@${domain}`;
+  if (
+    username === "inbot-selftest" &&
+    db.prepare("SELECT 1 FROM domains WHERE domain = ?").get(domain) !== undefined
+  )
+    throw validationError("The inbot-selftest address is reserved for domain verification.");
   if (inboxIds !== undefined && !inboxIds.includes(inboxId)) throw notFound();
   if (db.prepare("SELECT 1 FROM inboxes WHERE inbox_id = ?").get(inboxId) !== undefined)
     throw alreadyExists();

@@ -26,6 +26,8 @@ describe("HTTP API declarations", () => {
     expect(document.paths["/v0/lists/{direction}/{type}/{entry}"]?.delete).toBeDefined();
     expect(document.paths["/v0/api-keys/{api_key_id}"]?.get).toBeDefined();
     expect(document.paths["/v0/domains/{domain_id}/verify"]?.post).toBeDefined();
+    expect(document.paths["/v0/domains/{domain_id}/apply"]?.post).toBeDefined();
+    expect(document.paths["/v0/domains/{domain_id}/teardown"]?.post).toBeDefined();
     expect(document.components.securitySchemes.Bearer).toMatchObject({
       type: "http",
       scheme: "Bearer",
