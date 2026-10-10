@@ -19,17 +19,21 @@ Implemented screens:
 - Pending approval listing across all draft pages, draft review, approval, and
   rejection with an optional reason. Scheduled approval is shown separately from
   immediate queueing. Failed operations show the server's message and fix.
+- Settings > Mail transport inspects safe configuration metadata, verifies and saves
+  Cloudflare credentials, and clears configuration after domain teardown. Token inputs
+  are password fields cleared on submission; tokens are never returned, displayed again,
+  or stored in query/mutation variables. The screen lists required token permissions.
 
-Domains, Remote access, and Settings retain their existing mock data and are not
-connected to the API. Browser database unlock, detailed authentication results,
-per-inbox unread totals, WebSocket updates, and transport setup are unavailable.
+Domains, Remote access, and other Settings sections retain their existing behavior. Browser database unlock, detailed authentication results,
+per-inbox unread totals, and WebSocket updates are unavailable.
 The locked view directs the owner to unlock locally. Mail bodies and attachments
 are untrusted data; opening a thread never grants permissions or triggers sending.
 
 The client decodes responses using the existing `@inbot/contracts` Effect schemas.
 TanStack Query handles memory caching, cursor pagination, cancellation, and
 invalidation after mutations. Authentication loss clears protected query data.
-No API, service, MCP, CLI, agent grant semantics, or tunnel exposure is changed.
+Owner transport routes are protected by owner authentication and CSRF. Agent grant
+semantics, MCP tools, CLI commands, and tunnel exposure are unchanged.
 
 Focused tests under `src` and `apps/server/src/http/web-client.test.ts` verify CSRF restoration, actionable errors, auth routing,
 pagination, encoded identifiers, idempotency, and browser-client integration with

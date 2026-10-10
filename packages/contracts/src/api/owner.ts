@@ -5,6 +5,25 @@ import { WriteErrors } from "../errors.js";
 import { BearerAuth, OwnerOnly } from "../security.js";
 
 export const OwnerApiGroup = HttpApiGroup.make("owner").add(
+  HttpApiEndpoint.get("owner_transport", "/v0/owner/transport", {
+    success: Owner.OwnerTransportStatus,
+    error: WriteErrors,
+  })
+    .middleware(OwnerOnly)
+    .middleware(BearerAuth),
+  HttpApiEndpoint.put("owner_setTransport", "/v0/owner/transport", {
+    payload: Owner.OwnerTransportRequest,
+    success: Owner.OwnerTransportStatus,
+    error: WriteErrors,
+  })
+    .middleware(OwnerOnly)
+    .middleware(BearerAuth),
+  HttpApiEndpoint.delete("owner_clearTransport", "/v0/owner/transport", {
+    success: HttpApiSchema.Empty(200),
+    error: WriteErrors,
+  })
+    .middleware(OwnerOnly)
+    .middleware(BearerAuth),
   HttpApiEndpoint.get("owner_status", "/v0/owner/status", {
     success: Owner.OwnerStatus,
     error: WriteErrors,

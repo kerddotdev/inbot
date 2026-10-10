@@ -47,6 +47,7 @@ override are 4.0.2, matching the installed Effect version.
   owner-only approve and reject.
 - Domains: owner-only register, list, get, update, delete, verify, BIND zone-file,
   apply, and teardown. See [provisioning](../provision/README.md) for safety and states.
+- Mail transport: owner-only `GET`, `PUT`, and `DELETE /v0/owner/transport`.
 - API keys: owner-only organization CRUD and inbox-scoped create, list, update,
   delete. The contract has no inbox-scoped key-get route.
 
@@ -55,7 +56,7 @@ commits, with the message initially `queued`. The `idempotency-key` header is
 passed to the durable inbox-scoped replay ledger. Provider acceptance later
 changes the label to `sent`; it does not prove delivery. No configured transport
 returns 503 `service_unavailable` with fix `Configure the Cloudflare mail transport`
-and does not enqueue. Transport settings have only an internal service for now.
+and does not enqueue. Configure the transport in Settings > Mail transport or through the owner routes below.
 
 Lists and webhooks return HTTP 501 `not_supported` after
 authentication and authorization. Validated input is still required. Tunnels,
@@ -69,6 +70,39 @@ token or owner session cookie and recheck its current permissions, inbox scope, 
 read encrypted storage at download time and send binary content as an attachment
 with `nosniff` and `no-store`. No plaintext download cache is written. URLs
 expire on restart as well as at their advertised expiry time.
+
+## Owner mail transport
+
+`GET /v0/owner/transport` returns `{ provider: "cloudflare", account_id, token_set,
+verification_status, verified_at }`. An absent configuration has a null account and
+time, `token_set: false`, and `not_configured` status. Previously configured internal
+credentials have `unverified` status until verified through the owner route. A saved
+verification has `verified` status and an ISO timestamp. This records the last
+successful token check; it does not prove the token remains active or has all required
+permissions. Responses never contain the API token or a token hint.
+
+`PUT /v0/owner/transport` accepts `{ account_id, api_token }`. The account ID is 32
+hexadecimal characters and the token must be nonempty without whitespace. The existing
+provision adapter checks the candidate with account token verification and user-token
+fallback before persisting credentials and the verification time atomically in the
+encrypted Store. Failure leaves the existing configuration and timestamp unchanged.
+Provider errors never include response bodies, credentials, or keys. See the
+[required token permissions](../provision/README.md#token-permissions).
+
+`DELETE /v0/owner/transport` returns an empty 200 response and is idempotent. Active
+provisioning or remaining resource ledger entries return 409 `action_required` with a
+teardown instruction. Clear succeeds after teardown, without deleting local mail,
+inbound identity, or domain registration. Changing accounts requires teardown and
+registration deletion first; token rotation for the same account is supported.
+Transport writes share the provisioning lock with apply, verification, routing, and
+teardown. Outbox, inbound, and delivery runners observe changes on their next cycle;
+provider requests already in flight can finish with the previous configuration.
+
+Every transport route requires owner bearer or owner session authentication. Unsafe
+session requests require `X-Inbot-CSRF`; agent API keys receive 403 regardless of grant.
+No MCP tool, CLI command, or remote route is added. Errors retain
+`{ name, code, message, fix }`, including validation, permission, provider availability,
+and action-required failures.
 
 ## Authentication and authorization
 
@@ -255,8 +289,8 @@ Pass `serve --web-root /absolute/path/to/apps/web/dist` to serve a prebuilt UI.
 The path is resolved explicitly; there is no automatic repository or `dist`
 discovery and no UI when the flag is omitted. An invalid root or missing `index.html` fails startup.
 Build the React bundle with `pnpm web:build`. The bundle and owner authentication
-API share the loopback origin. The UI connects owner authentication, mail, API keys, and approvals to these routes.
-Domains, remote access, and settings still use mock data. See [owner UI](../../../web/README.md).
+API share the loopback origin. The UI connects owner authentication, mail, API keys, approvals, and mail transport settings to these routes.
+Domains, remote access, and other settings still use mock data. See [owner UI](../../../web/README.md).
 
 GET requests first try files under the canonical web root, then fall back to
 `index.html`. `/v0`, `/mcp`, `/oauth`, and `/.well-known`, including their
