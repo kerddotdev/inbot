@@ -6,6 +6,8 @@ import { Effect, Fiber, Layer } from "effect";
 import { ApiKeys } from "./auth/api-keys.js";
 import { Home, resolveHome, type HomeOptions } from "./home.js";
 import { startHttpServer } from "./http/server.js";
+import { InboundConfig } from "./inbound/config.js";
+import { startEventsLoop, startInboundLoop } from "./inbound/runtime.js";
 import { KeychainStore } from "./keychain.js";
 import { KeyManager } from "./keys.js";
 import { Mailbox } from "./mailbox/mailbox.js";
@@ -102,18 +104,28 @@ async function serve() {
         Layer.provide(ConfiguredProvider),
         Layer.provideMerge(config),
       );
-      const services = Layer.mergeAll(Mailbox.Live, ApiKeys.Live, outbound).pipe(
-        Layer.provide(store),
-      );
+      const services = Layer.mergeAll(
+        Mailbox.Live,
+        ApiKeys.Live,
+        InboundConfig.Live,
+        outbound,
+      ).pipe(Layer.provideMerge(store));
       yield* Effect.gen(function* () {
         const server = yield* startHttpServer({
           port: input.port,
           ready: (url) =>
             process.stdout.write(`${JSON.stringify({ event: "server.ready", url })}\n`),
         });
-        yield* server.runner === undefined
-          ? stopped
-          : Effect.raceFirst(stopped, Fiber.join(server.runner));
+        const inbound = yield* startInboundLoop();
+        const events = yield* startEventsLoop();
+        const runners = [inbound, events, ...(server.runner === undefined ? [] : [server.runner])];
+        yield* Effect.raceFirst(
+          stopped,
+          Effect.all(
+            runners.map((runner) => Fiber.join(runner)),
+            { concurrency: "unbounded" },
+          ),
+        );
       }).pipe(Effect.provide(services));
     }).pipe(Effect.provide(manager), Effect.scoped),
   );

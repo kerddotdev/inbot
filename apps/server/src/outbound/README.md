@@ -192,16 +192,12 @@ adapter. Test servers inject a fake provider instead.
 
 The existing schemas, service, REST, MCP, permissions, idempotency, reverse states,
 and documentation apply. Delivery events still apply through the existing internal
-service; Queue pulling, event publishing, CLI resource commands, the web UI, and
-tunnel allowlists remain planned. `skills/inbot` does not exist, so no guidance for
+service and the Queue consumer described below; event publishing, CLI resource
+commands, the web UI, and tunnel allowlists remain planned. `skills/inbot` does not exist, so no guidance for
 nonexistent commands was added. No real home or cloud resource was accessed.
 
 ## Questions requiring an authorized real-account check
 
-- Does REST `result.message_id` exactly match the wire Message-ID, and does
-  event `payload.messageId` use that same id? Event examples show opaque ids
-  while the REST reference shows angle-bracket RFC ids. Unknown ids are not
-  guessed or normalized into fabricated aliases.
 - Which numeric REST error identifies a sender that is not onboarded? The REST
   table does not map this explicitly; string identifiers come from the Workers
   documentation. `10203` is sending-disabled, not proof of an unverified domain.
@@ -217,3 +213,34 @@ nonexistent commands was added. No real home or cloud resource was accessed.
 Cloudflare sending is for transactional mail. Outbound content passes through
 Cloudflare in plaintext in transit; this is not end-to-end encryption. Local
 mail and outbox payloads are encrypted at rest by Store.
+
+## Delivery Queue consumer
+
+`processDeliveryEvents()` uses the events queue in `InboundConfig`, the shared
+`TransportConfig` token, and the same `InboundBuffer` interface as inbound mail.
+It decodes a body, calls `parseDeliveryEvent`, applies the event through Outbox's
+provider-id alias lookup, and only then acknowledges the lease. Replayed events
+remain idempotent. Storage or provider failures retry with bounded exponential
+backoff; unknown event types are acknowledged and counted. Invalid JSON or a
+malformed supported event is quarantine-acked after persisting only its
+account/queue/message ids, fixed reason, and first-seen timestamp. No event
+payload is retained in quarantine. Valid events with no matching alias are
+acknowledged without changing a message; the report counts only matching events
+as `applied`. Alias reconciliation for unmatched events is not implemented.
+
+The scoped events loop starts in `serve`, polls every two seconds while completing
+work, and every thirty seconds while idle. It performs no calls when locked or
+unconfigured. Migration **6** supplies buffer configuration and quarantine tables;
+owner provisioning and quarantine UI remain planned.
+
+Cloudflare delivery event payloads include plaintext recipient and subject fields
+while waiting in the events Queue. This differs from the encrypted inbound R2
+buffer. Provisioning should use short events retention; prompt pull and ack
+reduces exposure but does not encrypt provider-generated event payloads. The
+consumer never logs bodies or provider error text and discards fields outside the
+existing `DeliveryEvent` contract. The inbound README links the verified Queue
+[pull](https://developers.cloudflare.com/api/resources/queues/subresources/messages/methods/pull/)
+and [ack](https://developers.cloudflare.com/api/resources/queues/subresources/messages/methods/ack/)
+request formats. Tests reproduce the captured delivered-event structure with
+synthetic ids and content, including its extra source, metadata, and delivery
+fields; they do not read private spike files or contact Cloudflare.
