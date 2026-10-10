@@ -138,11 +138,6 @@ export const CommonErrors = [
   RateLimitExceededError,
   ServiceUnavailableError,
 ] as const;
-export const ReadErrors = [...CommonErrors, NotFoundError] as const;
+export const ReadErrors = [...CommonErrors, NotFoundError, NotSupportedError] as const;
 export const ListErrors = [...ReadErrors, ConflictError] as const;
-export const WriteErrors = [
-  ...ReadErrors,
-  ConflictError,
-  PayloadTooLargeError,
-  NotSupportedError,
-] as const;
+export const WriteErrors = [...ReadErrors, ConflictError, PayloadTooLargeError] as const;

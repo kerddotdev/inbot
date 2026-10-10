@@ -8,13 +8,18 @@ import {
   UpdateInboxRequest,
   type ListInboxesResponse,
 } from "../../../../packages/contracts/src/inboxes.js";
-import { alreadyExists, validate, validationError } from "./errors.js";
+import { alreadyExists, notFound, validate, validationError } from "./errors.js";
 import { getInbox, inboxRow } from "./rows.js";
-import { Where, keysetWhere, page, preparePage } from "./queries.js";
+import { Where, inboxScopeWhere, keysetWhere, page, preparePage } from "./queries.js";
 
 export type CreateInbox = CreateInboxRequest & { readonly domain: string };
 
-export function createInbox(db: Database.Database, request: CreateInbox, now: string) {
+export function createInbox(
+  db: Database.Database,
+  request: CreateInbox,
+  now: string,
+  inboxIds?: readonly string[],
+) {
   const input = validate(CreateInboxRequest, request);
   if (input.client_id !== undefined) {
     if (!input.client_id || input.client_id.includes("@"))
@@ -22,7 +27,11 @@ export function createInbox(db: Database.Database, request: CreateInbox, now: st
     const existing = db
       .prepare("SELECT *, inbox_id AS email FROM inboxes WHERE client_id = ?")
       .get(input.client_id);
-    if (existing !== undefined) return inboxRow(existing);
+    if (existing !== undefined) {
+      const inbox = inboxRow(existing);
+      if (inboxIds !== undefined && !inboxIds.includes(inbox.inbox_id)) throw notFound();
+      return inbox;
+    }
   }
   const username = (input.username ?? randomBytes(8).toString("hex")).toLowerCase();
   if (
@@ -47,6 +56,7 @@ export function createInbox(db: Database.Database, request: CreateInbox, now: st
     throw validationError("A valid mailbox domain is required.");
   }
   const inboxId = `${username}@${domain}`;
+  if (inboxIds !== undefined && !inboxIds.includes(inboxId)) throw notFound();
   if (db.prepare("SELECT 1 FROM inboxes WHERE inbox_id = ?").get(inboxId) !== undefined)
     throw alreadyExists();
   db.prepare(`
@@ -95,13 +105,16 @@ export function updateInbox(
 export function listInboxes(
   db: Database.Database,
   request: typeof PaginationQuery.Type,
+  inboxIds?: readonly string[],
 ): ListInboxesResponse {
   const query = validate(PaginationQuery, request);
   const { limit, expected, cursor } = preparePage(query, {
     resource: "inboxes",
     ascending: query.ascending ?? false,
+    inbox_ids: inboxIds,
   });
   const where = new Where();
+  inboxScopeWhere(where, inboxIds);
   keysetWhere(where, cursor, "i.created_at", "i.inbox_id", query.ascending ?? false);
   const order = query.ascending ? "ASC" : "DESC";
   const rows = db

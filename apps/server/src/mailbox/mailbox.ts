@@ -44,13 +44,16 @@ function makeMailbox(store: StoreService) {
   }
 
   return {
-    createInbox: (input: Inboxes.CreateInbox) =>
-      run((db, now) => Inboxes.createInbox(db, input, new Date(now).toISOString()), true),
+    createInbox: (input: Inboxes.CreateInbox, inboxIds?: readonly string[]) =>
+      run((db, now) => Inboxes.createInbox(db, input, new Date(now).toISOString(), inboxIds), true),
     getInbox: (inboxId: string) => run((db) => Rows.getInbox(db, inboxId)),
-    listInboxes: (query: typeof PaginationQuery.Type = {}) =>
-      run((db) => Inboxes.listInboxes(db, query)),
-    searchInboxes: (q: string, query: Omit<typeof SearchInboxesQuery.Type, "q"> = {}) =>
-      run((db) => Search.searchInboxes(db, q, query)),
+    listInboxes: (query: typeof PaginationQuery.Type = {}, inboxIds?: readonly string[]) =>
+      run((db) => Inboxes.listInboxes(db, query, inboxIds)),
+    searchInboxes: (
+      q: string,
+      query: Omit<typeof SearchInboxesQuery.Type, "q"> = {},
+      inboxIds?: readonly string[],
+    ) => run((db) => Search.searchInboxes(db, q, query, inboxIds)),
     updateInbox: (inboxId: string, input: UpdateInboxRequest) =>
       run((db, now) => Inboxes.updateInbox(db, inboxId, input, new Date(now).toISOString()), true),
     deleteInbox: (inboxId: string) =>
@@ -100,6 +103,8 @@ function makeMailbox(store: StoreService) {
     ) => run((db) => Search.searchThreads(db, scope, q, query)),
     getThread: (inboxId: string, threadId: string, query: typeof CursorQuery.Type = {}) =>
       run((db) => Threads.getThread(db, inboxId, threadId, query)),
+    resolveThreadInbox: (threadId: string, scope: InboxScope = {}) =>
+      run((db) => Threads.resolveThreadInbox(db, threadId, scope)),
     updateThread: (inboxId: string, threadId: string, input: UpdateThreadRequest) =>
       run(
         (db, now) =>

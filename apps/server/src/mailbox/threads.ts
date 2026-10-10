@@ -26,8 +26,19 @@ import {
   page,
   preparePage,
   threadWhere,
+  scopeWhere,
 } from "./queries.js";
 import type { InboxScope, StoredAttachment } from "./types.js";
+
+export function resolveThreadInbox(db: Database.Database, threadId: string, scope: InboxScope) {
+  const where = new Where().add("t.thread_id = ?", threadId);
+  scopeWhere(where, scope, "t");
+  const row = db
+    .prepare(`SELECT t.inbox_id FROM threads t WHERE ${where.sql}`)
+    .get(...where.params);
+  if (row === undefined) throw notFound();
+  return Schema.decodeUnknownSync(Schema.Struct({ inbox_id: Schema.String }))(row).inbox_id;
+}
 
 export function listThreads(
   db: Database.Database,

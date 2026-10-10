@@ -18,6 +18,7 @@ import {
   scopeWhere,
   searchRevision,
   timeWhere,
+  inboxScopeWhere,
 } from "./queries.js";
 import { timestampKey } from "./pagination.js";
 import type { InboxScope } from "./types.js";
@@ -155,6 +156,7 @@ export function searchInboxes(
   db: Database.Database,
   q: string,
   request: Omit<typeof SearchInboxesQuery.Type, "q">,
+  inboxIds?: readonly string[],
 ): SearchInboxesResponse {
   const query = validate(SearchInboxesQuery, { ...request, q });
   if (q.length < 2 || q.length > 256)
@@ -164,9 +166,12 @@ export function searchInboxes(
     resource: "search-inboxes",
     q: match,
     revision: searchRevision(db),
+    inbox_ids: inboxIds,
   });
   const where = new Where();
   rankedWhere(where, cursor);
+  const scope = new Where();
+  inboxScopeWhere(scope, inboxIds);
   const rows =
     match === ""
       ? []
@@ -174,12 +179,12 @@ export function searchInboxes(
           .prepare(`
     WITH matched AS MATERIALIZED (
       SELECT i.*, i.inbox_id AS email, i.inbox_id AS cursor_id, bm25(inbox_search) AS score
-      FROM inbox_search JOIN inboxes i ON i.rowid = inbox_search.rowid WHERE inbox_search MATCH ?
+      FROM inbox_search JOIN inboxes i ON i.rowid = inbox_search.rowid WHERE inbox_search MATCH ? AND ${scope.sql}
     )
     SELECT *, score AS cursor_key FROM matched WHERE ${where.sql}
     ORDER BY score, cursor_id LIMIT ?
   `)
-          .all(match, ...where.params, limit + 1);
+          .all(match, ...scope.params, ...where.params, limit + 1);
   const { items, ...fields } = page(rows, limit, expected, inboxRow);
   return { ...fields, inboxes: items };
 }

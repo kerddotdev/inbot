@@ -31,15 +31,18 @@ the plaintext `api_key`. Expiry and inbox scope are immutable on update.
 
 `BearerAuth` declares `Authorization: Bearer <key>` and provides a
 `CurrentPrincipal`. Domains and API keys additionally declare `OwnerOnly`.
-Other endpoints carry a typed `RequiredPermission` annotation. Future handlers
-must implement these middleware services, inbox and restricted-label checks,
-send policies, and scoped event subscriptions. Owner-only resources must never
-become agent MCP tools.
+Other endpoints carry a typed `RequiredPermission` annotation. The server HTTP
+layer implements these middleware services, inbox scopes, and restricted-label
+checks for mailbox operations. Send operations currently return `not_supported`;
+send policies and scoped event subscriptions need enforcement when their
+services land. Owner-only resources must never become agent MCP tools.
 
 Errors use the `{ name, code, message, fix?, docs? }` wire shape without an Effect
 `_tag`. Status-specific schemas constrain the code and carry `httpApiStatus`;
-`ErrorStatus` exposes the same mapping. Future HTTP handlers must map Effect's
-request-decoding failures to this wire shape and supply actionable error text.
+`ErrorStatus` exposes the same mapping. The HTTP server maps Effect's request
+decoding failures to `validation_error` with safe, actionable error text.
+Read and write error sets both declare `not_supported` so generated clients can
+decode the 501 responses of registered operations awaiting implementation.
 The optional `Idempotency-Key` header is declared on send, reply, reply-all,
 forward, and draft-send operations. Persistence, replay, and conflict detection
 belong to the service.
