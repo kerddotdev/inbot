@@ -18,5 +18,6 @@ pnpm start:server --home /path/to/explicit/inbot-home --port 0 --init
 Choose an explicit home directory for development. Initialization uses the OS
 keychain. Later starts omit `--init` and unlock through the keychain. The server
 prints its URL once and writes the owner token to the home directory's private
-`connection.json`. Sending and other unfinished resource families return
-`not_supported`; passphrase startup and web sessions are not implemented yet.
+`connection.json`. Sending requires a configured Cloudflare transport; drafts,
+lists, webhooks, and domains return `not_supported`. Passphrase startup and web
+sessions are not implemented yet.
