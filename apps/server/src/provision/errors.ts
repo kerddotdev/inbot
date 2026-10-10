@@ -26,11 +26,14 @@ export function actionRequired(
   });
 }
 
-export function invalid(message: string) {
+export function invalid(
+  message: string,
+  fix = "Use one mail subdomain inside a Cloudflare zone in the configured account.",
+) {
   return new ProvisionError({
     code: "validation_error",
     message,
-    fix: "Use one mail subdomain inside a Cloudflare zone in the configured account.",
+    fix,
   });
 }
 

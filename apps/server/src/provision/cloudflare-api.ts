@@ -192,7 +192,10 @@ export class CloudflareApi extends Context.Service<CloudflareApi, CloudflareApiS
           Effect.gen(function* () {
             const value = yield* config.get();
             if (value === undefined)
-              return yield* invalid("Configure a Cloudflare transport token first.");
+              return yield* invalid(
+                "Configure a Cloudflare transport token first.",
+                "Configure the Cloudflare mail transport in Settings, then register the domain again.",
+              );
             return value;
           });
         const accountId = () => Effect.map(settings(), (value) => value.account_id);
