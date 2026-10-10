@@ -3,17 +3,22 @@ import { McpSchema } from "effect/ai";
 import { expect } from "vitest";
 import type { fixture } from "../http/test-fixture.js";
 
-export async function client(api: Awaited<ReturnType<typeof fixture>>, token: string) {
+export async function client(
+  api: Awaited<ReturnType<typeof fixture>>,
+  token: string,
+  browser?: { cookie: string; csrf: string },
+) {
   let credential = token;
   let id = 0;
   let session: string | undefined;
   async function rpc(method: string, params: unknown, notification = false) {
     const response = await api.request("/mcp", {
-      token: credential,
+      token: browser === undefined ? credential : null,
       method: "POST",
       body: { jsonrpc: "2.0", ...(notification ? {} : { id: ++id }), method, params },
       headers: {
         accept: "application/json, text/event-stream",
+        ...(browser === undefined ? {} : { cookie: browser.cookie, "x-inbot-csrf": browser.csrf }),
         ...(session === undefined
           ? {}
           : { "mcp-session-id": session, "mcp-protocol-version": "2025-06-18" }),

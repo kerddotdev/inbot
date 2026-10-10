@@ -1,6 +1,7 @@
 import { Context, Schema } from "effect";
 import { OpenApi } from "effect/http-api";
 import { describe, expect, it } from "vitest";
+import { OwnerApi } from "./api/owner.js";
 import { InbotApi } from "./api.js";
 import { ErrorStatus, WriteErrors } from "./errors.js";
 import { SendHeaders } from "./common.js";
@@ -145,4 +146,24 @@ describe("HTTP API declarations", () => {
     }
     expect([...seen].sort()).toEqual(Object.keys(ErrorStatus).sort());
   });
+});
+
+it("declares owner browser auth separately from mailbox routes with public and protected endpoints", () => {
+  const document = OpenApi.fromApi(OwnerApi);
+  expect(document.paths["/v0/owner/status"]?.get).toBeDefined();
+  expect(document.paths["/v0/owner/setup"]?.post?.security ?? []).toEqual([]);
+  expect(document.paths["/v0/owner/login-links/redeem"]?.post).toBeDefined();
+  expect(document.paths["/v0/owner/sessions/{id}"]?.delete).toBeDefined();
+  for (const name of [
+    "owner_logout",
+    "owner_sessions",
+    "owner_revoke",
+    "owner_password",
+    "owner_loginLink",
+  ] as const) {
+    const endpoint = OwnerApi.groups.owner.endpoints[name];
+    expect(endpoint.middlewares.has(OwnerOnly)).toBe(true);
+    expect(endpoint.middlewares.has(BearerAuth)).toBe(true);
+  }
+  expect(Object.keys(InbotApi.groups)).not.toContain("owner");
 });

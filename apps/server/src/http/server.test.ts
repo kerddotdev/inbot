@@ -775,6 +775,16 @@ test("builds and starts the service in a child process with a test keychain and 
         reader.on("line", (line) => {
           lines.push(line);
           try {
+            const event = Schema.decodeUnknownSync(
+              Schema.fromJsonString(Schema.Struct({ event: Schema.String })),
+            )(line);
+            if (event.event === "owner.setup_required") {
+              const setup = Schema.decodeUnknownSync(
+                Schema.fromJsonString(Schema.Struct({ event: Schema.String, code: Schema.String })),
+              )(line);
+              expect(setup.code).toMatch(/^[A-Za-z0-9_-]{32}$/);
+              return;
+            }
             resolve(Schema.decodeUnknownSync(Schema.fromJsonString(Ready))(line));
           } catch {
             reject(new Error("Unexpected server stdout"));
@@ -803,7 +813,7 @@ test("builds and starts the service in a child process with a test keychain and 
     if (pid === undefined) throw new Error("Expected the spawned server PID");
     process.kill(pid, "SIGTERM");
     expect(await exited).toEqual({ code: 0, signal: null });
-    expect(lines).toHaveLength(1);
+    expect(lines).toHaveLength(2);
     expect(processServer.stderr()).toBe("");
     expect(await readFile(join(home, "connection.json"), "utf8")).toBeTruthy();
   } finally {

@@ -12,6 +12,7 @@ import {
   UpdateMessageResponse,
   ListMessagesResponse,
 } from "../../../../packages/contracts/src/messages.js";
+import { Draft, ListDraftsResponse } from "../../../../packages/contracts/src/drafts.js";
 import { ErrorResponse } from "../../../../packages/contracts/src/errors.js";
 import { client as connect } from "./test-client.js";
 import { fixture } from "../http/test-fixture.js";
@@ -46,11 +47,19 @@ const test = baseTest.extend<{ api: Awaited<ReturnType<typeof fixture>> }>({
   },
 });
 
-async function client(api: Awaited<ReturnType<typeof fixture>>, token?: string) {
-  const key = token === undefined ? await api.run(api.keys.create(grant)) : undefined;
+async function client(
+  api: Awaited<ReturnType<typeof fixture>>,
+  token?: string,
+  browser?: { cookie: string; csrf: string },
+) {
+  const key =
+    token === undefined && browser === undefined
+      ? await api.run(api.keys.create(grant))
+      : undefined;
   const credential = token ?? key?.api_key;
-  if (credential === undefined) throw new Error("Expected bearer credential");
-  return { ...(await connect(api, credential)), key };
+  if (credential === undefined && browser === undefined)
+    throw new Error("Expected bearer credential");
+  return { ...(await connect(api, credential ?? "", browser)), key };
 }
 
 function failure(result: McpSchema.CallToolResult, code: string) {
@@ -334,3 +343,83 @@ for (const policy of ["approval", "read_only", "direct"] as const) {
     }
   });
 }
+
+test("authenticates browser MCP requests as the owner with CSRF and keeps owner endpoints out of tools", async ({
+  api,
+}) => {
+  const response = await api.request("/v0/owner/setup", {
+    token: null,
+    method: "POST",
+    body: { password: "synthetic owner password", code: api.setupCode },
+  });
+  const body = Schema.decodeUnknownSync(Schema.Struct({ csrf_token: Schema.String }))(
+    await response.json(),
+  );
+  const cookie = response.headers.get("set-cookie")?.split(";")[0];
+  if (cookie === undefined) throw new Error("Expected a session cookie");
+  expect(
+    (
+      await api.request("/mcp", {
+        token: null,
+        method: "POST",
+        body: {},
+        headers: { cookie, accept: "application/json, text/event-stream" },
+      })
+    ).status,
+  ).toBe(403);
+  const owner = await client(api, undefined, { cookie, csrf: body.csrf_token });
+  const listed = await owner.list();
+  expect(
+    listed.tools.every(
+      (tool) =>
+        !tool.name.includes("owner") &&
+        !tool.name.includes("session") &&
+        !tool.name.includes("password"),
+    ),
+  ).toBe(true);
+  const result = await owner.call("list_inboxes", {});
+  expect(Schema.decodeUnknownSync(ListInboxesResponse)(result.structuredContent).count).toBe(2);
+});
+
+test("lists persisted drafts over MCP and REST with an owner cookie session and CSRF", async ({
+  api,
+}) => {
+  const draft = await api.run(
+    api.drafts.create(
+      inboxId,
+      { to: ["recipient@example.test"], subject: "Cookie draft", text: "Synthetic draft" },
+      "owner",
+      false,
+    ),
+  );
+  const setup = await api.request("/v0/owner/setup", {
+    token: null,
+    method: "POST",
+    body: { password: "synthetic owner password", code: api.setupCode },
+  });
+  expect(setup.status).toBe(200);
+  const { csrf_token } = Schema.decodeUnknownSync(Schema.Struct({ csrf_token: Schema.String }))(
+    await setup.json(),
+  );
+  const cookie = setup.headers.get("set-cookie")?.split(";")[0];
+  if (cookie === undefined) throw new Error("Expected a session cookie");
+  const owner = await client(api, undefined, { cookie, csrf: csrf_token });
+  const result = await owner.call("list_drafts", { inboxId });
+  expect(result.isError).toBe(false);
+  const listed = Schema.decodeUnknownSync(ListDraftsResponse)(result.structuredContent).drafts;
+  expect(listed.map((value) => value.draft_id)).toEqual([draft.draft_id]);
+  const rest = await api.request(`/v0/inboxes/${inboxId}/drafts`, {
+    token: null,
+    headers: { cookie, "x-inbot-csrf": csrf_token },
+  });
+  expect(rest.status).toBe(200);
+  expect(Schema.decodeUnknownSync(ListDraftsResponse)(await rest.json()).drafts).toEqual(listed);
+  const created = await owner.call("create_draft", {
+    inboxId,
+    to: ["recipient@example.test"],
+    text: "Another synthetic draft",
+  });
+  expect(created.isError).toBe(false);
+  const stored = Schema.decodeUnknownSync(Draft)(created.structuredContent);
+  expect((await api.run(api.drafts.get(inboxId, stored.draft_id))).created_by).toBe("owner");
+});

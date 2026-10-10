@@ -5,7 +5,7 @@ import { Context, Effect, Layer, Schema } from "effect";
 import { draftsSchema } from "./drafts/schema.js";
 import { inboundSchema } from "./inbound/schema.js";
 import { Home } from "./home.js";
-import { apiKeysSchema } from "./auth/schema.js";
+import { apiKeysSchema, ownerSessionsSchema } from "./auth/schema.js";
 import { mailboxSchema } from "./mailbox/schema.js";
 import { outboxSchema, transportConfigSchema } from "./outbound/schema.js";
 
@@ -41,6 +41,7 @@ export const migrations: readonly Migration[] = [
   { version: 5, sql: transportConfigSchema },
   { version: 6, sql: inboundSchema },
   { version: 7, sql: draftsSchema },
+  { version: 8, sql: ownerSessionsSchema },
 ];
 
 export function migrate(database: Database.Database, ordered: readonly Migration[] = migrations) {

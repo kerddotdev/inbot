@@ -10,6 +10,8 @@ import { CurrentPrincipal } from "../../../../packages/contracts/src/security.js
 import { ApiKeys } from "../auth/api-keys.js";
 import { OwnerAuth } from "../auth/owner.js";
 import { AgentOperations } from "../agent/operations.js";
+import { OwnerSessions } from "../auth/sessions.js";
+import { cookieName } from "../http/owner-session.js";
 import { authenticatePrincipal } from "../auth/bearer.js";
 import { wireError, wireFailure } from "../http/errors.js";
 import { toolResult } from "./results.js";
@@ -111,417 +113,426 @@ function sendRequest({ replyTo, idempotencyKey: _key, ...input }: typeof SendPar
 }
 const SendParams = Schema.Struct(send);
 
-export const McpTools = Layer.effectDiscard(
-  Effect.gen(function* () {
-    const registry = yield* McpServer.McpServer;
-    const operations = yield* AgentOperations;
-    const owner = yield* OwnerAuth;
-    const keys = yield* ApiKeys;
+export const McpTools = (origin: string) =>
+  Layer.effectDiscard(
+    Effect.gen(function* () {
+      const registry = yield* McpServer.McpServer;
+      const operations = yield* AgentOperations;
+      const owner = yield* OwnerAuth;
+      const keys = yield* ApiKeys;
+      const sessions = yield* OwnerSessions;
 
-    function register<S extends Schema.Top & { readonly DecodingServices: never }, A, E>(
-      name: string,
-      description: string,
-      parameters: S,
-      annotations: {
-        readonly readOnlyHint: boolean;
-        readonly destructiveHint: boolean;
-        readonly idempotentHint: boolean;
-      },
-      handle: (input: S["Type"]) => Effect.Effect<A, E, CurrentPrincipal>,
-    ) {
-      const document = Schema.toJsonSchemaDocument(parameters);
-      const inputSchema = Schema.decodeUnknownSync(McpSchema.ToolJson)({
-        ...document.schema,
-        ...(Object.keys(document.definitions).length ? { $defs: document.definitions } : {}),
-      });
-      return registry.addTool({
-        tool: new McpSchema.Tool({
-          name,
-          description: `${description} ${safety}`,
-          inputSchema,
-          annotations,
-        }),
-        annotations: Context.empty(),
-        handle: (input: unknown) =>
-          Effect.gen(function* () {
-            const request = Context.getOrUndefined(
-              yield* Effect.context<never>(),
-              HttpServerRequest.HttpServerRequest,
-            );
-            if (request === undefined)
-              return toolResult(
-                wireError(
-                  "unauthorized",
-                  "A valid bearer token is required.",
-                  "Supply an active API key or owner token.",
-                ),
-                true,
+      function register<S extends Schema.Top & { readonly DecodingServices: never }, A, E>(
+        name: string,
+        description: string,
+        parameters: S,
+        annotations: {
+          readonly readOnlyHint: boolean;
+          readonly destructiveHint: boolean;
+          readonly idempotentHint: boolean;
+        },
+        handle: (input: S["Type"]) => Effect.Effect<A, E, CurrentPrincipal>,
+      ) {
+        const document = Schema.toJsonSchemaDocument(parameters);
+        const inputSchema = Schema.decodeUnknownSync(McpSchema.ToolJson)({
+          ...document.schema,
+          ...(Object.keys(document.definitions).length ? { $defs: document.definitions } : {}),
+        });
+        return registry.addTool({
+          tool: new McpSchema.Tool({
+            name,
+            description: `${description} ${safety}`,
+            inputSchema,
+            annotations,
+          }),
+          annotations: Context.empty(),
+          handle: (input: unknown) =>
+            Effect.gen(function* () {
+              const request = Context.getOrUndefined(
+                yield* Effect.context<never>(),
+                HttpServerRequest.HttpServerRequest,
               );
-            const bearer = request.headers.authorization?.match(/^Bearer\s+(.+)$/i)?.[1] ?? "";
-            const principal = yield* authenticatePrincipal(Redacted.make(bearer), owner, keys);
-            const decoded = yield* Schema.decodeUnknownEffect(parameters)(input ?? {}, {
-              onExcessProperty: "error",
-            }).pipe(
-              Effect.mapError(() =>
-                wireError(
-                  "validation_error",
-                  "The tool arguments do not match its schema.",
-                  "Check the documented argument names and types.",
+              if (request === undefined)
+                return toolResult(
+                  wireError(
+                    "unauthorized",
+                    "A valid bearer token is required.",
+                    "Supply an active API key or owner token.",
+                  ),
+                  true,
+                );
+              const bearer = request.headers.authorization?.match(/^Bearer\s+(.+)$/i)?.[1] ?? "";
+              const session =
+                request.headers.authorization === undefined
+                  ? yield* sessions.authenticate(request.cookies[cookieName(origin)] ?? "")
+                  : undefined;
+              const principal =
+                session === undefined
+                  ? yield* authenticatePrincipal(Redacted.make(bearer), owner, keys)
+                  : { kind: "owner" as const };
+              const decoded = yield* Schema.decodeUnknownEffect(parameters)(input ?? {}, {
+                onExcessProperty: "error",
+              }).pipe(
+                Effect.mapError(() =>
+                  wireError(
+                    "validation_error",
+                    "The tool arguments do not match its schema.",
+                    "Check the documented argument names and types.",
+                  ),
                 ),
-              ),
-            );
-            const value = yield* handle(decoded).pipe(
-              Effect.provideService(CurrentPrincipal, principal),
-            );
-            return toolResult(value);
-          }).pipe(
-            Effect.catchCause((cause) => {
-              if (Cause.hasInterrupts(cause)) return Effect.interrupt;
-              const failure = cause.reasons.find((reason) => reason._tag === "Fail");
-              const error = failure?._tag === "Fail" ? failure.error : undefined;
-              return Effect.succeed(toolResult(wireFailure(error), true));
-            }),
-          ),
-      });
-    }
-    const read = { readOnlyHint: true, destructiveHint: false, idempotentHint: true };
-    const update = { readOnlyHint: false, destructiveHint: false, idempotentHint: true };
-    const remove = { readOnlyHint: false, destructiveHint: true, idempotentHint: true };
-    const create = { readOnlyHint: false, destructiveHint: false, idempotentHint: false };
-    const draft = { ...inbox, draftId: Common.DraftId };
-    const { reply_to, in_reply_to, forward_of, reply_all, send_at, client_id, ...draftCreate } =
-      Drafts.CreateDraftRequest.fields;
-    yield* register(
-      "create_draft",
-      "Create a draft. sendAt schedules it while the service runs.",
-      Schema.Struct({
-        ...inbox,
-        ...draftCreate,
-        replyTo: reply_to,
-        inReplyTo: in_reply_to,
-        forwardOf: forward_of,
-        replyAll: reply_all,
-        sendAt: send_at,
-        clientId: client_id,
-      }),
-      create,
-      ({ inboxId, replyTo, inReplyTo, forwardOf, replyAll, sendAt, clientId, ...input }) =>
-        operations.createDraft(inboxId, {
-          ...input,
-          ...(replyTo === undefined ? {} : { reply_to: replyTo }),
-          ...(inReplyTo === undefined ? {} : { in_reply_to: inReplyTo }),
-          ...(forwardOf === undefined ? {} : { forward_of: forwardOf }),
-          ...(replyAll === undefined ? {} : { reply_all: replyAll }),
-          ...(sendAt === undefined ? {} : { send_at: sendAt }),
-          ...(clientId === undefined ? {} : { client_id: clientId }),
+              );
+              const value = yield* handle(decoded).pipe(
+                Effect.provideService(CurrentPrincipal, principal),
+              );
+              return toolResult(value);
+            }).pipe(
+              Effect.catchCause((cause) => {
+                if (Cause.hasInterrupts(cause)) return Effect.interrupt;
+                const failure = cause.reasons.find((reason) => reason._tag === "Fail");
+                const error = failure?._tag === "Fail" ? failure.error : undefined;
+                return Effect.succeed(toolResult(wireFailure(error), true));
+              }),
+            ),
+        });
+      }
+      const read = { readOnlyHint: true, destructiveHint: false, idempotentHint: true };
+      const update = { readOnlyHint: false, destructiveHint: false, idempotentHint: true };
+      const remove = { readOnlyHint: false, destructiveHint: true, idempotentHint: true };
+      const create = { readOnlyHint: false, destructiveHint: false, idempotentHint: false };
+      const draft = { ...inbox, draftId: Common.DraftId };
+      const { reply_to, in_reply_to, forward_of, reply_all, send_at, client_id, ...draftCreate } =
+        Drafts.CreateDraftRequest.fields;
+      yield* register(
+        "create_draft",
+        "Create a draft. sendAt schedules it while the service runs.",
+        Schema.Struct({
+          ...inbox,
+          ...draftCreate,
+          replyTo: reply_to,
+          inReplyTo: in_reply_to,
+          forwardOf: forward_of,
+          replyAll: reply_all,
+          sendAt: send_at,
+          clientId: client_id,
         }),
-    );
-    yield* register(
-      "list_drafts",
-      "List drafts across accessible inboxes or one inbox.",
-      Schema.Struct({
-        inboxId: thread.inboxId,
-        ...page,
-        before: mail.before,
-        after: mail.after,
-        labels: mail.labels,
-      }),
-      read,
-      ({ inboxId, before, after, labels, ...input }) =>
-        operations.listDrafts(inboxId, {
-          ...pageQuery(input),
-          ...(before === undefined ? {} : { before }),
-          ...(after === undefined ? {} : { after }),
-          ...(labels === undefined ? {} : { labels }),
+        create,
+        ({ inboxId, replyTo, inReplyTo, forwardOf, replyAll, sendAt, clientId, ...input }) =>
+          operations.createDraft(inboxId, {
+            ...input,
+            ...(replyTo === undefined ? {} : { reply_to: replyTo }),
+            ...(inReplyTo === undefined ? {} : { in_reply_to: inReplyTo }),
+            ...(forwardOf === undefined ? {} : { forward_of: forwardOf }),
+            ...(replyAll === undefined ? {} : { reply_all: replyAll }),
+            ...(sendAt === undefined ? {} : { send_at: sendAt }),
+            ...(clientId === undefined ? {} : { client_id: clientId }),
+          }),
+      );
+      yield* register(
+        "list_drafts",
+        "List drafts across accessible inboxes or one inbox.",
+        Schema.Struct({
+          inboxId: thread.inboxId,
+          ...page,
+          before: mail.before,
+          after: mail.after,
+          labels: mail.labels,
         }),
-    );
-    yield* register("get_draft", "Read a draft.", Schema.Struct(draft), read, (input) =>
-      operations.getDraft(input.inboxId, input.draftId),
-    );
-    const {
-      reply_to: updateReplyTo,
-      send_at: updateSendAt,
-      add_attachments,
-      remove_attachments,
-      add_labels,
-      remove_labels,
-      ...draftUpdate
-    } = Drafts.UpdateDraftRequest.fields;
-    yield* register(
-      "update_draft",
-      "Edit a draft. Clearing sendAt cancels its schedule.",
-      Schema.Struct({
-        ...draft,
-        ...draftUpdate,
-        replyTo: updateReplyTo,
-        sendAt: updateSendAt,
-        addAttachments: add_attachments,
-        removeAttachments: remove_attachments,
-        addLabels: add_labels,
-        removeLabels: remove_labels,
-      }),
-      update,
-      ({
-        inboxId,
-        draftId,
-        replyTo,
-        sendAt,
-        addAttachments,
-        removeAttachments,
-        addLabels,
-        removeLabels,
-        ...input
-      }) =>
-        operations.updateDraft(inboxId, draftId, {
-          ...input,
-          ...(replyTo === undefined ? {} : { reply_to: replyTo }),
-          ...(sendAt === undefined ? {} : { send_at: sendAt }),
-          ...(addAttachments === undefined ? {} : { add_attachments: addAttachments }),
-          ...(removeAttachments === undefined ? {} : { remove_attachments: removeAttachments }),
-          ...(addLabels === undefined ? {} : { add_labels: addLabels }),
-          ...(removeLabels === undefined ? {} : { remove_labels: removeLabels }),
+        read,
+        ({ inboxId, before, after, labels, ...input }) =>
+          operations.listDrafts(inboxId, {
+            ...pageQuery(input),
+            ...(before === undefined ? {} : { before }),
+            ...(after === undefined ? {} : { after }),
+            ...(labels === undefined ? {} : { labels }),
+          }),
+      );
+      yield* register("get_draft", "Read a draft.", Schema.Struct(draft), read, (input) =>
+        operations.getDraft(input.inboxId, input.draftId),
+      );
+      const {
+        reply_to: updateReplyTo,
+        send_at: updateSendAt,
+        add_attachments,
+        remove_attachments,
+        add_labels,
+        remove_labels,
+        ...draftUpdate
+      } = Drafts.UpdateDraftRequest.fields;
+      yield* register(
+        "update_draft",
+        "Edit a draft. Clearing sendAt cancels its schedule.",
+        Schema.Struct({
+          ...draft,
+          ...draftUpdate,
+          replyTo: updateReplyTo,
+          sendAt: updateSendAt,
+          addAttachments: add_attachments,
+          removeAttachments: remove_attachments,
+          addLabels: add_labels,
+          removeLabels: remove_labels,
         }),
-    );
-    yield* register(
-      "send_draft",
-      "Queue a draft now; approval policies request owner review.",
-      Schema.Struct({
-        ...draft,
-        ...labels,
-        idempotencyKey: send.idempotencyKey,
-      }),
-      create,
-      ({ inboxId, draftId, addLabels, removeLabels, idempotencyKey }) =>
-        operations.sendDraft(
+        update,
+        ({
           inboxId,
           draftId,
-          {
+          replyTo,
+          sendAt,
+          addAttachments,
+          removeAttachments,
+          addLabels,
+          removeLabels,
+          ...input
+        }) =>
+          operations.updateDraft(inboxId, draftId, {
+            ...input,
+            ...(replyTo === undefined ? {} : { reply_to: replyTo }),
+            ...(sendAt === undefined ? {} : { send_at: sendAt }),
+            ...(addAttachments === undefined ? {} : { add_attachments: addAttachments }),
+            ...(removeAttachments === undefined ? {} : { remove_attachments: removeAttachments }),
             ...(addLabels === undefined ? {} : { add_labels: addLabels }),
             ...(removeLabels === undefined ? {} : { remove_labels: removeLabels }),
-          },
-          idempotencyKey,
-        ),
-    );
-    yield* register(
-      "delete_draft",
-      "Delete a draft and cancel its schedule.",
-      Schema.Struct(draft),
-      remove,
-      (input) => operations.deleteDraft(input.inboxId, input.draftId),
-    );
-    yield* register(
-      "list_inboxes",
-      "List accessible inboxes.",
-      Schema.Struct(page),
-      read,
-      (input) => operations.listInboxes(pageQuery(input)),
-    );
-    yield* register(
-      "search_inboxes",
-      "Search accessible inboxes.",
-      Schema.Struct({ q: Common.SearchInboxesQuery.fields.q, ...page }),
-      read,
-      (input) => operations.searchInboxes({ q: input.q, ...pageQuery(input) }),
-    );
-    yield* register("get_inbox", "Read an inbox.", Schema.Struct(inbox), read, (input) =>
-      operations.getInbox(input.inboxId),
-    );
-    yield* register(
-      "create_inbox",
-      "Create an inbox within the key's fixed scope.",
-      Schema.Struct({
-        username: Inboxes.CreateInboxRequest.fields.username,
-        domain: Inboxes.CreateInboxRequest.fields.domain,
-        displayName: Inboxes.CreateInboxRequest.fields.display_name,
-        clientId: Inboxes.CreateInboxRequest.fields.client_id,
-        status: Inboxes.CreateInboxRequest.fields.status,
-        metadata: Inboxes.CreateInboxRequest.fields.metadata,
-      }),
-      create,
-      ({ displayName, clientId, ...input }) =>
-        operations.createInbox({
-          ...input,
-          ...(displayName === undefined ? {} : { display_name: displayName }),
-          ...(clientId === undefined ? {} : { client_id: clientId }),
+          }),
+      );
+      yield* register(
+        "send_draft",
+        "Queue a draft now; approval policies request owner review.",
+        Schema.Struct({
+          ...draft,
+          ...labels,
+          idempotencyKey: send.idempotencyKey,
         }),
-    );
-    yield* register(
-      "update_inbox",
-      "Update inbox details.",
-      Schema.Struct({
-        ...inbox,
-        displayName: Inboxes.UpdateInboxRequest.fields.display_name,
-        status: Inboxes.UpdateInboxRequest.fields.status,
-        metadata: Inboxes.UpdateInboxRequest.fields.metadata,
-      }),
-      update,
-      ({ inboxId, displayName, ...input }) =>
-        operations.updateInbox(inboxId, {
-          ...input,
-          ...(displayName === undefined ? {} : { display_name: displayName }),
-        }),
-    );
-    yield* register(
-      "delete_inbox",
-      "Permanently delete an inbox and its mail.",
-      Schema.Struct(inbox),
-      remove,
-      (input) => operations.deleteInbox(input.inboxId),
-    );
-    yield* register(
-      "list_threads",
-      "List accessible threads.",
-      Schema.Struct({
-        inboxId: thread.inboxId,
-        ...mail,
-        senders: Threads.ListThreadsQuery.fields.senders,
-        recipients: Threads.ListThreadsQuery.fields.recipients,
-        subject: Threads.ListThreadsQuery.fields.subject,
-      }),
-      read,
-      ({ inboxId, senders, recipients, subject, ...input }) =>
-        operations.listThreads(inboxId, {
-          ...mailQuery(input),
-          ...(senders === undefined ? {} : { senders }),
-          ...(recipients === undefined ? {} : { recipients }),
-          ...(subject === undefined ? {} : { subject }),
-        }),
-    );
-    yield* register(
-      "search_threads",
-      "Search accessible threads.",
-      Schema.Struct({ inboxId: thread.inboxId, ...search }),
-      read,
-      (input) => operations.searchThreads(input.inboxId, searchQuery(input)),
-    );
-    yield* register(
-      "get_thread",
-      "Read a thread and a page of its messages.",
-      Schema.Struct({ ...thread, limit: page.limit, pageToken: page.pageToken }),
-      read,
-      (input) => operations.getThread(input.inboxId, input.threadId, pageQuery(input)),
-    );
-    yield* register(
-      "get_attachment",
-      "Get attachment metadata and an authenticated download URL.",
-      Schema.Struct({ ...thread, attachmentId: Common.AttachmentId }),
-      read,
-      (input) => operations.getAttachment(input.inboxId, input.threadId, input.attachmentId),
-    );
-    yield* register(
-      "update_thread",
-      "Update thread labels.",
-      Schema.Struct({ ...thread, ...threadLabels }),
-      update,
-      (input) =>
-        operations.updateThread(input.inboxId, input.threadId, {
-          ...(input.addLabels === undefined ? {} : { add_labels: input.addLabels }),
-          ...(input.removeLabels === undefined ? {} : { remove_labels: input.removeLabels }),
-        }),
-    );
-    yield* register(
-      "delete_thread",
-      "Permanently delete a thread and its messages.",
-      Schema.Struct(thread),
-      remove,
-      (input) => operations.deleteThread(input.inboxId, input.threadId),
-    );
-    yield* register(
-      "list_messages",
-      "List inbox messages.",
-      Schema.Struct({
-        ...inbox,
-        ...mail,
-        from: Messages.ListMessagesQuery.fields.from,
-        to: Messages.ListMessagesQuery.fields.to,
-        subject: Messages.ListMessagesQuery.fields.subject,
-      }),
-      read,
-      ({ inboxId, from, to, subject, ...input }) =>
-        operations.listMessages(inboxId, {
-          ...mailQuery(input),
-          ...(from === undefined ? {} : { from }),
-          ...(to === undefined ? {} : { to }),
-          ...(subject === undefined ? {} : { subject }),
-        }),
-    );
-    yield* register(
-      "search_messages",
-      "Search inbox messages.",
-      Schema.Struct({ ...inbox, ...search }),
-      read,
-      (input) => operations.searchMessages(input.inboxId, searchQuery(input)),
-    );
-    yield* register(
-      "get_message",
-      "Read a message; large bodies are explicitly truncated.",
-      Schema.Struct(message),
-      read,
-      (input) => operations.getMessage(input.inboxId, input.messageId),
-    );
-    yield* register(
-      "send_message",
-      "Queue mail. Supply idempotencyKey for safe replay.",
-      Schema.Struct({ ...inbox, ...send }),
-      create,
-      ({ inboxId, ...input }) =>
-        operations.send(
-          inboxId,
-          { kind: "send", request: sendRequest(input) },
-          input.idempotencyKey,
-        ),
-    );
-    yield* register(
-      "reply_to_message",
-      "Queue a reply, optionally to all original recipients.",
-      Schema.Struct({
-        ...message,
-        ...reply,
-        replyAll: Messages.ReplyToMessageRequest.fields.reply_all,
-      }),
-      create,
-      ({ inboxId, messageId, replyAll, ...input }) =>
-        operations.send(
-          inboxId,
-          {
-            kind: "reply",
-            message_id: messageId,
-            request: {
-              ...sendRequest(input),
-              ...(replyAll === undefined ? {} : { reply_all: replyAll }),
+        create,
+        ({ inboxId, draftId, addLabels, removeLabels, idempotencyKey }) =>
+          operations.sendDraft(
+            inboxId,
+            draftId,
+            {
+              ...(addLabels === undefined ? {} : { add_labels: addLabels }),
+              ...(removeLabels === undefined ? {} : { remove_labels: removeLabels }),
             },
-          },
-          input.idempotencyKey,
-        ),
-    );
-    yield* register(
-      "forward_message",
-      "Queue a forward with original content and attachments.",
-      Schema.Struct({ ...message, ...send }),
-      create,
-      ({ inboxId, messageId, ...input }) =>
-        operations.send(
-          inboxId,
-          { kind: "forward", message_id: messageId, request: sendRequest(input) },
-          input.idempotencyKey,
-        ),
-    );
-    yield* register(
-      "update_message",
-      "Update message labels.",
-      Schema.Struct({ ...message, ...labels }),
-      update,
-      (input) =>
-        operations.updateMessage(input.inboxId, input.messageId, {
-          ...(input.addLabels === undefined ? {} : { add_labels: input.addLabels }),
-          ...(input.removeLabels === undefined ? {} : { remove_labels: input.removeLabels }),
+            idempotencyKey,
+          ),
+      );
+      yield* register(
+        "delete_draft",
+        "Delete a draft and cancel its schedule.",
+        Schema.Struct(draft),
+        remove,
+        (input) => operations.deleteDraft(input.inboxId, input.draftId),
+      );
+      yield* register(
+        "list_inboxes",
+        "List accessible inboxes.",
+        Schema.Struct(page),
+        read,
+        (input) => operations.listInboxes(pageQuery(input)),
+      );
+      yield* register(
+        "search_inboxes",
+        "Search accessible inboxes.",
+        Schema.Struct({ q: Common.SearchInboxesQuery.fields.q, ...page }),
+        read,
+        (input) => operations.searchInboxes({ q: input.q, ...pageQuery(input) }),
+      );
+      yield* register("get_inbox", "Read an inbox.", Schema.Struct(inbox), read, (input) =>
+        operations.getInbox(input.inboxId),
+      );
+      yield* register(
+        "create_inbox",
+        "Create an inbox within the key's fixed scope.",
+        Schema.Struct({
+          username: Inboxes.CreateInboxRequest.fields.username,
+          domain: Inboxes.CreateInboxRequest.fields.domain,
+          displayName: Inboxes.CreateInboxRequest.fields.display_name,
+          clientId: Inboxes.CreateInboxRequest.fields.client_id,
+          status: Inboxes.CreateInboxRequest.fields.status,
+          metadata: Inboxes.CreateInboxRequest.fields.metadata,
         }),
-    );
-  }),
-);
+        create,
+        ({ displayName, clientId, ...input }) =>
+          operations.createInbox({
+            ...input,
+            ...(displayName === undefined ? {} : { display_name: displayName }),
+            ...(clientId === undefined ? {} : { client_id: clientId }),
+          }),
+      );
+      yield* register(
+        "update_inbox",
+        "Update inbox details.",
+        Schema.Struct({
+          ...inbox,
+          displayName: Inboxes.UpdateInboxRequest.fields.display_name,
+          status: Inboxes.UpdateInboxRequest.fields.status,
+          metadata: Inboxes.UpdateInboxRequest.fields.metadata,
+        }),
+        update,
+        ({ inboxId, displayName, ...input }) =>
+          operations.updateInbox(inboxId, {
+            ...input,
+            ...(displayName === undefined ? {} : { display_name: displayName }),
+          }),
+      );
+      yield* register(
+        "delete_inbox",
+        "Permanently delete an inbox and its mail.",
+        Schema.Struct(inbox),
+        remove,
+        (input) => operations.deleteInbox(input.inboxId),
+      );
+      yield* register(
+        "list_threads",
+        "List accessible threads.",
+        Schema.Struct({
+          inboxId: thread.inboxId,
+          ...mail,
+          senders: Threads.ListThreadsQuery.fields.senders,
+          recipients: Threads.ListThreadsQuery.fields.recipients,
+          subject: Threads.ListThreadsQuery.fields.subject,
+        }),
+        read,
+        ({ inboxId, senders, recipients, subject, ...input }) =>
+          operations.listThreads(inboxId, {
+            ...mailQuery(input),
+            ...(senders === undefined ? {} : { senders }),
+            ...(recipients === undefined ? {} : { recipients }),
+            ...(subject === undefined ? {} : { subject }),
+          }),
+      );
+      yield* register(
+        "search_threads",
+        "Search accessible threads.",
+        Schema.Struct({ inboxId: thread.inboxId, ...search }),
+        read,
+        (input) => operations.searchThreads(input.inboxId, searchQuery(input)),
+      );
+      yield* register(
+        "get_thread",
+        "Read a thread and a page of its messages.",
+        Schema.Struct({ ...thread, limit: page.limit, pageToken: page.pageToken }),
+        read,
+        (input) => operations.getThread(input.inboxId, input.threadId, pageQuery(input)),
+      );
+      yield* register(
+        "get_attachment",
+        "Get attachment metadata and an authenticated download URL.",
+        Schema.Struct({ ...thread, attachmentId: Common.AttachmentId }),
+        read,
+        (input) => operations.getAttachment(input.inboxId, input.threadId, input.attachmentId),
+      );
+      yield* register(
+        "update_thread",
+        "Update thread labels.",
+        Schema.Struct({ ...thread, ...threadLabels }),
+        update,
+        (input) =>
+          operations.updateThread(input.inboxId, input.threadId, {
+            ...(input.addLabels === undefined ? {} : { add_labels: input.addLabels }),
+            ...(input.removeLabels === undefined ? {} : { remove_labels: input.removeLabels }),
+          }),
+      );
+      yield* register(
+        "delete_thread",
+        "Permanently delete a thread and its messages.",
+        Schema.Struct(thread),
+        remove,
+        (input) => operations.deleteThread(input.inboxId, input.threadId),
+      );
+      yield* register(
+        "list_messages",
+        "List inbox messages.",
+        Schema.Struct({
+          ...inbox,
+          ...mail,
+          from: Messages.ListMessagesQuery.fields.from,
+          to: Messages.ListMessagesQuery.fields.to,
+          subject: Messages.ListMessagesQuery.fields.subject,
+        }),
+        read,
+        ({ inboxId, from, to, subject, ...input }) =>
+          operations.listMessages(inboxId, {
+            ...mailQuery(input),
+            ...(from === undefined ? {} : { from }),
+            ...(to === undefined ? {} : { to }),
+            ...(subject === undefined ? {} : { subject }),
+          }),
+      );
+      yield* register(
+        "search_messages",
+        "Search inbox messages.",
+        Schema.Struct({ ...inbox, ...search }),
+        read,
+        (input) => operations.searchMessages(input.inboxId, searchQuery(input)),
+      );
+      yield* register(
+        "get_message",
+        "Read a message; large bodies are explicitly truncated.",
+        Schema.Struct(message),
+        read,
+        (input) => operations.getMessage(input.inboxId, input.messageId),
+      );
+      yield* register(
+        "send_message",
+        "Queue mail. Supply idempotencyKey for safe replay.",
+        Schema.Struct({ ...inbox, ...send }),
+        create,
+        ({ inboxId, ...input }) =>
+          operations.send(
+            inboxId,
+            { kind: "send", request: sendRequest(input) },
+            input.idempotencyKey,
+          ),
+      );
+      yield* register(
+        "reply_to_message",
+        "Queue a reply, optionally to all original recipients.",
+        Schema.Struct({
+          ...message,
+          ...reply,
+          replyAll: Messages.ReplyToMessageRequest.fields.reply_all,
+        }),
+        create,
+        ({ inboxId, messageId, replyAll, ...input }) =>
+          operations.send(
+            inboxId,
+            {
+              kind: "reply",
+              message_id: messageId,
+              request: {
+                ...sendRequest(input),
+                ...(replyAll === undefined ? {} : { reply_all: replyAll }),
+              },
+            },
+            input.idempotencyKey,
+          ),
+      );
+      yield* register(
+        "forward_message",
+        "Queue a forward with original content and attachments.",
+        Schema.Struct({ ...message, ...send }),
+        create,
+        ({ inboxId, messageId, ...input }) =>
+          operations.send(
+            inboxId,
+            { kind: "forward", message_id: messageId, request: sendRequest(input) },
+            input.idempotencyKey,
+          ),
+      );
+      yield* register(
+        "update_message",
+        "Update message labels.",
+        Schema.Struct({ ...message, ...labels }),
+        update,
+        (input) =>
+          operations.updateMessage(input.inboxId, input.messageId, {
+            ...(input.addLabels === undefined ? {} : { add_labels: input.addLabels }),
+            ...(input.removeLabels === undefined ? {} : { remove_labels: input.removeLabels }),
+          }),
+      );
+    }),
+  );
 
 export function mcpRoutes(origin: string) {
-  return McpTools.pipe(
+  return McpTools(origin).pipe(
     Layer.provide(
       McpServer.layerHttp({
         name: "inbot",

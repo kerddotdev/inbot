@@ -13,7 +13,10 @@ requests. POST requests use `Content-Type: application/json` and
 The initialized notification receives HTTP 202. OAuth, stdio, resumable event
 streams, and remote tunnel exposure are not implemented here.
 
-Every HTTP request requires `Authorization: Bearer <owner-token-or-api-key>`.
+Every HTTP request requires `Authorization: Bearer <owner-token-or-api-key>`
+or an owner browser session cookie. Cookie-authenticated POST/DELETE requests
+also require `X-Inbot-CSRF`; see [owner authentication](../http/README.md#owner-browser-authentication).
+An Authorization header takes precedence over cookies.
 Missing, invalid, expired, and revoked credentials return HTTP 401 with
 `WWW-Authenticate: Bearer`. Foreign browser origins are rejected. Tools
 reauthenticate the current request, never a captured session credential or a
@@ -30,7 +33,7 @@ Parameters use camelCase (`inboxId`, `messageId`, `threadId`, `pageToken`,
 `replyTo`, `replyAll`, `inReplyTo`, `forwardOf`, `sendAt`, `draftId`, `clientId`, `addLabels`, `removeLabels`, `idempotencyKey`).
 Attachment objects retain the shared request fields. `get_attachment`
 uses `threadId`, `attachmentId`, and optional `inboxId` and returns the same signed,
-bearer-protected download metadata as REST. Thread tools may omit `inboxId` for
+authenticated download metadata as REST. Thread tools may omit `inboxId` for
 a scoped organization lookup. Default page size is 10; `limit` can override it.
 
 | Tools                                                                                                               | readOnlyHint | destructiveHint | idempotentHint | Permission       |
@@ -61,8 +64,9 @@ returns `isError: true` with `approval_required`. The error shape stays
 id is invented before the owner approves. Proposed message idempotency is shared
 with REST, including after the original draft is approved or deleted.
 
-There are no tools for domains, keys, webhooks, settings, transport, unlock,
-approval/rejection, or list entries. Owner-only capabilities never enter the MCP registry.
+There are no tools for owner authentication, sessions, passwords, domains, keys,
+webhooks, settings, transport, unlock, approval/rejection, or list entries.
+Owner-only capabilities never enter the MCP registry.
 
 ## Drafts
 
@@ -92,7 +96,7 @@ scheduling guarantees.
 
 ## Shared behavior and results
 
-Both REST and MCP call `AgentOperations`, which uses the same Mailbox/Outbox
+Both REST and MCP call `AgentOperations`, which uses the same Mailbox/Outbox/Drafts
 methods and authorization helpers. Scope checks precede permission checks and
 conceal foreign resources with `not_found`. Organization pagination and search
 apply the key's fixed inbox allowlist before reading. Hidden-label permissions

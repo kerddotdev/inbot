@@ -10,16 +10,20 @@ pnpm start:server --home /path/to/explicit/inbot-home --port 0 --init
 `serve` defaults to development flavor. Port 0 chooses an available loopback
 port; `--port` accepts 0 through 65535. The service listens only on `127.0.0.1`.
 `--init` initializes a new home with a random DEK wrapped by an OS-keychain KEK;
-existing homes unlock with the keychain. Passphrase startup, password/cookie web
-sessions, and the full CLI remain later work. SIGINT and SIGTERM close HTTP and
+existing homes unlock with the keychain. Passphrase startup and the full CLI
+remain later work. Owner browser sessions authenticate against the unlocked service;
+they do not unlock the database. SIGINT and SIGTERM close HTTP and
 the encrypted Store. Files, keys, and `connection.json` remain in the home.
 
 On each successful start, the service replaces `<home>/connection.json`
 atomically with mode 0600. Its shape is `{ "url": "http://127.0.0.1:<port>",
 "token": "<owner-bearer-token>" }`. Local clients read that file and send
 `Authorization: Bearer <token>`. Only the token's SHA-256 remains in the owner
-authentication service. The service prints one JSON `server.ready` line
-containing the URL, never the token. Restart rotates the owner token.
+authentication service. The service prints a JSON `server.ready` line containing the URL, never the
+bearer token. When no owner password exists it first prints
+`{"event":"owner.setup_required","code":"<one-time-code>"}`. Only the code
+SHA-256 stays in process memory. Restart rotates both the bearer token and any
+unconsumed setup code. Existing owner accounts and sessions persist.
 
 Tests use temporary homes and the in-memory keychain. The process smoke test
 sets `INBOT_TEST_MEMORY_KEYCHAIN=1`; this switch requires an explicit `--home`,
@@ -53,13 +57,13 @@ and does not enqueue. Transport settings have only an internal service for now.
 
 Lists, webhooks, and domains return HTTP 501 `not_supported` after
 authentication and authorization. Validated input is still required. Provisioning,
-tunnels, the web UI, OAuth, and event streams remain planned. The same server
+tunnels, owner UI API wiring, OAuth, and event streams remain planned. The same server
 exposes authenticated streamable HTTP MCP at `/mcp`; see
 [the MCP reference](../mcp/README.md).
 
 Raw and attachment endpoints return the declared metadata and a signed
 five-minute URL under `/v0/downloads/:token`. Downloads still require a bearer
-token and recheck its current permissions, inbox scope, and hidden labels. They
+token or owner session cookie and recheck its current permissions, inbox scope, and hidden labels. They
 read encrypted storage at download time and send binary content as an attachment
 with `nosniff` and `no-store`. No plaintext download cache is written. URLs
 expire on restart as well as at their advertised expiry time.
@@ -170,12 +174,104 @@ delay. Both background fibers are scoped to the HTTP service and observed by
 loops and drive the clock and fake provider explicitly.
 
 REST and MCP use `AgentOperations`, the shared authorization helpers, and the
-same Mailbox/Outbox methods. The middleware checks contract permission annotations
+same Mailbox/Outbox/Drafts methods. The middleware checks contract permission annotations
 through that same authorization function. Scope remains checked before permissions.
 
 Browser requests with an `Origin` different from the server's exact origin,
 including `null`, return 403. Requests without `Origin` and same-origin requests
-are allowed; both still need authentication. Responses use `no-store`.
+are allowed; protected endpoints still need authentication. Host must match the
+loopback URL, preventing browser DNS rebinding. API responses use `no-store`.
+
+## Owner browser authentication
+
+The separate `OwnerApiGroup` in `packages/contracts/src/api/owner.ts` declares
+Inbot extensions, outside the main `InbotApi`. These endpoints
+are never MCP tools. Agent API keys are rejected on every owner endpoint,
+including public endpoints when an agent Authorization header is supplied.
+
+| Method | Path                           | Input / result                                                                               | Access                                               |
+| ------ | ------------------------------ | -------------------------------------------------------------------------------------------- | ---------------------------------------------------- |
+| GET    | `/v0/owner/status`             | `{ setup_required, authenticated, locked }` booleans                                         | Public                                               |
+| POST   | `/v0/owner/setup`              | `{ password, code }` -> session                                                              | Public, only before setup, valid setup code required |
+| POST   | `/v0/owner/login`              | `{ password }` -> session                                                                    | Public                                               |
+| POST   | `/v0/owner/logout`             | Revokes current cookie session and clears cookie                                             | Owner                                                |
+| GET    | `/v0/owner/sessions`           | `{ sessions: [{ id, created_at, last_seen_at, expires_at, user_agent, revoked, current }] }` | Owner                                                |
+| DELETE | `/v0/owner/sessions/:id`       | Revokes session; clears cookie if current                                                    | Owner                                                |
+| POST   | `/v0/owner/password`           | `{ current_password, password }`; revokes other sessions                                     | Owner                                                |
+| POST   | `/v0/owner/login-links`        | `{ url: "<origin>/login?token=..." }`                                                        | Owner bearer only                                    |
+| POST   | `/v0/owner/login-links/redeem` | `{ token }` -> session                                                                       | Public                                               |
+
+Setup, login, and link redemption set the session cookie and return
+`{ csrf_token, expires_at }`. New passwords require 12 to 1024 characters.
+The password uses Node's built-in Argon2id with a random 16-byte salt,
+19,456 KiB memory, two passes, one lane, and a 32-byte hash. Verification uses
+constant-time hash comparison, including a dummy derivation before setup.
+Password failures share process-wide exponential backoff from one to 60 seconds;
+concurrent password verification attempts return 429 `rate_limit_exceeded`.
+A successful verification resets backoff. This limiter resets on restart.
+
+Migration 8 adds a singleton `owner_account` and `owner_sessions` inside the
+encrypted database. Session tokens are random 32-byte values; only SHA-256
+hashes persist. Session metadata stores a SHA-256 of User-Agent, no IP address.
+Expiry slides by 14 days per authenticated request, bounded by 30 days from
+creation. Expired and revoked sessions cannot authenticate. Listing keeps
+revocation history. Password changes preserve the current cookie session and
+revoke all others; bearer-only password changes revoke all browser sessions.
+
+The loopback HTTP service sets `inbot_session`, with `HttpOnly`, `SameSite=Strict`,
+`Path=/`, no Domain, and an explicit expiry. The cookie builder uses
+`__Host-inbot_session` and `Secure` for HTTPS origins; TLS serving is not
+implemented by this loopback server. Cookie requests authenticate exclusively as
+owner. An Authorization header takes precedence and never falls back to cookies.
+This applies to REST, downloads, and MCP; it preserves agent scope and permissions.
+
+For cookie-authenticated unsafe methods, send `X-Inbot-CSRF: <csrf_token>`.
+The token is derived from the session token with HMAC-SHA-256 and compared in
+constant time. Authenticated `GET /v0/owner/status` returns it in the
+`X-Inbot-CSRF` response header, keeping the JSON body boolean-only. Browser code
+can obtain it after reload without reading the HttpOnly cookie. The exact Origin
+check remains enforced. Bearer requests do not need CSRF. Setup/login/redemption
+without an existing session do not need CSRF, but still require same-origin
+browser requests. Foreign and null Origins are rejected.
+
+Setup atomically creates the account and session, refuses subsequent setup, and
+consumes the in-memory setup code after success. The setup code is entered from
+the startup stdout line; it is never returned by status or stored on disk.
+Login links are hashed in a bounded in-memory map, expire after two minutes,
+are consumed before redemption, and disappear on restart or password change.
+The future web UI should redeem the URL token immediately and remove it from
+browser history. A future `inbot open` command can request links with the local
+owner bearer; that CLI command is not implemented here.
+
+`locked` is currently false because HTTP starts only after the database unlocks.
+There is no browser database-unlock endpoint. Owner sessions and setup do not
+change agent grants or the planned tunnel allowlist.
+
+## Static owner UI serving
+
+Pass `serve --web-root /absolute/path/to/apps/web/dist` to serve a prebuilt UI.
+The path is resolved explicitly; there is no automatic repository or `dist`
+discovery and no UI when the flag is omitted. An invalid root or missing `index.html` fails startup.
+Build the React bundle with `pnpm web:build`. The bundle and owner authentication
+API share the loopback origin. The UI has presentational screens with mock data;
+API wiring and owner sign-in screens remain planned.
+
+GET requests first try files under the canonical web root, then fall back to
+`index.html`. `/v0`, `/mcp`, `/oauth`, and `/.well-known`, including their
+subpaths and encoded spellings, never get SPA fallback. Non-GET requests do not
+serve files. Malformed encodings, encoded dot segments or separators that form
+traversal, backslashes, NULs, double encodings, and symlinks outside the root are
+rejected. Canonical paths are checked before reading files.
+
+JavaScript, CSS, HTML, images, fonts, JSON, and WASM have explicit content types.
+Files whose names end in a hash-like suffix of at least eight characters before
+the extension use `public, max-age=31536000, immutable`; HTML uses `no-cache`.
+Other files use `no-cache`. All responses include `X-Content-Type-Options:
+nosniff`, `Referrer-Policy: no-referrer`, and this CSP:
+
+```text
+default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; font-src 'self' https://fonts.gstatic.com; style-src-elem 'self' 'unsafe-inline' https://fonts.googleapis.com; frame-ancestors 'none'; base-uri 'none'
+```
 
 ## Errors
 
