@@ -13,3 +13,4 @@ export * from "./events.js";
 export * from "./webhooks.js";
 export * from "./security.js";
 export * from "./api.js";
+export * from "./outbound.js";
