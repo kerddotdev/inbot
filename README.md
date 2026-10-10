@@ -2,7 +2,7 @@
 
 Self-hosted, privacy-first email for AI agents. Each agent gets its own inbox on your custom domain, mail is stored encrypted on your own machine, and agents reach it through MCP, a CLI, or a REST API. An optional Cloudflare Tunnel lets cloud-hosted agents reach your local instance with scoped credentials. The mail provider still sees plaintext in transit: Inbot is zero-knowledge at rest, not end-to-end encrypted.
 
-Status: early development. The encrypted storage foundation, mailbox service, [inbound ingestion and encrypted buffer pulling](apps/server/src/inbound/README.md), [authenticated loopback HTTP API](apps/server/src/http/README.md), shared [age envelope package](packages/envelope/README.md), [inbound Email Worker handler](apps/worker/README.md), [owner browser authentication and static UI serving](apps/server/src/http/README.md#owner-browser-authentication), drafts with owner approval and scheduled sending, and [delivery Queue consumer](apps/server/src/outbound/README.md#delivery-queue-consumer) exist. The [owner UI](apps/web/README.md) connects authentication, mail, API keys, approvals, domains, and mail transport settings to the local API. Remote access and other settings still use mock data. Live mail validation and installers remain planned.
+Status: early development. The encrypted storage foundation, mailbox service, [inbound ingestion and encrypted buffer pulling](apps/server/src/inbound/README.md), [authenticated loopback HTTP API](apps/server/src/http/README.md), [authenticated CLI](apps/cli/README.md), shared [age envelope package](packages/envelope/README.md), [inbound Email Worker handler](apps/worker/README.md), [owner browser authentication and static UI serving](apps/server/src/http/README.md#owner-browser-authentication), drafts with owner approval and scheduled sending, and [delivery Queue consumer](apps/server/src/outbound/README.md#delivery-queue-consumer) exist. The [owner UI](apps/web/README.md) connects authentication, mail, API keys, approvals, domains, and mail transport settings to the local API. Remote access and other settings still use mock data. Live mail validation and installers remain planned.
 
 ## Development
 
@@ -39,3 +39,19 @@ plan and provision Cloudflare infrastructure with apex DNS protection, encrypted
 self-test verification, exact teardown, and durable inbox routing jobs.
 `pnpm build` ships a single Worker bundle; real-account deployment is not part of
 build or tests.
+
+## CLI
+
+After `pnpm build`, use `pnpm start:cli --help` in a source checkout. The root
+package exposes the `inbot` binary from `dist/apps/cli/src/main.js` when linked
+or installed. `inbot serve` delegates to the existing server with identical flags.
+
+Resource commands read the owner's `connection.json` from the same home as the
+server. Agents instead set both `INBOT_URL` and `INBOT_API_KEY` for scoped bearer
+authentication. Use `--json` for wire JSON, `--help` on every command, and retain
+the idempotency key printed to stderr before sends. `inbot open` prints an
+owner-only single-use login link; only `--browser` opens it. API key creation
+prints the one-time secret only with explicit `--show-secret`.
+
+See the [CLI reference](apps/cli/README.md) for resource commands, payload flags,
+pagination, and stable exit codes, or the [agent CLI guidance](skills/inbot/references/cli.md).
