@@ -10,8 +10,8 @@ pnpm start:server --home /path/to/explicit/inbot-home --port 0 --init
 `serve` defaults to development flavor. Port 0 chooses an available loopback
 port; `--port` accepts 0 through 65535. The service listens only on `127.0.0.1`.
 `--init` initializes a new home with a random DEK wrapped by an OS-keychain KEK;
-existing homes unlock with the keychain. Passphrase startup and the full CLI
-remain later work. Owner browser sessions authenticate against the unlocked service;
+existing homes unlock with the keychain. Passphrase startup remains later work. The [CLI](../../../cli/README.md)
+delegates `serve` to this entry and uses the REST API for resource commands. Owner browser sessions authenticate against the unlocked service;
 they do not unlock the database. SIGINT and SIGTERM close HTTP and
 the encrypted Store. Files, keys, and `connection.json` remain in the home.
 

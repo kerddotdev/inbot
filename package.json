@@ -2,6 +2,9 @@
   "name": "inbot-workspace",
   "private": true,
   "license": "MIT",
+  "bin": {
+    "inbot": "dist/apps/cli/src/main.js"
+  },
   "type": "module",
   "scripts": {
     "build": "tsc -p tsconfig.build.json && tsc -p apps/worker/tsconfig.build.json && pnpm build:worker",
@@ -14,7 +17,8 @@
     "format": "oxfmt .",
     "format:check": "oxfmt --check .",
     "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test",
-    "build:worker": "node scripts/build-worker.mjs"
+    "build:worker": "node scripts/build-worker.mjs",
+    "start:cli": "node dist/apps/cli/src/main.js"
   },
   "dependencies": {
     "@effect/platform-node": "4.0.2",
