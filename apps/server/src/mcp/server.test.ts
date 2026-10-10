@@ -102,6 +102,10 @@ test("initializes with an API key and lists only mailbox tools with object schem
       "update_draft",
       "send_draft",
       "delete_draft",
+      "list_list_entries",
+      "get_list_entry",
+      "create_list_entry",
+      "delete_list_entry",
     ].sort(),
   );
   for (const tool of tools) {

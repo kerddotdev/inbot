@@ -23,6 +23,10 @@ Implemented screens:
   Cloudflare credentials, and clears configuration after domain teardown. Token inputs
   are password fields cleared on submission; tokens are never returned, displayed again,
   or stored in query/mutation variables. The screen lists required token permissions.
+- Settings > Allow and block lists manages global and inbox entries for receive, send,
+  and reply using the shared API. Scope, direction, and list type are explicit; entries
+  have cursor pagination, optional reasons, and removal. Blocks win over allows;
+  the screen explains exact matching and how non-empty allow lists restrict mail.
 - Owner-only domain registration, list and detail loading, plan preview, resumable
   apply, verification followed by a fresh GET, teardown, registration deletion, and
   supported feature updates. Domain and per-record DNS states, incomplete DNS

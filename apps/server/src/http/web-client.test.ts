@@ -48,6 +48,22 @@ test("browser client uses real owner sessions for mail, keys, approvals, transpo
     expect(await reloaded.transport(signal())).toEqual(transport);
     await reloaded.clearTransport();
     expect((await reloaded.transport(signal())).token_set).toBe(false);
+    const selection = {
+      direction: "receive",
+      type: "block",
+      inboxId: "agent@example.test",
+    } as const;
+    const entry = await reloaded.createListEntry(selection, {
+      entry: "EXAMPLE.TEST",
+      reason: "Synthetic browser rule",
+    });
+    expect(entry.entry).toBe("example.test");
+    expect((await reloaded.listEntries(selection, null, signal())).entries).toEqual([entry]);
+    expect(
+      (await reloaded.listEntries({ direction: "receive", type: "block" }, null, signal())).entries,
+    ).toEqual([]);
+    await reloaded.deleteListEntry(selection, entry.entry);
+    expect((await reloaded.listEntries(selection, null, signal())).entries).toEqual([]);
     const threads = await reloaded.threads("agent@example.test", null, signal());
     const thread = await reloaded.thread("agent@example.test", api.threadId, null, signal());
     expect(threads.threads.map((item) => item.thread_id)).toContain(thread.thread_id);

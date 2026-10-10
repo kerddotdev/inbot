@@ -5,6 +5,7 @@ import { MessagesApi } from "../../../packages/contracts/src/api/messages.js";
 import { DraftsApi } from "../../../packages/contracts/src/api/drafts.js";
 import { ApiKeysApi } from "../../../packages/contracts/src/api/api-keys.js";
 import { OwnerApiGroup } from "../../../packages/contracts/src/api/owner.js";
+import { ListsApi } from "../../../packages/contracts/src/api/lists.js";
 
 export type Endpoint = Pick<HttpApiEndpoint.Top, "path" | "method" | "payload" | "success">;
 export type FieldKind = "string" | "array" | "boolean" | "number" | "object";
@@ -52,6 +53,36 @@ const message = ["inbox_id", "message_id"];
 const draft = ["inbox_id", "draft_id"];
 
 export const commands: readonly Command[] = [
+  {
+    name: "lists list",
+    description: "List allow/block entries for receive, send, or reply; --inbox selects an inbox.",
+    endpoint: ListsApi.endpoints.lists_list,
+    scopedEndpoint: ListsApi.endpoints.inboxes_lists_list,
+    params: ["direction", "type"],
+    query: cursor,
+  },
+  {
+    name: "lists create",
+    description: "Add one exact address or domain; blocks win over allows.",
+    endpoint: ListsApi.endpoints.lists_create,
+    scopedEndpoint: ListsApi.endpoints.inboxes_lists_create,
+    params: ["direction", "type"],
+    body: { entry: "string", reason: "string" },
+  },
+  {
+    name: "lists get",
+    description: "Read one allow/block entry, optionally within --inbox.",
+    endpoint: ListsApi.endpoints.lists_get,
+    scopedEndpoint: ListsApi.endpoints.inboxes_lists_get,
+    params: ["direction", "type", "entry"],
+  },
+  {
+    name: "lists delete",
+    description: "Remove an entry, optionally within --inbox.",
+    endpoint: ListsApi.endpoints.lists_delete,
+    scopedEndpoint: ListsApi.endpoints.inboxes_lists_delete,
+    params: ["direction", "type", "entry"],
+  },
   {
     name: "open",
     description: "Print a single-use owner login link. Open it only with --browser.",

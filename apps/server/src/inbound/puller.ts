@@ -81,17 +81,22 @@ function ingestObject(
           framed.raw,
           pointer.received_at,
         );
-        if (!selfTest)
-          yield* ingestInbound(
-            { ...framed.envelope, raw: framed.raw, received_at: pointer.received_at },
-            { trusted_authserv_ids: ["mx.cloudflare.net"] },
-          ).pipe(
-            Effect.provideService(Mailbox, mailbox),
-            Effect.catchTag("InboundError", (error) =>
-              Effect.fail(new InboundQuarantine({ code: error.code })),
-            ),
-          );
-        yield* state.put(pointer.key, "committed");
+        const results = selfTest
+          ? []
+          : yield* ingestInbound(
+              { ...framed.envelope, raw: framed.raw, received_at: pointer.received_at },
+              { trusted_authserv_ids: ["mx.cloudflare.net"] },
+            ).pipe(
+              Effect.provideService(Mailbox, mailbox),
+              Effect.catchTag("InboundError", (error) =>
+                Effect.fail(new InboundQuarantine({ code: error.code })),
+              ),
+            );
+        yield* state.put(
+          pointer.key,
+          "committed",
+          results.some((result) => result.status === "skipped_blocked") ? "message_rejected" : null,
+        );
       }).pipe(Effect.ensuring(Effect.sync(() => plaintext.fill(0))));
     }
     yield* buffer.deleteObject(pointer.key);

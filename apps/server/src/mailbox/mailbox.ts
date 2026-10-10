@@ -19,6 +19,7 @@ import type {
 } from "../../../../packages/contracts/src/threads.js";
 import { Store, type StoreService } from "../store.js";
 import { MailboxError } from "./errors.js";
+import { acceptInbound } from "../lists/policy.js";
 import * as Inboxes from "./inboxes.js";
 import * as Messages from "./messages.js";
 import * as Threads from "./threads.js";
@@ -44,6 +45,12 @@ function makeMailbox(store: StoreService) {
   }
 
   return {
+    acceptInbound: (
+      inboxId: string,
+      senders: readonly string[],
+      raw: Uint8Array,
+      receivedAt: string,
+    ) => run((db) => acceptInbound(db, inboxId, senders, raw, receivedAt), true),
     createInbox: (input: Inboxes.CreateInbox, inboxIds?: readonly string[]) =>
       run((db, now) => Inboxes.createInbox(db, input, new Date(now).toISOString(), inboxIds), true),
     getInbox: (inboxId: string) => run((db) => Rows.getInbox(db, inboxId)),

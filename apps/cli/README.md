@@ -54,32 +54,36 @@ are `--home <directory>`, `--flavor development|production`, and `--json`.
 Place the command first, or precede it with global options. Addresses and IDs are
 positional; quote IDs containing shell metacharacters.
 
-| Command            | Arguments                                    | REST operation                               |
-| ------------------ | -------------------------------------------- | -------------------------------------------- |
-| `serve`            | Existing server flags                        | Existing server entry point                  |
-| `open`             | Optional `--browser`                         | POST `/v0/owner/login-links`                 |
-| `inboxes list`     | Pagination flags                             | GET `/v0/inboxes`                            |
-| `inboxes create`   | Body flags or JSON                           | POST `/v0/inboxes`                           |
-| `inboxes get`      | `<inbox_id>`                                 | GET `/v0/inboxes/:inbox_id`                  |
-| `inboxes delete`   | `<inbox_id>`                                 | DELETE `/v0/inboxes/:inbox_id`               |
-| `threads list`     | Optional `--inbox`, filters                  | GET `/v0/threads` or inbox threads           |
-| `threads get`      | `<thread_id>`, optional `--inbox`            | GET organization or inbox thread             |
-| `messages get`     | `<inbox_id> <message_id>`                    | GET inbox message                            |
-| `messages send`    | `<inbox_id>`, body                           | POST inbox messages/send                     |
-| `messages reply`   | `<inbox_id> <message_id>`, body              | POST inbox message/reply                     |
-| `messages forward` | `<inbox_id> <message_id>`, body              | POST inbox message/forward                   |
-| `messages update`  | `<inbox_id> <message_id>`, labels            | PATCH inbox message                          |
-| `drafts list`      | Optional `--inbox`, filters                  | GET `/v0/drafts` or inbox drafts             |
-| `drafts create`    | `<inbox_id>`, body                           | POST inbox drafts                            |
-| `drafts get`       | `<draft_id>`, optional `--inbox`             | GET organization or inbox draft              |
-| `drafts update`    | `<inbox_id> <draft_id>`, body                | PATCH inbox draft                            |
-| `drafts delete`    | `<inbox_id> <draft_id>`                      | DELETE inbox draft                           |
-| `drafts send`      | `<inbox_id> <draft_id>`, labels              | POST inbox draft/send                        |
-| `drafts approve`   | `<inbox_id> <draft_id>`                      | POST inbox draft/approve (owner)             |
-| `drafts reject`    | `<inbox_id> <draft_id>`, optional `--reason` | POST inbox draft/reject (owner)              |
-| `api-keys list`    | Optional `--inbox`, cursor flags             | GET organization or inbox API keys (owner)   |
-| `api-keys create`  | Optional `--inbox`, body                     | POST organization or inbox API keys (owner)  |
-| `api-keys revoke`  | `<api_key_id>`, optional `--inbox`           | DELETE organization or inbox API key (owner) |
+| Command            | Arguments                                                       | REST operation                               |
+| ------------------ | --------------------------------------------------------------- | -------------------------------------------- |
+| `serve`            | Existing server flags                                           | Existing server entry point                  |
+| `open`             | Optional `--browser`                                            | POST `/v0/owner/login-links`                 |
+| `inboxes list`     | Pagination flags                                                | GET `/v0/inboxes`                            |
+| `inboxes create`   | Body flags or JSON                                              | POST `/v0/inboxes`                           |
+| `inboxes get`      | `<inbox_id>`                                                    | GET `/v0/inboxes/:inbox_id`                  |
+| `inboxes delete`   | `<inbox_id>`                                                    | DELETE `/v0/inboxes/:inbox_id`               |
+| `threads list`     | Optional `--inbox`, filters                                     | GET `/v0/threads` or inbox threads           |
+| `threads get`      | `<thread_id>`, optional `--inbox`                               | GET organization or inbox thread             |
+| `messages get`     | `<inbox_id> <message_id>`                                       | GET inbox message                            |
+| `messages send`    | `<inbox_id>`, body                                              | POST inbox messages/send                     |
+| `messages reply`   | `<inbox_id> <message_id>`, body                                 | POST inbox message/reply                     |
+| `messages forward` | `<inbox_id> <message_id>`, body                                 | POST inbox message/forward                   |
+| `messages update`  | `<inbox_id> <message_id>`, labels                               | PATCH inbox message                          |
+| `drafts list`      | Optional `--inbox`, filters                                     | GET `/v0/drafts` or inbox drafts             |
+| `drafts create`    | `<inbox_id>`, body                                              | POST inbox drafts                            |
+| `drafts get`       | `<draft_id>`, optional `--inbox`                                | GET organization or inbox draft              |
+| `drafts update`    | `<inbox_id> <draft_id>`, body                                   | PATCH inbox draft                            |
+| `drafts delete`    | `<inbox_id> <draft_id>`                                         | DELETE inbox draft                           |
+| `drafts send`      | `<inbox_id> <draft_id>`, labels                                 | POST inbox draft/send                        |
+| `drafts approve`   | `<inbox_id> <draft_id>`                                         | POST inbox draft/approve (owner)             |
+| `drafts reject`    | `<inbox_id> <draft_id>`, optional `--reason`                    | POST inbox draft/reject (owner)              |
+| `lists list`       | `<direction> <type>`, optional `--inbox`, cursor flags          | GET global or inbox list                     |
+| `lists create`     | `<direction> <type>`, `--entry`, optional `--reason`, `--inbox` | POST global or inbox list                    |
+| `lists get`        | `<direction> <type> <entry>`, optional `--inbox`                | GET global or inbox list entry               |
+| `lists delete`     | `<direction> <type> <entry>`, optional `--inbox`                | DELETE global or inbox list entry            |
+| `api-keys list`    | Optional `--inbox`, cursor flags                                | GET organization or inbox API keys (owner)   |
+| `api-keys create`  | Optional `--inbox`, body                                        | POST organization or inbox API keys (owner)  |
+| `api-keys revoke`  | `<api_key_id>`, optional `--inbox`                              | DELETE organization or inbox API key (owner) |
 
 `open` prints a single-use login URL and never opens a browser unless
 `--browser` is present. Password setup must already be complete; links expire
@@ -159,3 +163,14 @@ fake provider. No real mail, infrastructure, or owner home is used. Domains,
 transport setup, service installation, binary downloads, and additional REST
 operations are outside this CLI implementation. Resource commands add no
 service behavior, permission, event, MCP tool, or remote route.
+
+## Allow and block lists
+
+```sh
+inbot lists list receive block --inbox agent@example.test --json
+inbot lists create send block --inbox agent@example.test --entry blocked.test --reason "Synthetic rule"
+inbot lists get send block blocked.test --inbox agent@example.test --json
+inbot lists delete send block blocked.test --inbox agent@example.test
+```
+
+Directions: `receive`, `send`, `reply`; types: `allow`, `block`. Omit `--inbox` for global lists (owner or unrestricted grant required). Read/create/delete need their respective `list_entry_*` permissions. Entries are exact addresses or domains; entries normalize to lowercase and match case-insensitively. Global and inbox entries add together, blocks win, and non-empty allow lists restrict mail. Replies must pass send and reply rules. List pagination uses `--limit` and `--page-token`, lexically ascending. Duplicate creates return `already_exists`; rejected sends return `message_rejected` (exit 4), with nothing queued.

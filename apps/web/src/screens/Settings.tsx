@@ -5,6 +5,7 @@ import { Button, inputClasses, Page, Segmented, Status } from "../components/ui"
 import { ErrorNotice, LoadError } from "../feedback";
 import { transportQuery } from "../queries";
 import { readTheme, writeTheme, type ThemeChoice } from "../theme";
+import { ListManagement } from "./ListManagement";
 
 const choices: { value: ThemeChoice; label: string }[] = [
   { value: "system", label: "System" },
@@ -192,6 +193,7 @@ export function Settings() {
         />
       </fieldset>
       <MailTransport />
+      <ListManagement />
     </Page>
   );
 }

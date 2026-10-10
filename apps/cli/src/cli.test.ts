@@ -479,3 +479,97 @@ test("sends drafts and preserves owner approval and rejection responses", async 
   Schema.decodeUnknownSync(SendMessageResponse)(JSON.parse(approved.stdout));
   expect(api.sent).toHaveLength(0);
 });
+
+test("list commands use global and inbox endpoints, decode entries, paginate and preserve errors", async ({
+  api,
+}) => {
+  const create = await invoke(api, [
+    "lists",
+    "create",
+    "receive",
+    "block",
+    "--entry",
+    "EXAMPLE.TEST",
+    "--reason",
+    "Synthetic rule",
+    "--json",
+  ]);
+  expect(create.code).toBe(0);
+  expect(JSON.parse(create.stdout)).toMatchObject({
+    entry: "example.test",
+    entry_type: "domain",
+    direction: "receive",
+    list_type: "block",
+  });
+  const get = await invoke(api, ["lists", "get", "receive", "block", "EXAMPLE.TEST", "--json"]);
+  expect(get.code).toBe(0);
+  expect(JSON.parse(get.stdout)).toEqual(JSON.parse(create.stdout));
+  const key = await api.run(
+    api.keys.create({
+      inbox_id: inboxId,
+      permissions: { list_entry_read: true, list_entry_create: true, list_entry_delete: true },
+      send_policy: "read_only",
+    }),
+  );
+  const options = { env: agentEnv(api, key.api_key) };
+  for (const entry of ["b.test", "a.test"])
+    expect(
+      (
+        await invoke(
+          api,
+          ["lists", "create", "send", "allow", "--inbox", inboxId, "--entry", entry],
+          options,
+        )
+      ).code,
+    ).toBe(0);
+  const list = await invoke(
+    api,
+    ["lists", "list", "send", "allow", "--inbox", inboxId, "--limit", "1", "--json"],
+    options,
+  );
+  const page = JSON.parse(list.stdout);
+  expect(list.code).toBe(0);
+  expect(page.entries).toHaveLength(1);
+  expect(page.entries[0].entry).toBe("a.test");
+  const next = await invoke(
+    api,
+    [
+      "lists",
+      "list",
+      "send",
+      "allow",
+      "--inbox",
+      inboxId,
+      "--page-token",
+      page.next_page_token,
+      "--json",
+    ],
+    options,
+  );
+  expect(JSON.parse(next.stdout).entries[0].entry).toBe("b.test");
+  const human = await invoke(api, ["lists", "list", "send", "allow", "--inbox", inboxId], options);
+  expect(human.stdout).toContain("ENTRY_TYPE");
+  expect(human.stdout).toContain("a.test");
+  expect(
+    (await invoke(api, ["lists", "delete", "send", "allow", "a.test", "--inbox", inboxId], options))
+      .code,
+  ).toBe(0);
+  expect(
+    (await invoke(api, ["lists", "get", "send", "allow", "a.test", "--inbox", inboxId], options))
+      .code,
+  ).toBe(5);
+  expect((await invoke(api, ["lists", "list", "receive", "block"], options)).code).toBe(4);
+  expect(
+    (
+      await invoke(
+        api,
+        ["lists", "list", "send", "allow", "--inbox", "other@example.test"],
+        options,
+      )
+    ).code,
+  ).toBe(5);
+  expect((await invoke(api, ["lists", "delete", "receive", "block", "example.test"])).code).toBe(0);
+  const help = await invoke(api, ["lists", "create", "--help"]);
+  expect(help.stdout).toContain("<direction> <type>");
+  expect(help.stdout).toContain("--entry");
+});

@@ -283,15 +283,40 @@ const DraftsLive = HttpApiBuilder.group(ServerApi, "drafts", (handlers) =>
 );
 
 const ListsLive = HttpApiBuilder.group(ServerApi, "lists", (handlers) =>
-  handlers
-    .handle("inboxes_lists_list", unsupported)
-    .handle("inboxes_lists_create", unsupported)
-    .handle("inboxes_lists_get", unsupported)
-    .handle("inboxes_lists_delete", unsupported)
-    .handle("lists_list", unsupported)
-    .handle("lists_create", unsupported)
-    .handle("lists_get", unsupported)
-    .handle("lists_delete", unsupported),
+  Effect.gen(function* () {
+    const operations = yield* AgentOperations;
+    return handlers
+      .handle("inboxes_lists_list", ({ params, query }) =>
+        respond(operations.listEntries(params.inbox_id, params.direction, params.type, query)),
+      )
+      .handle("inboxes_lists_create", ({ params, payload }) =>
+        respond(
+          operations.createListEntry(params.inbox_id, params.direction, params.type, payload),
+        ),
+      )
+      .handle("inboxes_lists_get", ({ params }) =>
+        respond(
+          operations.getListEntry(params.inbox_id, params.direction, params.type, params.entry),
+        ),
+      )
+      .handle("inboxes_lists_delete", ({ params }) =>
+        respond(
+          operations.deleteListEntry(params.inbox_id, params.direction, params.type, params.entry),
+        ),
+      )
+      .handle("lists_list", ({ params, query }) =>
+        respond(operations.listEntries(undefined, params.direction, params.type, query)),
+      )
+      .handle("lists_create", ({ params, payload }) =>
+        respond(operations.createListEntry(undefined, params.direction, params.type, payload)),
+      )
+      .handle("lists_get", ({ params }) =>
+        respond(operations.getListEntry(undefined, params.direction, params.type, params.entry)),
+      )
+      .handle("lists_delete", ({ params }) =>
+        respond(operations.deleteListEntry(undefined, params.direction, params.type, params.entry)),
+      );
+  }),
 );
 
 const WebhooksLive = HttpApiBuilder.group(ServerApi, "webhooks", (handlers) =>

@@ -1,5 +1,12 @@
 import { queryOptions } from "@tanstack/react-query";
-import { api } from "./api";
+import { api, type ListSelection } from "./api";
+
+export const listEntriesQuery = (selection: ListSelection, pageToken: string | null) =>
+  queryOptions({
+    queryKey: ["lists", selection, pageToken],
+    queryFn: ({ signal }) => api.listEntries(selection, pageToken, signal),
+    staleTime: 0,
+  });
 
 export const inboxesQuery = queryOptions({
   queryKey: ["inboxes"],
