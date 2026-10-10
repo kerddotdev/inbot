@@ -70,7 +70,7 @@ Before calling a change done, walk this list and say which entries applied:
 ## Development
 
 - Node 24 and pnpm, with one committed workspace lockfile. Read the root `package.json` for the commands that actually exist. Do not assume a script exists before it lands.
-- Build with `pnpm build`, then run `pnpm start:server --home <explicit-directory> --port 0 --init`. Initialization uses the OS keychain; subsequent starts unlock with it. `connection.json` holds the loopback URL and owner bearer token. Before owner password setup, `serve` prints a one-time setup code to stdout. Browser sessions use the same owner principal and require CSRF on unsafe requests; owner auth endpoints never become MCP tools. UI serving requires explicit `--web-root`. See `apps/server/src/http/README.md` for implemented routes and test-only startup.
+- Build with `pnpm build`, then run `pnpm start:server --home <explicit-directory> --port 0 --init`. Initialization uses the OS keychain; subsequent starts unlock with it. `connection.json` holds the loopback URL and owner bearer token. Before owner password setup, `serve` prints a one-time setup code to stdout. Browser sessions use the same owner principal and require CSRF on unsafe requests; owner auth endpoints never become MCP tools. Source-checkout UI serving requires explicit `--web-root`; packaged CLI `serve` defaults to its bundled UI and production flavor. See `apps/server/src/http/README.md` for implemented routes and test-only startup.
 - Do not add another package manager, lockfile, automatic Git hook, or install-time script that rewrites repository files.
 - Never deploy, publish packages, push tags, or create releases unless asked.
 - Keep setup and checks independent of private files and machine-specific paths.
@@ -115,7 +115,7 @@ The local `inbot serve` service owns the encrypted SQLite database and serves RE
 - `packages/contracts` - implemented Effect schemas and HTTP API declarations shared by every surface. No handlers or service runtime.
 - `packages/envelope` - implemented X25519 age streaming encryption, the inbound frame carrying the SMTP envelope, buffered decryption, and the Queue pointer schema shared by the Worker and the service consumer.
 - `skills/inbot` - portable agent guidance for using Inbot.
-- `scripts` - packaging, release, and verification scripts. `install.sh` and `install.ps1` install releases.
+- `scripts` - cross-target release packaging (`package.mjs`), isolated archive smoke checks (`smoke-release.mjs`), and installer verification. Root `install.sh` and `install.ps1` verify and install published release archives without installing services. Releases have not been published yet.
 
 ## Taste
 

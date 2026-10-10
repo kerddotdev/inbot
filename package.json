@@ -1,5 +1,6 @@
 {
   "name": "inbot-workspace",
+  "version": "0.1.0",
   "private": true,
   "license": "MIT",
   "bin": {
@@ -18,7 +19,9 @@
     "format:check": "oxfmt --check .",
     "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test",
     "build:worker": "node scripts/build-worker.mjs",
-    "start:cli": "node dist/apps/cli/src/main.js"
+    "start:cli": "node dist/apps/cli/src/main.js",
+    "package": "node scripts/package.mjs",
+    "test:packaging": "node --test scripts/*.test.mjs"
   },
   "dependencies": {
     "@effect/platform-node": "4.0.2",
