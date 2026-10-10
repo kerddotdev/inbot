@@ -1,3 +1,4 @@
+import { deliveryEvent, draftEvent, outboundEvent } from "../events/log.js";
 import { createHash, randomUUID } from "node:crypto";
 import type Database from "better-sqlite3-multiple-ciphers";
 import { Clock, Context, Effect, Layer, Result, Schema } from "effect";
@@ -95,6 +96,7 @@ function makeOutbox(store: StoreService, provider: OutboundProviderService) {
         { add_labels: "failed", remove_labels: "queued" },
         new Date(now).toISOString(),
       );
+      outboundEvent(db, row.inbox_id, row.message_id, "failed", now, "unknown_outcome");
     }
   };
 
@@ -148,6 +150,14 @@ function makeOutbox(store: StoreService, provider: OutboundProviderService) {
               { add_labels: ["failed", "rejected"], remove_labels: "queued" },
               new Date(now).toISOString(),
             );
+            outboundEvent(
+              db,
+              pending.inbox_id,
+              pending.message_id,
+              "failed",
+              now,
+              "message_rejected",
+            );
             return undefined;
           }
           db.prepare(
@@ -194,6 +204,7 @@ function makeOutbox(store: StoreService, provider: OutboundProviderService) {
                 { add_labels: "failed", remove_labels: "queued" },
                 timestamp,
               );
+              outboundEvent(db, row.inbox_id, row.message_id, "failed", now, "unknown_outcome");
               return;
             }
             db.prepare(
@@ -210,6 +221,7 @@ function makeOutbox(store: StoreService, provider: OutboundProviderService) {
               { add_labels: "sent", remove_labels: ["queued", "failed"] },
               timestamp,
             );
+            outboundEvent(db, row.inbox_id, row.message_id, "sent", now);
           } else {
             const error = result.failure;
             const retry = error.retryable && !error.outcome_unknown && row.attempts < MAX_ATTEMPTS;
@@ -234,6 +246,14 @@ function makeOutbox(store: StoreService, provider: OutboundProviderService) {
                 row.message_id,
                 { add_labels: "failed", remove_labels: "queued" },
                 timestamp,
+              );
+              outboundEvent(
+                db,
+                row.inbox_id,
+                row.message_id,
+                "failed",
+                now,
+                error.outcome_unknown ? "unknown_outcome" : error.code,
               );
             }
           }
@@ -412,6 +432,8 @@ function makeOutbox(store: StoreService, provider: OutboundProviderService) {
         });
       const draft = { ...stored, labels: sendLabels(stored.labels, input) };
       const request = draftRequest(draft);
+      if (approve && stored.approval_state !== "approved")
+        draftEvent(db, draft, "draft.approved", now);
       if (approve && draft.send_at !== undefined && Date.parse(draft.send_at) > now) {
         const composed = compose(inboxId, request, { draft: true });
         assertOutbound(
@@ -430,6 +452,11 @@ function makeOutbox(store: StoreService, provider: OutboundProviderService) {
         });
       }
       const response = enqueue(db, now, inboxId, request, idempotencyKey, true);
+      db.prepare("UPDATE outbox SET source_draft_id = ? WHERE inbox_id = ? AND message_id = ?").run(
+        draftId,
+        inboxId,
+        response.message_id,
+      );
       db.prepare("DELETE FROM drafts WHERE inbox_id = ? AND draft_id = ?").run(inboxId, draftId);
       if (idempotencyKey !== undefined)
         db.prepare(`INSERT INTO draft_send_replays
@@ -484,7 +511,7 @@ function makeOutbox(store: StoreService, provider: OutboundProviderService) {
               event.recipient,
               event.timestamp,
             );
-          if (inserted.changes)
+          if (inserted.changes) {
             updateMessage(
               db,
               row.inbox_id,
@@ -492,6 +519,8 @@ function makeOutbox(store: StoreService, provider: OutboundProviderService) {
               { add_labels: event.status },
               new Date(now).toISOString(),
             );
+            deliveryEvent(db, row.inbox_id, row.message_id, event, now);
+          }
         }
         return rows.length > 0;
       }),

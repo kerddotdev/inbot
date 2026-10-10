@@ -60,9 +60,9 @@ changes the label to `sent`; it does not prove delivery. No configured transport
 returns 503 `service_unavailable` with fix `Configure the Cloudflare mail transport`
 and does not enqueue. Configure the transport in Settings > Mail transport or through the owner routes below.
 
-Webhooks return HTTP 501 `not_supported` after
-authentication and authorization. Validated input is still required. Tunnels,
-OAuth, and event streams remain planned. The same server
+Webhook CRUD/header routes and authenticated `/v0/ws` are implemented; see
+[event delivery](../events/README.md) for scope, signing, SSRF guards, retries,
+resume and the owner cookie/CSRF handshake. Tunnels and OAuth remain planned. The same server
 exposes authenticated streamable HTTP MCP at `/mcp`; see
 [the MCP reference](../mcp/README.md).
 
@@ -278,8 +278,8 @@ the startup stdout line; it is never returned by status or stored on disk.
 Login links are hashed in a bounded in-memory map, expire after two minutes,
 are consumed before redemption, and disappear on restart or password change.
 The owner UI redeems the URL token once and removes it from
-browser history before rendering. A future `inbot open` command can request links with the local
-owner bearer; that CLI command is not implemented here.
+browser history before rendering. `inbot open` requests links with the local
+owner bearer and opens the browser only with `--browser`.
 
 `locked` is currently false because HTTP starts only after the database unlocks.
 There is no browser database-unlock endpoint. Owner sessions and setup do not
@@ -347,6 +347,29 @@ automatic loop when they need to call the fake provider's `processDue()` explici
 
 ## Allow and block lists
 
-`GET`/`POST /v0/lists/:direction/:type` and `GET`/`DELETE` with `/:entry` manage global entries. Prefix with `/v0/inboxes/:inbox_id` for inbox entries. Create accepts `{ entry, reason? }`; directions are `receive`, `send`, `reply`, types `allow`, `block`. Domains normalize to lowercase IDNA; email local parts remain exact. Lists paginate with `limit` and `page_token`, lexically ascending.
+`GET`/`POST /v0/lists/:direction/:type` and `GET`/`DELETE` with `/:entry` manage global entries. Prefix with `/v0/inboxes/:inbox_id` for inbox entries. Create accepts `{ entry, reason? }`; directions are `receive`, `send`, `reply`, types `allow`, `block`. Entries normalize to lowercase (domains to IDNA) and match case-insensitively. Lists paginate with `limit` and `page_token`, lexically ascending.
 
 Reads need `list_entry_read`, creation `list_entry_create`, deletion `list_entry_delete`. Global access requires owner authentication or an unrestricted inbox grant; inbox access enforces fixed scope. Global and inbox rules add together, blocks win, and non-empty allow lists restrict mail. Replies pass send and reply rules. Forbidden outbound recipients return `message_rejected` with nothing queued. Inbound rejection reasons are recorded durably before ciphertext cleanup. Settings uses these same routes with owner sessions and CSRF.
+
+## Event routes
+
+- `/v0/webhooks` and `/v0/inboxes/:inbox_id/webhooks`: GET/POST.
+- Append `/:webhook_id` for GET/PATCH/DELETE; append `/headers` for GET/PATCH.
+- `/v0/ws`: authenticated WebSocket upgrade; send one contract `subscribe` frame.
+
+Webhook routes enforce `webhook_read/create/update/delete`, key ownership and
+inbox scope. Creation alone returns `secret`; subsequent metadata omits it.
+Header reads return names only. Unsupported pod filters fail `not_supported`.
+`message_read`/`draft_read` and hidden-label permissions govern event payloads.
+Domain events require the owner. Disabled state and failures are visible in GET.
+Agents require public HTTPS webhook targets; only owners can use loopback HTTP.
+Credential header names are forbidden for all webhooks. Agent-created webhook
+delivery errors expose only `delivery_failed`, without HTTP status details.
+Deletion redacts received event content transactionally. Event history expires
+after 30 days unless webhook delivery still needs it; pruned resume IDs fail
+`validation_error`. WebSocket output is capped at 1 MiB, closing with 1013 for
+slow clients or oversized events.
+Owner cookie upgrades require exact Origin plus `inbot.events` and
+`csrf.<token>` subprotocols; API keys use a bearer header. See the module README
+for durable resume, heartbeat and revocation. Remote tunnel integration remains
+planned; no remote owner capability is introduced by these routes.

@@ -561,7 +561,7 @@ test("allows inbox creation with permission while preserving immutable scope and
   );
 });
 
-test("maps malformed requests, missing resources, stale tokens, and unsupported families to safe wire errors", async ({
+test("maps malformed requests, missing resources and stale tokens to safe wire errors", async ({
   api,
 }) => {
   for (const path of [
@@ -602,12 +602,6 @@ test("maps malformed requests, missing resources, stale tokens, and unsupported 
   await failure(await api.request("/v0/inboxes/missing@example.test"), 404, "not_found");
   await failure(await api.request("/v0/unknown"), 404, "not_found");
   await failure(await api.request("/v0/inboxes?page_token=invalid"), 409, "page_token_stale");
-  for (const path of ["/v0/webhooks"])
-    await failure(
-      await api.request(path, path.includes("/messages/") ? { method: "POST", body: {} } : {}),
-      501,
-      "not_supported",
-    );
 });
 
 test("rejects foreign and null browser origins and accepts same-origin requests", async ({

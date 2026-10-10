@@ -1,3 +1,4 @@
+import { draftEvent } from "../events/log.js";
 import { createHash } from "node:crypto";
 import type Database from "better-sqlite3-multiple-ciphers";
 import { Clock, Context, Effect, Layer, Result, Schema } from "effect";
@@ -204,9 +205,20 @@ function makeDrafts(
         return { ...fields, drafts: items };
       }, false),
     update: (inboxId: string, draftId: string, input: UpdateDraftRequest, approval: boolean) =>
-      run((db, now) =>
-        Rows.updateDraft(db, inboxId, draftId, input, new Date(now).toISOString(), approval),
-      ),
+      run((db, now) => {
+        const before = Rows.getDraft(db, inboxId, draftId);
+        const draft = Rows.updateDraft(
+          db,
+          inboxId,
+          draftId,
+          input,
+          new Date(now).toISOString(),
+          approval,
+        );
+        if (before.approval_state !== "pending" && draft.approval_state === "pending")
+          draftEvent(db, draft, "draft.approval_required", now);
+        return draft;
+      }),
     delete: (inboxId: string, draftId: string) =>
       run((db) => {
         const draft = Rows.getDraft(db, inboxId, draftId);
@@ -261,6 +273,8 @@ function makeDrafts(
           approval_state: "pending",
           updated_at: new Date(now).toISOString(),
         });
+        if (draft.approval_state !== "pending")
+          draftEvent(db, draft, "draft.approval_required", now);
         recordApproval(db, inboxId, idempotencyKey, fingerprint, draftId);
         return draftId;
       }),
@@ -340,6 +354,7 @@ function makeDrafts(
         const draft = Rows.getDraft(db, inboxId, draftId);
         Rows.ensureMutable(draft);
         const { send_status: _status, ...fields } = draft;
+        if (draft.approval_state !== "rejected") draftEvent(db, draft, "draft.rejected", now);
         return Rows.saveDraft(db, {
           ...fields,
           pending_approval: false,

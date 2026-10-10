@@ -5,6 +5,8 @@ import * as Common from "../../../../packages/contracts/src/common.js";
 import * as Inboxes from "../../../../packages/contracts/src/inboxes.js";
 import * as Messages from "../../../../packages/contracts/src/messages.js";
 import * as Drafts from "../../../../packages/contracts/src/drafts.js";
+import * as WebhookContracts from "../../../../packages/contracts/src/webhooks.js";
+import { Webhooks } from "../events/webhooks.js";
 import * as Threads from "../../../../packages/contracts/src/threads.js";
 import * as Lists from "../../../../packages/contracts/src/lists.js";
 import { CurrentPrincipal } from "../../../../packages/contracts/src/security.js";
@@ -122,6 +124,7 @@ export const McpTools = (origin: string) =>
       const owner = yield* OwnerAuth;
       const keys = yield* ApiKeys;
       const sessions = yield* OwnerSessions;
+      const webhooks = yield* Webhooks;
 
       function register<S extends Schema.Top & { readonly DecodingServices: never }, A, E>(
         name: string,
@@ -266,6 +269,59 @@ export const McpTools = (origin: string) =>
         remove,
         ({ inboxId, direction, type, entry }) =>
           operations.deleteListEntry(inboxId, direction, type, entry),
+      );
+      const webhook = {
+        inboxId: optionalString("Optionally constrain the webhook to this inbox."),
+        webhookId: Common.WebhookId,
+      };
+      yield* register(
+        "list_webhooks",
+        "List webhook metadata. Requires webhook_read.",
+        Schema.Struct({ ...page, inboxId: webhook.inboxId }),
+        read,
+        (input) => webhooks.list(pageQuery(input), input.inboxId),
+      );
+      yield* register(
+        "get_webhook",
+        "Get webhook metadata without its secret. Requires webhook_read.",
+        Schema.Struct(webhook),
+        read,
+        (input) => webhooks.get(input.webhookId, input.inboxId),
+      );
+      yield* register(
+        "create_webhook",
+        "Create a signed event receiver. Save the one-time secret. Requires webhook_create; delivery respects resource read permissions.",
+        Schema.Struct({ inboxId: webhook.inboxId, request: WebhookContracts.CreateWebhookRequest }),
+        create,
+        (input) => webhooks.create(input.request, input.inboxId),
+      );
+      yield* register(
+        "update_webhook",
+        "Update webhook filters or enable/disable delivery. Requires webhook_update.",
+        Schema.Struct({ ...webhook, request: WebhookContracts.UpdateWebhookRequest }),
+        update,
+        (input) => webhooks.update(input.webhookId, input.request, input.inboxId),
+      );
+      yield* register(
+        "delete_webhook",
+        "Delete a webhook and pending deliveries. Requires webhook_delete.",
+        Schema.Struct(webhook),
+        remove,
+        (input) => webhooks.delete(input.webhookId, input.inboxId),
+      );
+      yield* register(
+        "get_webhook_headers",
+        "List custom header names without values. Requires webhook_read.",
+        Schema.Struct(webhook),
+        read,
+        (input) => webhooks.headers(input.webhookId, input.inboxId),
+      );
+      yield* register(
+        "update_webhook_headers",
+        "Set or remove custom headers. Requires webhook_update.",
+        Schema.Struct({ ...webhook, request: WebhookContracts.UpdateWebhookHeadersRequest }),
+        update,
+        (input) => webhooks.updateHeaders(input.webhookId, input.request, input.inboxId),
       );
       const draft = { ...inbox, draftId: Common.DraftId };
       const { reply_to, in_reply_to, forward_of, reply_all, send_at, client_id, ...draftCreate } =

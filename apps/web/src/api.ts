@@ -5,6 +5,7 @@ import * as Threads from "@inbot/contracts/src/threads.js";
 import * as Messages from "@inbot/contracts/src/messages.js";
 import * as Keys from "@inbot/contracts/src/api-keys.js";
 import * as Drafts from "@inbot/contracts/src/drafts.js";
+import * as Webhooks from "@inbot/contracts/src/webhooks.js";
 import * as Domains from "@inbot/contracts/src/domains.js";
 import * as Lists from "@inbot/contracts/src/lists.js";
 import { ErrorResponse, type ErrorCode } from "@inbot/contracts/src/errors.js";
@@ -136,6 +137,36 @@ export class ApiClient {
     }
     throw new ApiError(wire.code, wire.message, wire.fix);
   }
+
+  async eventsSocket(origin: string, lastEventId?: string) {
+    const status = await this.status();
+    if (!status.authenticated || status.locked || !this.csrfToken)
+      throw new ApiError(
+        status.locked ? "locked" : "unauthorized",
+        "The owner session is unavailable.",
+        "Sign in again.",
+      );
+    const url = new URL("/v0/ws", origin);
+    url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
+    if (lastEventId) url.searchParams.set("last_event_id", lastEventId);
+    return new WebSocket(url, ["inbot.events", `csrf.${this.csrfToken}`]);
+  }
+
+  webhooks = (signal: AbortSignal) =>
+    allPages(
+      (token) =>
+        this.request(`/v0/webhooks${pageQuery(token)}`, Webhooks.ListWebhooksResponse, { signal }),
+      (page) => page.webhooks,
+    );
+
+  createWebhook = (body: Webhooks.CreateWebhookRequest) =>
+    this.request("/v0/webhooks", Webhooks.Webhook, { method: "POST", body });
+
+  updateWebhook = (id: string, body: Webhooks.UpdateWebhookRequest) =>
+    this.request(`/v0/webhooks/${segment(id)}`, Webhooks.Webhook, { method: "PATCH", body });
+
+  deleteWebhook = (id: string) =>
+    this.request(`/v0/webhooks/${segment(id)}`, Schema.Undefined, { method: "DELETE" });
 
   status = (signal?: AbortSignal) =>
     this.request("/v0/owner/status", Owner.OwnerStatus, signal ? { signal } : {});

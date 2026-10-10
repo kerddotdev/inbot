@@ -3,7 +3,7 @@
 `Mailbox.Live` requires `Store`. It stores parsed mail in the encrypted database
 and returns the decoded contract types from `packages/contracts/src`. It does
 not parse MIME, send mail, serve HTTP or MCP, enforce grants or send policies,
-or emit events. Every operation observes a transactionally consistent snapshot;
+or dispatch events. Inbound insertion appends its contract event inside the store transaction. Every operation observes a transactionally consistent snapshot;
 writes use immediate transactions. Expected failures are `MailboxError` with
 contract codes and actionable fixes. Storage failures remain `DatabaseError`.
 

@@ -1,3 +1,4 @@
+import { draftEvent } from "../events/log.js";
 import { randomUUID } from "node:crypto";
 import type Database from "better-sqlite3-multiple-ciphers";
 import { Schema } from "effect";
@@ -199,7 +200,10 @@ export function createDraft(
     created_at: now,
     updated_at: now,
   };
-  return saveDraft(db, draft);
+  const result = saveDraft(db, draft);
+  draftEvent(db, draft, "draft.created", Date.parse(now));
+  if (approval) draftEvent(db, draft, "draft.approval_required", Date.parse(now));
+  return result;
 }
 
 export function draftRequest(draft: StoredDraft): OutboundRequest {

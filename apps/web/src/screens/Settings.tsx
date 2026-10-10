@@ -1,3 +1,4 @@
+import { WebhooksSettings } from "./WebhooksSettings";
 import { useRef, useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, ApiError } from "../api";
@@ -194,6 +195,7 @@ export function Settings() {
       </fieldset>
       <MailTransport />
       <ListManagement />
+      <WebhooksSettings />
     </Page>
   );
 }

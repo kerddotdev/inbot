@@ -1,5 +1,5 @@
 import { Schema } from "effect";
-import { InboxId, MessageId, ThreadId, Timestamp } from "./common.js";
+import { DraftId, InboxId, MessageId, ThreadId, Timestamp } from "./common.js";
 import { Domain } from "./domains.js";
 import { EventType, MessageReceivedEventType } from "./event-types.js";
 import { Message } from "./messages.js";
@@ -109,6 +109,34 @@ export const MessageRejectedEvent = Schema.Struct({
 }).annotate({ identifier: "MessageRejectedEvent" });
 export type MessageRejectedEvent = typeof MessageRejectedEvent.Type;
 
+export const MessageFailedEvent = Schema.Struct({
+  type: Schema.Literal("event"),
+  event_type: Schema.Literal("message.failed"),
+  event_id: Schema.String,
+  failure: Reject,
+}).annotate({ identifier: "MessageFailedEvent" });
+export type MessageFailedEvent = typeof MessageFailedEvent.Type;
+
+export const DraftEvent = Schema.Struct({
+  type: Schema.Literal("event"),
+  event_type: Schema.Literals([
+    "draft.created",
+    "draft.approval_required",
+    "draft.approved",
+    "draft.rejected",
+    "draft.sent",
+  ]),
+  event_id: Schema.String,
+  draft: Schema.Struct({
+    inbox_id: InboxId,
+    draft_id: DraftId,
+    timestamp: Timestamp,
+    message_id: Schema.optionalKey(MessageId),
+    thread_id: Schema.optionalKey(ThreadId),
+  }),
+}).annotate({ identifier: "DraftEvent" });
+export type DraftEvent = typeof DraftEvent.Type;
+
 export const DomainVerifiedEvent = Schema.Struct({
   type: Schema.Literal("event"),
   event_type: Schema.Literal("domain.verified"),
@@ -131,6 +159,8 @@ export const Event = Schema.Union([
   MessageBouncedEvent,
   MessageComplainedEvent,
   MessageRejectedEvent,
+  MessageFailedEvent,
+  DraftEvent,
   DomainVerifiedEvent,
 ]).annotate({ identifier: "Event" });
 export type Event = typeof Event.Type;
@@ -140,6 +170,7 @@ export const Subscribe = Schema.Struct({
   event_types: Schema.optionalKey(Schema.Array(EventType)),
   inbox_ids: Schema.optionalKey(Schema.Array(Schema.String)),
   pod_ids: Schema.optionalKey(Schema.Array(Schema.String)),
+  last_event_id: Schema.optionalKey(Schema.String),
 }).annotate({ identifier: "Subscribe" });
 export type Subscribe = typeof Subscribe.Type;
 
@@ -148,3 +179,11 @@ export const Subscribed = Schema.Struct({
   type: Schema.Literal("subscribed"),
 }).annotate({ identifier: "Subscribed" });
 export type Subscribed = typeof Subscribed.Type;
+
+export const Heartbeat = Schema.Struct({
+  type: Schema.Literal("ping"),
+  timestamp: Timestamp,
+});
+export const Pong = Schema.Struct({ type: Schema.Literal("pong") });
+export const WebSocketFrame = Schema.Union([Event, Subscribed, Heartbeat]);
+export type WebSocketFrame = typeof WebSocketFrame.Type;

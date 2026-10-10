@@ -30,14 +30,11 @@ Notes:
 - Drafts are an addition owners and agents share. `approve` and `reject` also exist (`POST .../drafts/{draft_id}/approve|reject`) but are owner-only. An agent key gets 403 `missing_permission`.
 - API key management (`/api-keys`, `/inboxes/{id}/api-keys`) exists but is owner-only. Do not try to use it.
 
-## `not_supported`
+## Unsupported options
 
-These resources authenticate and validate, then return 501 `not_supported`:
-
-- Webhooks: `/webhooks...` and `/inboxes/{id}/webhooks...`
-- Domains: `/domains...`
-
-Event streams (WebSocket) and OAuth are not available. Anything not listed in the table above should be treated as unavailable.
+Pod filters and URL attachments return 501 `not_supported` after authentication and validation.
+Domains exist but are owner-only; agents cannot use them.
+Signed webhooks, WebSocket events and the CLI are implemented; see [events](events.md) and [CLI](cli.md). OAuth is unavailable.
 
 ## Pagination
 
@@ -80,7 +77,7 @@ Shape: `{ "name": "InbotError", "code": "...", "message": "...", "fix": "..." }`
 | `idempotency_conflict` | 409  | Same key, different request                                           |
 | `page_token_stale`     | 409  | Invalid, mismatched, or stale page token                              |
 | `payload_too_large`    | 413  | Composed message over 5 MiB                                           |
-| `not_supported`        | 501  | Unimplemented resource or option (webhooks, domains, URL attachments) |
+| `not_supported`        | 501  | Unimplemented resource or option (pod filters, URL attachments)       |
 | `service_unavailable`  | 503  | Transport not configured, storage failure, or other server fault      |
 
 The contract also declares `permission_escalation`, `limit_exceeded`, `domain_not_verified`, `message_rejected`, `resource_taken`, `locked` (423), and `rate_limit_exceeded` (429). Handle them generically if you see them.
@@ -102,3 +99,7 @@ With no mail transport configured, sends return 503 `service_unavailable` and no
 Use `GET`/`POST /lists/{direction}/{type}` or `/inboxes/{id}/lists/{direction}/{type}`. Append `/{encoded-entry}` for `GET`/`DELETE`. Directions: `receive`, `send`, `reply`; types: `allow`, `block`. Create body: `{ "entry": "example.test", "reason": "optional" }`. Reads need `list_entry_read`, creates `list_entry_create`, deletes `list_entry_delete`. Global access requires an unrestricted inbox grant; scoped keys use their inbox endpoints.
 
 Entries are exact addresses or domains. Entries normalize to lowercase (domains to IDNA) and match case-insensitively. Global and inbox entries add together, blocks win, and any allow entries restrict mail to their combined matches. Replies pass both send and reply rules. Forbidden outbound recipients return `message_rejected` before queueing. List responses use `entries`, cursor pagination, and lexical ascending order. Duplicate creates return `already_exists`.
+
+## Webhooks and events
+
+Webhook CRUD/header routes use `/webhooks` or `/inboxes/{id}/webhooks`, with `webhook_read/create/update/delete`. See [events](events.md) for payload scope and one-time secrets.

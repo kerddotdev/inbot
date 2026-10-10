@@ -1,3 +1,4 @@
+import { startWebhookLoop } from "./events/dispatcher.js";
 import { realpath } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, resolve } from "node:path";
@@ -139,10 +140,12 @@ async function serve() {
         const inbound = yield* startInboundLoop();
         const events = yield* startEventsLoop();
         const provision = yield* startProvisionLoop();
+        const webhooks = yield* startWebhookLoop();
         const runners = [
           inbound,
           events,
           provision,
+          webhooks,
           ...(server.runner === undefined ? [] : [server.runner]),
           ...(server.scheduler === undefined ? [] : [server.scheduler]),
         ];

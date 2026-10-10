@@ -1,3 +1,4 @@
+import { followEvents } from "./events.js";
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
@@ -11,6 +12,7 @@ import { humanOutput, record } from "./output.js";
 
 export interface CliIO {
   readonly env: Environment;
+  readonly signal?: AbortSignal;
   readonly stdout: (text: string) => void;
   readonly stderr: (text: string) => void;
   readonly openBrowser?: (url: string) => Promise<void>;
@@ -53,7 +55,7 @@ function help(command?: Command, group?: string): string {
       group === undefined
         ? commands
         : commands.filter((entry) => entry.name.startsWith(`${group} `));
-    return `Usage: inbot <command> [options]\n\n${available.map((entry) => `  ${entry.name.padEnd(20)} ${entry.description}`).join("\n")}\n  serve                Run the existing server (inbot serve --help).\n\nGlobal options: --home <directory>, --flavor development|production, --json, --help\nOwner: read connection.json from the server home. Agent: set INBOT_URL and INBOT_API_KEY.\n`;
+    return `Usage: inbot <command> [options]\n\n${available.map((entry) => `  ${entry.name.padEnd(20)} ${entry.description}`).join("\n")}\n  events --follow      Stream accessible events (--json, --last-event-id).\n  serve                Run the existing server (inbot serve --help).\n\nGlobal options: --home <directory>, --flavor development|production, --json, --help\nOwner: read connection.json from the server home. Agent: set INBOT_URL and INBOT_API_KEY.\n`;
   }
   const flags = commandOptions(command);
   return `Usage: inbot ${command.name}${(command.params ?? []).map((param) => ` <${param}>`).join("")} [options]\n\n${command.description}\n\n${Object.entries(
@@ -107,6 +109,13 @@ export async function runCli(args: readonly string[], io: CliIO): Promise<number
     const first = positional[0];
     const second = positional[1];
     const group = first?.value;
+    if (group === "events") {
+      await followEvents(
+        args.filter((_, index) => index !== first?.index),
+        io,
+      );
+      return 0;
+    }
     const name = group === "open" ? "open" : `${group ?? ""} ${second?.value ?? ""}`;
     const command = commands.find((entry) => entry.name === name);
     if (command === undefined) {
@@ -213,11 +222,9 @@ export async function runCli(args: readonly string[], io: CliIO): Promise<number
     }
     let result = await request(auth, endpoint, path, body, idempotencyKey);
     if (command.secret && !values["show-secret"] && record(result)) {
-      const { api_key: _secret, ...metadata } = result;
+      const { api_key: _secret, secret: _webhookSecret, ...metadata } = result;
       result = metadata;
-      io.stderr(
-        "Secret omitted. Use --show-secret when creating a key to print its one-time secret.\n",
-      );
+      io.stderr("Secret omitted. Use --show-secret at creation to print the one-time secret.\n");
     }
     io.stdout(values.json ? `${JSON.stringify(result ?? null)}\n` : humanOutput(result));
     if (values.browser && record(result) && typeof result.url === "string") {
