@@ -1,6 +1,8 @@
 import { EventLog } from "../events/log.js";
 import { Webhooks } from "../events/webhooks.js";
 import { websocket } from "../events/websocket.js";
+import { createHash } from "node:crypto";
+import { isIP } from "node:net";
 import { createServer } from "node:http";
 import { NodeHttpServer } from "@effect/platform-node";
 import { Cause, Context, Effect, Layer, Option, Redacted, Result, Schema } from "effect";
@@ -12,6 +14,8 @@ import {
   HttpServerResponse,
 } from "effect/http";
 import { HttpApiBuilder, HttpApiError } from "effect/http-api";
+import { OAuth, OAuthAudience, OAuthRateLimitKey, makeOAuth } from "../oauth/service.js";
+import { OAuthHandlers, oauthRoutes, publicOAuthPath, oauthCorsHeaders } from "./oauth.js";
 import { ApiKeys } from "../auth/api-keys.js";
 import { OwnerSessions } from "../auth/sessions.js";
 import { Store } from "../store.js";
@@ -140,6 +144,7 @@ export function startHttpServer(
       EventLog.Live.pipe(Layer.provide(Layer.succeed(Store, store))),
       Webhooks.Live.pipe(Layer.provide(Layer.succeed(Store, store))),
       Layer.succeed(RemoteAccess, remote),
+      Layer.succeed(OAuth, makeOAuth(store)),
       Layer.succeed(Home, home),
       OwnerSessions.layer(options.setupRequired).pipe(Layer.provide(Layer.succeed(Store, store))),
       Layer.succeed(Mailbox, mailbox),
@@ -153,15 +158,20 @@ export function startHttpServer(
     );
     const context = yield* Layer.build(services);
     const owner = Context.get(context, OwnerAuth);
+    const oauth = Context.get(context, OAuth);
     const sessions = Context.get(context, OwnerSessions);
     const shared = AgentOperations.Live.pipe(Layer.provideMerge(Layer.succeedContext(context)));
-    const handlers = Layer.mergeAll(HandlersLive, ownerHandlers(url), RemoteHandlers).pipe(
-      Layer.provide(Layer.mergeAll(AuthLive, OwnerOnlyLive, WireErrorsLive)),
-    );
+    const handlers = Layer.mergeAll(
+      HandlersLive,
+      ownerHandlers(url),
+      RemoteHandlers,
+      OAuthHandlers,
+    ).pipe(Layer.provide(Layer.mergeAll(AuthLive, OwnerOnlyLive, WireErrorsLive)));
     const routes = Layer.mergeAll(
       HttpApiBuilder.layer(ServerApi).pipe(Layer.provide(handlers)),
       DownloadRoutes,
       mcpRoutes(url),
+      oauthRoutes(url, options.webRoot),
     ).pipe(Layer.provide(shared));
     const app = yield* HttpRouter.toHttpEffect(routes).pipe(
       Effect.provideService(HttpRouter.RouterConfig, { caseSensitive: true, maxParamLength: 8192 }),
@@ -173,7 +183,7 @@ export function startHttpServer(
       try {
         routePath = tunnel
           ? tunnelPath(request.url)
-          : decodeURIComponent(request.url.split("?")[0] ?? "");
+          : decodeURIComponent(request.url.split("?")[0] ?? "").replace(/\/$/, "") || "/";
       } catch {
         return errorResponse(
           wireError("validation_error", "The request path is invalid.", "Use a valid URL path."),
@@ -188,6 +198,7 @@ export function startHttpServer(
             "Enable or repair remote access locally.",
           ),
         );
+      const audience = `${requestOrigin}${routePath === "/mcp" ? "/mcp" : "/v0"}`;
       let policy: ReturnType<typeof tunnelRoute> | undefined;
       if (tunnel) {
         try {
@@ -228,7 +239,18 @@ export function startHttpServer(
             "Use the local server URL.",
           ),
         );
-      if (origin !== undefined && origin !== requestOrigin)
+      const publicOAuth = publicOAuthPath(routePath);
+      if (publicOAuth && request.method === "OPTIONS")
+        return HttpServerResponse.empty({
+          status: 204,
+          headers: {
+            ...oauthCorsHeaders,
+            "access-control-allow-methods": routePath.startsWith("/.well-known/")
+              ? "GET, OPTIONS"
+              : "POST, OPTIONS",
+          },
+        });
+      if (!publicOAuth && origin !== undefined && origin !== requestOrigin)
         return errorResponse(
           wireError(
             "missing_permission",
@@ -237,7 +259,7 @@ export function startHttpServer(
           ),
         );
       const session =
-        request.headers.authorization === undefined
+        !publicOAuth && request.headers.authorization === undefined
           ? yield* sessions.authenticate(request.cookies[cookieName(requestOrigin)] ?? "")
           : undefined;
       if (tunnel && routePath === "/v0/ws" && session !== undefined && origin !== requestOrigin)
@@ -262,7 +284,9 @@ export function startHttpServer(
         );
       if (routePath.startsWith("/v0/owner/") && request.headers.authorization !== undefined) {
         const bearer = request.headers.authorization.match(/^Bearer\s+(.+)$/i)?.[1] ?? "";
-        const principal = yield* authenticate(Redacted.make(bearer), owner, keys);
+        const principal = yield* authenticate(Redacted.make(bearer), owner, keys, oauth).pipe(
+          Effect.provideService(OAuthAudience, audience),
+        );
         if (HttpServerResponse.isHttpServerResponse(principal)) return principal;
         if (principal.kind !== "owner")
           return errorResponse(
@@ -274,7 +298,10 @@ export function startHttpServer(
           );
       }
       if (routePath === "/v0/ws")
-        return yield* websocket(requestOrigin).pipe(Effect.provideContext(context));
+        return yield* websocket(requestOrigin).pipe(
+          Effect.provideContext(context),
+          Effect.provideService(OAuthAudience, `${requestOrigin}/v0`),
+        );
       if (tunnel && policy === "web" && session === undefined)
         return HttpServerResponse.redirect("/login");
       const staticResponse =
@@ -282,10 +309,26 @@ export function startHttpServer(
       if (staticResponse !== undefined) return staticResponse;
       if (routePath === "/mcp" && session === undefined) {
         const bearer = request.headers.authorization?.match(/^Bearer\s+(.+)$/i)?.[1] ?? "";
-        const principal = yield* authenticate(Redacted.make(bearer), owner, keys);
+        const principal = yield* authenticate(Redacted.make(bearer), owner, keys, oauth).pipe(
+          Effect.provideService(OAuthAudience, audience),
+        );
         if (HttpServerResponse.isHttpServerResponse(principal)) return principal;
       }
       const response = yield* app.pipe(
+        Effect.provideService(OAuthAudience, audience),
+        // Only the dedicated cloudflared listener trusts Cloudflare's authenticated client IP header.
+        Effect.provideService(
+          OAuthRateLimitKey,
+          tunnel
+            ? `tunnel:${
+                isIP(request.headers["cf-connecting-ip"] ?? "")
+                  ? createHash("sha256")
+                      .update(request.headers["cf-connecting-ip"] ?? "")
+                      .digest("hex")
+                  : "unknown"
+              }`
+            : "loopback",
+        ),
         Effect.provideService(CurrentOwnerSession, session),
         Effect.provideService(CurrentRequestOrigin, requestOrigin),
         // The outer guard validates the dynamic public origin before MCP's static origin check.
@@ -348,6 +391,37 @@ export function startHttpServer(
         : sessionCookie(response, requestOrigin, session);
     }).pipe(
       Effect.catch(() => Effect.succeed(unavailable())),
+      Effect.flatMap((response) =>
+        Effect.gen(function* () {
+          if (response.status !== 401) return response;
+          const request = yield* HttpServerRequest.HttpServerRequest;
+          const base = (yield* TunnelTraffic) ? yield* remote.publicOrigin() : url;
+          if (base === undefined) return response;
+          const resource =
+            decodeURIComponent(request.url.split("?")[0] ?? "").replace(/\/$/, "") === "/mcp"
+              ? "mcp"
+              : "v0";
+          return HttpServerResponse.setHeader(
+            response,
+            "www-authenticate",
+            `Bearer resource_metadata="${base}/.well-known/oauth-protected-resource/${resource}", scope="inbot"${request.headers.authorization === undefined ? "" : ', error="invalid_token"'}`,
+          );
+        }),
+      ),
+      Effect.flatMap((response) =>
+        Effect.gen(function* () {
+          const request = yield* HttpServerRequest.HttpServerRequest;
+          let path: string;
+          try {
+            path = tunnelPath(request.url);
+          } catch {
+            return response;
+          }
+          return publicOAuthPath(path)
+            ? HttpServerResponse.setHeaders(response, oauthCorsHeaders)
+            : response;
+        }),
+      ),
       Effect.map((original) => {
         const response =
           original.status === 415

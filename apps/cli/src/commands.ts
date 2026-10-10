@@ -4,6 +4,7 @@ import { InboxesApi } from "../../../packages/contracts/src/api/inboxes.js";
 import { ThreadsApi } from "../../../packages/contracts/src/api/threads.js";
 import { MessagesApi } from "../../../packages/contracts/src/api/messages.js";
 import { DraftsApi } from "../../../packages/contracts/src/api/drafts.js";
+import { OAuthOwnerApi } from "../../../packages/contracts/src/api/oauth.js";
 import { ApiKeysApi } from "../../../packages/contracts/src/api/api-keys.js";
 import { RemoteApiGroup } from "../../../packages/contracts/src/api/remote.js";
 import { OwnerApiGroup } from "../../../packages/contracts/src/api/owner.js";
@@ -55,6 +56,22 @@ const message = ["inbox_id", "message_id"];
 const draft = ["inbox_id", "draft_id"];
 
 export const commands: readonly Command[] = [
+  {
+    name: "oauth clients",
+    description: "List authorized OAuth clients and grants as owner.",
+    endpoint: OAuthOwnerApi.endpoints.oauth_clients,
+  },
+  {
+    name: "oauth purge",
+    description: "Purge unused OAuth client registrations as owner.",
+    endpoint: OAuthOwnerApi.endpoints.oauth_purge,
+  },
+  {
+    name: "oauth revoke",
+    description: "Revoke an OAuth grant and every token as owner.",
+    endpoint: OAuthOwnerApi.endpoints.oauth_revokeGrant,
+    params: ["grant_id"],
+  },
   {
     name: "lists list",
     description: "List allow/block entries for receive, send, or reply; --inbox selects an inbox.",

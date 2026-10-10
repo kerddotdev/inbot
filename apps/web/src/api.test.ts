@@ -422,3 +422,81 @@ test("remote actions decode shared status and send hostname with restored CSRF",
   expect(new Headers(enable?.[1]?.headers).get("X-Inbot-CSRF")).toBe("synthetic-csrf");
   expect(fetcher.mock.calls[3]?.[0]).toBe("/v0/owner/remote/disable");
 });
+
+test("OAuth consent and management use shared contracts, cookie authentication and session CSRF", async () => {
+  const fetcher = vi
+    .fn<typeof fetch>()
+    .mockResolvedValueOnce(
+      json(
+        { setup_required: false, authenticated: true, locked: false },
+        { headers: { "X-Inbot-CSRF": "consent-csrf" } },
+      ),
+    )
+    .mockResolvedValueOnce(json({ grants: [] }))
+    .mockResolvedValueOnce(
+      json({
+        client_name: "<untrusted>",
+        redirect_host: "client.example.test",
+        resource: "https://inbot.example.test/mcp",
+      }),
+    )
+    .mockResolvedValueOnce(json({ redirect_uri: "https://client.example.test/cb?code=synthetic" }))
+    .mockResolvedValueOnce(new Response(null, { status: 200 }))
+    .mockResolvedValueOnce(json({ deleted_clients: 3 }));
+  const client = new ApiClient(fetcher);
+  await client.status();
+  await client.oauthClients();
+  const input = {
+    response_type: "code",
+    client_id: "a".repeat(32),
+    redirect_uri: "https://client.example.test/cb",
+    resource: "https://inbot.example.test/mcp",
+    code_challenge_method: "S256",
+    code_challenge: "z".repeat(43),
+  } as const;
+  expect((await client.oauthDetails(input)).client_name).toBe("<untrusted>");
+  await client.oauthConsent({
+    ...input,
+    approved: true,
+    grant: {
+      inbox_ids: ["agent@example.test"],
+      permissions: { message_read: true },
+      send_policy: "read_only",
+    },
+  });
+  await client.revokeOAuthGrant("b".repeat(32));
+  expect(await client.purgeOAuthClients()).toEqual({ deleted_clients: 3 });
+  expect(fetcher.mock.calls[5]?.[0]).toBe("/v0/owner/oauth/clients/purge");
+  expect(fetcher.mock.calls[5]?.[1]?.method).toBe("POST");
+  for (const [path, options] of fetcher.mock.calls.slice(2)) {
+    expect(String(path)).toMatch(/oauth/);
+    expect(options?.credentials).toBe("same-origin");
+    expect(new Headers(options?.headers).get("X-Inbot-CSRF")).toBe("consent-csrf");
+    expect(new Headers(options?.headers).has("Authorization")).toBe(false);
+  }
+});
+
+test("OAuth protocol errors remain actionable in the consent UI", async () => {
+  const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
+    json(
+      {
+        error: "access_denied",
+        error_description: "Owner consent requires a browser session and the exact server Origin.",
+      },
+      { status: 403 },
+    ),
+  );
+  const client = new ApiClient(fetcher);
+  const input = {
+    response_type: "code",
+    client_id: "a".repeat(32),
+    redirect_uri: "https://client.example.test/cb",
+    resource: "https://inbot.example.test/mcp",
+    code_challenge_method: "S256",
+    code_challenge: "z".repeat(43),
+  } as const;
+  await expect(client.oauthDetails(input)).rejects.toMatchObject({
+    code: "missing_permission",
+    message: "Owner consent requires a browser session and the exact server Origin.",
+  });
+});

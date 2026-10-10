@@ -3,6 +3,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Schema } from "effect";
 import { expect, test as base } from "vitest";
+import { makeOAuth } from "../../server/src/oauth/service.js";
+import {
+  OAuthClientsResponse,
+  PurgeOAuthClientsResponse,
+} from "../../../packages/contracts/src/oauth.js";
 import { Event } from "../../../packages/contracts/src/events.js";
 import { Webhook, ListWebhooksResponse } from "../../../packages/contracts/src/webhooks.js";
 import { readEvents } from "../../server/src/events/log.js";
@@ -720,4 +725,71 @@ test("shows historical unknown sends and resolves only with owner credentials", 
     send_reason: "owner_confirmed_not_sent",
   });
   expect(api.sent).toHaveLength(0);
+});
+
+test("owner OAuth CLI lists, purges unused registrations and revokes grants while excluding agent credentials", async ({
+  api,
+}) => {
+  const oauth = makeOAuth(api.store);
+  const registered = await api.run(
+    oauth.register({
+      client_name: "Synthetic CLI client",
+      redirect_uris: ["http://127.0.0.1:8765/callback"],
+    }),
+  );
+  await api.run(
+    oauth.consent(
+      {
+        response_type: "code",
+        client_id: registered.client_id,
+        redirect_uri: registered.redirect_uris[0],
+        resource: `${api.url}/mcp`,
+        code_challenge_method: "S256",
+        code_challenge: "a".repeat(43),
+        approved: true,
+        grant: {
+          inbox_ids: [inboxId],
+          permissions: { inbox_read: true },
+          send_policy: "read_only",
+        },
+      },
+      api.url,
+    ),
+  );
+  const listed = await invoke(api, ["oauth", "clients", "--json"]);
+  expect(listed.code).toBe(0);
+  const clients = Schema.decodeUnknownSync(Schema.fromJsonString(OAuthClientsResponse))(
+    listed.stdout,
+  );
+  const approved = clients.grants[0];
+  if (!approved) throw new Error("Missing authorized client");
+  expect(approved.client_name).toBe("Synthetic CLI client");
+  await api.run(oauth.register({ redirect_uris: ["com.example.unused:/callback"] }));
+  const purged = await invoke(api, ["oauth", "purge", "--json"]);
+  expect(purged.code).toBe(0);
+  expect(
+    Schema.decodeUnknownSync(Schema.fromJsonString(PurgeOAuthClientsResponse))(purged.stdout),
+  ).toEqual({ deleted_clients: 1 });
+  expect((await api.run(oauth.clients())).grants.map((item) => item.grant_id)).toEqual([
+    approved.grant_id,
+  ]);
+  const key = await api.run(
+    api.keys.create({ permissions: { inbox_read: true }, send_policy: "read_only" }),
+  );
+  const agent = await invoke(api, ["oauth", "clients", "--json"], {
+    env: { INBOT_URL: api.url, INBOT_API_KEY: key.api_key },
+  });
+  expect(agent.code).toBe(4);
+  expect(JSON.parse(agent.stderr)).toMatchObject({ code: "missing_permission" });
+  const agentPurge = await invoke(api, ["oauth", "purge", "--json"], {
+    env: { INBOT_URL: api.url, INBOT_API_KEY: key.api_key },
+  });
+  expect(agentPurge.code).toBe(4);
+  expect(JSON.parse(agentPurge.stderr)).toMatchObject({ code: "missing_permission" });
+  expect((await invoke(api, ["oauth", "revoke", approved.grant_id])).code).toBe(0);
+  const after = await invoke(api, ["oauth", "clients", "--json"]);
+  expect(
+    Schema.decodeUnknownSync(Schema.fromJsonString(OAuthClientsResponse))(after.stdout).grants,
+  ).toEqual([]);
+  expect((await invoke(api, ["inboxes", "list", "--json"])).code).toBe(0);
 });

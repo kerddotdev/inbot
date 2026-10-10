@@ -1,12 +1,12 @@
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
-import { Schema } from "effect";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Permissions, type SendPolicy } from "@inbot/contracts/src/api-keys.js";
+import type { Grant } from "@inbot/contracts/src/api-keys.js";
+import { GrantFields, defaultGrant, policyDisplay } from "../components/GrantFields";
 import { api } from "../api";
 import { inboxesQuery, keysQuery } from "../queries";
+import { OAuthGrants } from "./OAuth";
 import { ErrorNotice, LoadError } from "../feedback";
 
-import type { IconName } from "../icons";
 import {
   Button,
   CopyButton,
@@ -14,61 +14,9 @@ import {
   inputClasses,
   ListMessage,
   Page,
-  Segmented,
   SkeletonRows,
   Status,
-  type Tone,
 } from "../components/ui";
-
-type PermissionPreset = "read" | "read-draft" | "full";
-const readPermissions = { inbox_read: true, message_read: true, draft_read: true };
-const draftPermissions = {
-  ...readPermissions,
-  draft_create: true,
-  draft_update: true,
-  draft_delete: true,
-};
-const presetPermissions = {
-  read: readPermissions,
-  "read-draft": draftPermissions,
-  full: {
-    ...draftPermissions,
-    message_update: true,
-    message_reply: true,
-    message_send: true,
-    draft_send: true,
-  },
-} satisfies Record<PermissionPreset, Permissions>;
-const presetHint: Record<PermissionPreset, string> = {
-  read: "Can read threads. Cannot create drafts or send.",
-  "read-draft": "Can read threads and create drafts. Cannot send or manage inboxes.",
-  full: "Can read, draft, and send. Sending follows the policy below.",
-};
-
-const policyDisplay: Record<
-  SendPolicy,
-  { tone: Tone; icon: IconName; label: string; hint: string }
-> = {
-  direct: {
-    tone: "ok",
-    icon: "send",
-    label: "Direct",
-    hint: "Messages are queued for sending without owner approval.",
-  },
-  approval: {
-    tone: "warn",
-    icon: "shield-check",
-    label: "Approval",
-    hint: "Drafts wait in Approvals until you accept them.",
-  },
-  read_only: { tone: "mute", icon: "eye", label: "Read-only", hint: "The key can never send." },
-};
-
-const presets: { value: PermissionPreset; label: string }[] = [
-  { value: "read", label: "Read only" },
-  { value: "read-draft", label: "Read and draft" },
-  { value: "full", label: "Full access" },
-];
 
 export function ApiKeys() {
   const [creating, setCreating] = useState(false);
@@ -199,6 +147,7 @@ export function ApiKeys() {
             </table>
           </div>
         )}
+        <OAuthGrants />
       </Page>
       {creating ? (
         <CreateKeyDialog
@@ -230,34 +179,15 @@ function CreateKeyDialog({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>();
   const [secret, setSecret] = useState<string>();
-  const [allInboxes, setAllInboxes] = useState(false);
-  const [permissions, setPermissions] = useState<Permissions>(presetPermissions["read-draft"]);
+  const [grant, setGrant] = useState<Grant>(defaultGrant);
   const dialogRef = useRef<HTMLDialogElement>(null);
   const nameId = useId();
   const [name, setName] = useState("");
-  const [scope, setScope] = useState<ReadonlySet<string>>(new Set());
-  const [customized, setCustomized] = useState(false);
-  const [preset, setPreset] = useState<PermissionPreset>("read-draft");
-  const [policy, setPolicy] = useState<SendPolicy>("approval");
 
   useEffect(() => {
     const dialog = dialogRef.current;
     if (dialog && !dialog.open) dialog.showModal();
   }, []);
-
-  const choosePreset = (next: PermissionPreset) => {
-    setPreset(next);
-    setCustomized(false);
-    setPermissions(presetPermissions[next]);
-    if (next === "read") setPolicy("read_only");
-    else if (policy === "read_only") setPolicy("approval");
-  };
-
-  const toggleInbox = (inbox: string) => {
-    const next = new Set(scope);
-    if (!next.delete(inbox)) next.add(inbox);
-    setScope(next);
-  };
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -267,9 +197,7 @@ function CreateKeyDialog({
     try {
       const result = await api.createKey({
         name: name.trim(),
-        ...(allInboxes ? {} : { inbox_ids: [...scope] }),
-        permissions,
-        send_policy: policy,
+        ...grant,
       });
       setSecret(result.api_key);
       void client.invalidateQueries({ queryKey: ["keys"] });
@@ -332,93 +260,14 @@ function CreateKeyDialog({
                 onChange={(event) => setName(event.target.value)}
               />
             </div>
-            <fieldset className="mb-4 min-w-0">
-              <legend className="mb-[7px] p-0 font-semibold">Inbox scope</legend>
-              <label className="mb-2 flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={allInboxes}
-                  onChange={(event) => setAllInboxes(event.target.checked)}
-                />
-                All current and future inboxes
-              </label>
-              {loadingInboxes ? (
-                <p role="status">Loading inboxes...</p>
-              ) : inboxError ? (
-                <LoadError error={inboxError} retry={retryInboxes} />
-              ) : inboxIds.length === 0 ? (
-                <p className="text-ink2">No inboxes exist yet.</p>
-              ) : null}
-              <div className="grid grid-cols-2 gap-x-3 gap-y-1.5">
-                {inboxIds.map((inbox) => (
-                  <label key={inbox} className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      className="size-[15px]"
-                      checked={scope.has(inbox)}
-                      disabled={allInboxes}
-                      onChange={() => toggleInbox(inbox)}
-                    />
-                    {inbox}
-                  </label>
-                ))}
-              </div>
-            </fieldset>
-            <fieldset className="mb-4 min-w-0">
-              <legend className="mb-[7px] p-0 font-semibold">Permissions</legend>
-              <Segmented name="preset" options={presets} value={preset} onChange={choosePreset} />
-              <p className="mt-1.5 text-xs text-ink2">
-                {customized ? "Only the checked permissions are granted." : presetHint[preset]}
-              </p>
-              <Disclosure label="Choose individual permissions">
-                <div className="mt-2 grid gap-1.5">
-                  {Object.keys(Permissions.fields).map((permission) => (
-                    <label key={permission} className="flex items-center gap-2">
-                      <input
-                        type="checkbox"
-                        checked={Object.entries(permissions).some(
-                          ([key, enabled]) => key === permission && enabled,
-                        )}
-                        onChange={(event) => {
-                          setCustomized(true);
-                          setPermissions(
-                            Schema.decodeUnknownSync(Permissions)({
-                              ...permissions,
-                              [permission]: event.target.checked,
-                            }),
-                          );
-                        }}
-                      />
-                      {permission.replaceAll("_", " ")}
-                    </label>
-                  ))}
-                </div>
-              </Disclosure>
-            </fieldset>
-            <fieldset className="mb-4 min-w-0">
-              <legend className="mb-[7px] p-0 font-semibold">Send policy</legend>
-              <div className="grid gap-2">
-                {(["direct", "approval", "read_only"] satisfies SendPolicy[]).map((value) => (
-                  <label
-                    key={value}
-                    className={`flex items-start gap-2 ${!customized && preset === "read" && value !== "read_only" ? "opacity-50" : ""}`}
-                  >
-                    <input
-                      type="radio"
-                      name="policy"
-                      className="mt-0.5 size-[15px]"
-                      checked={policy === value}
-                      disabled={!customized && preset === "read" && value !== "read_only"}
-                      onChange={() => setPolicy(value)}
-                    />
-                    <span>
-                      {policyDisplay[value].label}
-                      <small className="block text-ink2">{policyDisplay[value].hint}</small>
-                    </span>
-                  </label>
-                ))}
-              </div>
-            </fieldset>
+            <GrantFields
+              value={grant}
+              onChange={setGrant}
+              inboxIds={inboxIds}
+              inboxError={inboxError}
+              loadingInboxes={loadingInboxes}
+              retryInboxes={retryInboxes}
+            />
             <div className="mt-1.5 flex items-center justify-end gap-2.5">
               <Button variant="quiet" disabled={busy} onClick={() => dialogRef.current?.close()}>
                 Cancel
@@ -426,7 +275,11 @@ function CreateKeyDialog({
               <Button
                 variant="primary"
                 type="submit"
-                disabled={busy || name.trim() === "" || (!allInboxes && scope.size === 0)}
+                disabled={
+                  busy ||
+                  name.trim() === "" ||
+                  (grant.inbox_ids !== undefined && grant.inbox_ids.length === 0)
+                }
               >
                 {busy ? "Creating..." : "Create key"}
               </Button>

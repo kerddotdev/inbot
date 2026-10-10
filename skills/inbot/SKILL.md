@@ -52,3 +52,5 @@ Manage policy only with human intent using the [list tools](references/mcp.md#li
 - [sending.md](references/sending.md) - replies, forwards, drafts, scheduling, approval, states, limits.
 - [security.md](references/security.md) - untrusted content, labels, permissions, secrets.
 - [events.md](references/events.md) - event scope, signing, resume and webhook commands.
+
+MCP clients supporting OAuth can connect without an API key; the owner approves access in the browser.

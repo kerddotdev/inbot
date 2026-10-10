@@ -87,8 +87,8 @@ zero-knowledge at rest, not end-to-end encrypted.
 
 The tunnel listener permits:
 
-- Exactly `/mcp`, with scoped API key or owner browser session authentication.
-- Exactly `/v0/ws` as an agent route, with API key bearer authentication or an
+- Exactly `/mcp`, with scoped API key, audience-bound OAuth token or owner browser session authentication.
+- Exactly `/v0/ws` as an agent route, with API key or REST-audience OAuth bearer authentication or an
   owner browser session supplying exactly `Origin: https://<public host>`.
   Missing or mismatched session Origin is rejected. The common request guard
   runs before the events handler upgrades the connection; owner sessions also
@@ -97,8 +97,13 @@ The tunnel listener permits:
   send-policy checks, including list permissions and scoped webhook ownership,
   subject to the management exclusions below. Signed
   `/v0/downloads/*` URLs retain authentication and use the public origin.
-- `/oauth`, `/oauth/*`, `/.well-known`, `/.well-known/*` as reserved namespaces.
-  No OAuth implementation is added; undeclared routes return `not_found`.
+- Exactly `/.well-known/oauth-authorization-server`,
+  `/.well-known/oauth-protected-resource`, and its `/mcp` and `/v0` variants.
+- Exactly `/oauth/register`, `/oauth/token`, and `/oauth/revoke`, public with
+  persistent rate limits. `/oauth/authorize` serves the session-gated consent UI;
+  consent and `/oauth/authorize/details` POSTs require an owner browser session,
+  exact public Origin and CSRF. Other OAuth/metadata paths are rejected.
+  See [OAuth](../oauth/README.md) for resource binding and refresh rotation.
 - `/`, `/login`, `/favicon.svg`, `/favicon.ico`, and `/assets/*` for the sign-in
   shell. Other web paths require an owner browser session and redirect to
   `/login` without one. Static serving still requires explicit `--web-root`.

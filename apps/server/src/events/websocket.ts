@@ -4,6 +4,7 @@ import { Socket } from "effect/socket";
 import { NodeHttpServerRequest } from "@effect/platform-node";
 import { Subscribe, Pong } from "../../../../packages/contracts/src/events.js";
 import type { Principal } from "../../../../packages/contracts/src/security.js";
+import { OAuth, OAuthAudience } from "../oauth/service.js";
 import { ApiKeys } from "../auth/api-keys.js";
 import { OwnerAuth } from "../auth/owner.js";
 import { OwnerSessions } from "../auth/sessions.js";
@@ -33,6 +34,8 @@ export function websocket(origin: string) {
     const request = yield* HttpServerRequest.HttpServerRequest;
     const owner = yield* OwnerAuth;
     const keys = yield* ApiKeys;
+    const oauth = yield* OAuth;
+    const audience = yield* OAuthAudience;
     const sessions = yield* OwnerSessions;
     const events = yield* EventLog;
     if (request.method !== "GET" || request.headers.upgrade?.toLowerCase() !== "websocket")
@@ -66,7 +69,9 @@ export function websocket(origin: string) {
       );
     const authenticated =
       session === undefined
-        ? yield* authenticatePrincipal(Redacted.make(bearer ?? ""), owner, keys).pipe(Effect.result)
+        ? yield* authenticatePrincipal(Redacted.make(bearer ?? ""), owner, keys, oauth).pipe(
+            Effect.result,
+          )
         : undefined;
     if (authenticated !== undefined && authenticated._tag === "Failure")
       return errorResponse(wireFailure(authenticated.failure));
@@ -100,7 +105,9 @@ export function websocket(origin: string) {
             )
         : initial.kind === "owner"
           ? Effect.sync(() => (owner.authenticate(bearer ?? "") ? initial : undefined))
-          : keys.authenticate(bearer ?? "");
+          : bearer?.startsWith("inbot_oauth_")
+            ? oauth.authenticate(bearer, audience)
+            : keys.authenticate(bearer ?? "");
     const socket = yield* request.upgrade;
     return yield* Effect.gen(function* () {
       const reader = yield* socket.reader;
