@@ -252,6 +252,36 @@ test("domain actions preserve transport and action-required fixes without claimi
   expect(fetcher.mock.calls).toHaveLength(2);
 });
 
+test.each(["create", "apply", "verify", "teardown"] as const)(
+  "%s settles a validation error with the server's message and fix",
+  async (action) => {
+    const wire = {
+      name: "ProvisionError",
+      code: "validation_error",
+      message: "Configure a Cloudflare transport token first.",
+      fix: "Configure the Cloudflare mail transport in Settings, then register the domain again.",
+    };
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(json(wire, { status: 400 }));
+    const client = new ApiClient(fetcher);
+    const request =
+      action === "create"
+        ? client.createDomain({ domain: domain.domain })
+        : action === "apply"
+          ? client.applyDomain(domain.domain_id)
+          : action === "verify"
+            ? client.verifyDomain(domain.domain_id)
+            : client.teardownDomain(domain.domain_id);
+    await expect(request).rejects.toBeInstanceOf(ApiError);
+    await expect(request).rejects.toMatchObject({
+      code: wire.code,
+      message: wire.message,
+      fix: wire.fix,
+    });
+    await expect(request.catch(errorText)).resolves.toBe(`${wire.message} ${wire.fix}`);
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  },
+);
+
 test("zone files are authenticated blobs and use the same error and session-expiry decoding", async () => {
   const fetcher = vi
     .fn<typeof fetch>()

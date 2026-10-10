@@ -295,7 +295,10 @@ export function makeProvisioner(options: {
       Effect.gen(function* () {
         const row = yield* getRow(id);
         if (row.phase === "tearing_down")
-          return yield* invalid("Finish teardown before applying this domain.");
+          return yield* invalid(
+            "Finish teardown before applying this domain.",
+            "Retry teardown until it completes, then apply the domain again.",
+          );
         yield* api.verifyToken();
         yield* boundAccount(row);
         const zone = yield* findZone(row.domain);
@@ -556,7 +559,10 @@ export function makeProvisioner(options: {
         let row = yield* getRow(id);
         yield* boundAccount(row);
         if (row.phase !== "ready")
-          return yield* invalid("Apply the domain before verifying mail delivery.");
+          return yield* invalid(
+            "Apply the domain before verifying mail delivery.",
+            "Apply the domain resources, then verify the domain again.",
+          );
         yield* recoverDns(row);
         const records = yield* dns.check(row.records);
         yield* repo.records(id, records);
@@ -693,7 +699,10 @@ export function makeProvisioner(options: {
         ) {
           const settings = yield* transport.get();
           if (settings === undefined)
-            return yield* invalid("Configure the recorded Cloudflare transport before teardown.");
+            return yield* invalid(
+              "Configure the recorded Cloudflare transport before teardown.",
+              "Configure the recorded Cloudflare account and token in Settings, then retry teardown.",
+            );
           const buffer =
             options.buffer ??
             (yield* InboundBuffer.pipe(
@@ -823,10 +832,15 @@ export function makeProvisioner(options: {
       gate.withPermit(
         Effect.gen(function* () {
           yield* Schema.decodeUnknownEffect(CreateDomainRequest)(input).pipe(
-            Effect.mapError(() => invalid("Invalid domain request.")),
+            Effect.mapError(() =>
+              invalid("Invalid domain request.", "Use the declared domain registration fields."),
+            ),
           );
           if (input.allow_conflicting_provider === true)
-            return yield* invalid("Inbot never allows conflicting apex providers.");
+            return yield* invalid(
+              "Inbot never allows conflicting apex providers.",
+              "Set allow_conflicting_provider to false and use a dedicated mail subdomain.",
+            );
           if (
             input.feedback_enabled === true ||
             input.tracking_enabled === true ||
@@ -835,12 +849,16 @@ export function makeProvisioner(options: {
           )
             return yield* invalid(
               "Provisioning supports inbound email on one literal subdomain without tracking or feedback.",
+              "Enable inbound mail and disable feedback, tracking, and wildcard subdomains.",
             );
           const domain = yield* checkedDomain(input.domain);
           const existing = (yield* repo.all()).find((row) => row.domain === domain);
           if (existing !== undefined) return domainWire(existing);
           if ((yield* repo.all()).length > 0)
-            return yield* invalid("This Inbot instance supports one registered mail subdomain.");
+            return yield* invalid(
+              "This Inbot instance supports one registered mail subdomain.",
+              "Use the existing registration, or tear it down and delete it before registering another domain.",
+            );
           const planned = yield* plan(domain);
           const zone = yield* findZone(domain);
           const conflicting = yield* store.use(
@@ -852,6 +870,7 @@ export function makeProvisioner(options: {
           if (conflicting)
             return yield* invalid(
               "The inbot-selftest address is reserved for domain verification.",
+              "Remove the inbox using the reserved inbot-selftest address, then register the domain again.",
             );
           const timestamp = yield* now();
           const id = randomUUID();
@@ -877,7 +896,9 @@ export function makeProvisioner(options: {
       Effect.gen(function* () {
         yield* getRow(id);
         yield* Schema.decodeUnknownEffect(UpdateDomainRequest)(input).pipe(
-          Effect.mapError(() => invalid("Invalid domain update.")),
+          Effect.mapError(() =>
+            invalid("Invalid domain update.", "Use the declared domain update fields."),
+          ),
         );
         if (
           input.feedback_enabled === true ||
@@ -887,6 +908,7 @@ export function makeProvisioner(options: {
         )
           return yield* invalid(
             "The requested domain feature is unsupported by subdomain provisioning.",
+            "Enable inbound mail and disable feedback, tracking, and wildcard subdomains.",
           );
         return domainWire(yield* getRow(id));
       }),
@@ -895,7 +917,10 @@ export function makeProvisioner(options: {
         Effect.gen(function* () {
           yield* getRow(id);
           if ((yield* repo.resources(id)).length > 0)
-            return yield* invalid("Teardown all recorded resources before deleting the domain.");
+            return yield* invalid(
+              "Teardown all recorded resources before deleting the domain.",
+              "Complete domain teardown, then delete the registration again.",
+            );
           yield* store.use((db) => {
             db.transaction(() => {
               db.prepare("DELETE FROM inbox_routing_rules WHERE domain_id = ?").run(id);
@@ -910,7 +935,9 @@ export function makeProvisioner(options: {
           try: () =>
             preparePage(query, { resource: "domains", ascending: query.ascending ?? false }),
           catch: (error) =>
-            error instanceof MailboxError ? error : invalid("Invalid domain pagination query."),
+            error instanceof MailboxError
+              ? error
+              : invalid("Invalid domain pagination query.", "Use the declared pagination fields."),
         });
         return yield* store.use((db) => {
           const where = new Where();
