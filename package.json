@@ -14,8 +14,10 @@
   },
   "dependencies": {
     "@napi-rs/keyring": "2.1.0",
+    "agentextract": "0.3.0",
     "better-sqlite3-multiple-ciphers": "13.0.3",
-    "effect": "4.0.2"
+    "effect": "4.0.2",
+    "postal-mime": "4.0.5"
   },
   "devDependencies": {
     "@types/node": "24.13.4",
