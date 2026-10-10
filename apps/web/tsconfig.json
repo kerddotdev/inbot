@@ -8,7 +8,7 @@
     "types": ["vite/client", "node"],
     "jsx": "react-jsx",
     "noEmit": true,
-    "rootDir": ".",
+    "rootDir": "../..",
     "paths": {}
   },
   "include": ["src", "vite.config.ts"],

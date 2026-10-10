@@ -2,7 +2,7 @@
 
 Self-hosted, privacy-first email for AI agents. Each agent gets its own inbox on your custom domain, mail is stored encrypted on your own machine, and agents reach it through MCP, a CLI, or a REST API. An optional Cloudflare Tunnel lets cloud-hosted agents reach your local instance with scoped credentials. The mail provider still sees plaintext in transit: Inbot is zero-knowledge at rest, not end-to-end encrypted.
 
-Status: early development. The encrypted storage foundation, mailbox service, [inbound ingestion and encrypted buffer pulling](apps/server/src/inbound/README.md), [authenticated loopback HTTP API](apps/server/src/http/README.md), shared [age envelope package](packages/envelope/README.md), [inbound Email Worker handler](apps/worker/README.md), [owner browser authentication and static UI serving](apps/server/src/http/README.md#owner-browser-authentication), drafts with owner approval and scheduled sending, and [delivery Queue consumer](apps/server/src/outbound/README.md#delivery-queue-consumer) exist. The owner UI has presentational screens with mock data; API wiring, live mail validation, and installers remain planned.
+Status: early development. The encrypted storage foundation, mailbox service, [inbound ingestion and encrypted buffer pulling](apps/server/src/inbound/README.md), [authenticated loopback HTTP API](apps/server/src/http/README.md), shared [age envelope package](packages/envelope/README.md), [inbound Email Worker handler](apps/worker/README.md), [owner browser authentication and static UI serving](apps/server/src/http/README.md#owner-browser-authentication), drafts with owner approval and scheduled sending, and [delivery Queue consumer](apps/server/src/outbound/README.md#delivery-queue-consumer) exist. The [owner UI](apps/web/README.md) connects authentication, mail, API keys, and approvals to the local API. Domains, remote access, and settings still use mock data. Live mail validation and installers remain planned.
 
 ## Development
 
@@ -22,7 +22,7 @@ prints its URL once and writes the owner token to the home directory's private
 transport. Draft CRUD, owner approval, and scheduled sending are implemented; lists
 and webhooks return `not_supported`. Passphrase startup remains planned. Before
 password setup, the server prints a one-time owner setup code. Browser sessions
-require CSRF on unsafe requests. Build the presentational UI with `pnpm web:build`
+require CSRF on unsafe requests. Build the owner UI with `pnpm web:build`
 and pass `--web-root /absolute/path/to/apps/web/dist` to serve it on the loopback origin.
 
 Inbound and delivery pulling require internal encrypted buffer configuration and
