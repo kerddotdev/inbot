@@ -194,7 +194,7 @@ Reads wrap the token in `Redacted`; no token is logged. Owner-only
 inspect, verify, save, and clear configuration. `OwnerTransport` verifies candidate
 credentials with the existing provision adapter before persisting them. Failed checks
 preserve the previous configuration. The verification timestamp uses the existing
-`meta` table in the same transaction as credentials; migrations remain 1 through 9.
+`meta` table in the same transaction as credentials; the transport migration remains version 5.
 Clearing requires domain teardown. See the [owner transport API](../http/README.md#owner-mail-transport)
 and [required token permissions](../provision/README.md#token-permissions). No transport
 MCP tool or CLI command is exposed.
@@ -203,8 +203,9 @@ adapter. Test servers inject a fake provider instead.
 
 The existing schemas, service, REST, MCP, permissions, idempotency, reverse states,
 and documentation apply. Delivery events still apply through the existing internal
-service and the Queue consumer described below; event publishing, CLI resource
-commands and tunnel allowlists remain planned. Agent guidance in `skills/inbot` directs
+service and the Queue consumer described below. Signed webhooks and WebSocket
+replay publish the durable event log, and CLI resource commands use REST.
+Tunnel allowlists remain planned. Agent guidance in `skills/inbot` directs
 owners to transport setup without granting agents access to credentials.
 
 ## Questions requiring an authorized real-account check
@@ -259,3 +260,5 @@ fields; they do not read private spike files or contact Cloudflare.
 ## Recipient lists
 
 Every To/CC/BCC recipient must pass global and inbox `send` lists; replies and reply drafts also pass `reply` lists. Blocks win and non-empty allow lists restrict recipients. Refusal returns `message_rejected` before queueing or approval, leaving existing drafts unchanged. Scheduled drafts and queued outbox messages recheck rules before sending; newly forbidden mail becomes failed without invoking the provider. See [list policy](../lists/README.md).
+
+Provider acceptance, terminal failure and observed delivery changes append their contract events in the same transaction. See [event delivery](../events/README.md) for dispatch and replay.

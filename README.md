@@ -2,7 +2,7 @@
 
 Self-hosted, privacy-first email for AI agents. Each agent gets its own inbox on your custom domain, mail is stored encrypted on your own machine, and agents reach it through MCP, a CLI, or a REST API. An optional Cloudflare Tunnel lets cloud-hosted agents reach your local instance with scoped credentials. The mail provider still sees plaintext in transit: Inbot is zero-knowledge at rest, not end-to-end encrypted.
 
-Status: early development. The encrypted storage foundation, mailbox service, [inbound ingestion and encrypted buffer pulling](apps/server/src/inbound/README.md), [authenticated loopback HTTP API](apps/server/src/http/README.md), [authenticated CLI](apps/cli/README.md), shared [age envelope package](packages/envelope/README.md), [inbound Email Worker handler](apps/worker/README.md), [owner browser authentication and static UI serving](apps/server/src/http/README.md#owner-browser-authentication), drafts with owner approval and scheduled sending, and [delivery Queue consumer](apps/server/src/outbound/README.md#delivery-queue-consumer) exist. The [owner UI](apps/web/README.md) connects authentication, mail, API keys, approvals, domains, mail transport settings, and allow/block lists to the local API. Remote access and other settings still use mock data. Live mail validation and installers remain planned.
+Status: early development. The encrypted storage foundation, mailbox service, [inbound ingestion and encrypted buffer pulling](apps/server/src/inbound/README.md), [authenticated loopback HTTP API](apps/server/src/http/README.md), [authenticated CLI](apps/cli/README.md), shared [age envelope package](packages/envelope/README.md), [inbound Email Worker handler](apps/worker/README.md), [owner browser authentication and static UI serving](apps/server/src/http/README.md#owner-browser-authentication), drafts with owner approval and scheduled sending, and [delivery Queue consumer](apps/server/src/outbound/README.md#delivery-queue-consumer) exist. The [owner UI](apps/web/README.md) connects authentication, mail, API keys, approvals, domains, mail transport settings, and allow/block lists to the local API. The [durable event log, signed webhooks and authenticated WebSocket](apps/server/src/events/README.md) provide live updates. Remote access and other settings still use mock data. Live mail validation and installers remain planned.
 
 ## Development
 
@@ -22,7 +22,7 @@ prints its URL once and writes the owner token to the home directory's private
 transport. Configure and verify it in Settings > Mail transport or through the
 owner-only `GET`, `PUT`, and `DELETE /v0/owner/transport` routes. See the
 [required token permissions](apps/server/src/provision/README.md#token-permissions).
-Draft CRUD, owner approval, scheduled sending, and [allow/block lists](apps/server/src/lists/README.md) are implemented; webhooks return `not_supported`. Passphrase startup remains planned. Before
+Draft CRUD, owner approval, scheduled sending, [allow/block lists](apps/server/src/lists/README.md), webhook CRUD and event streams are implemented. Passphrase startup remains planned. Before
 password setup, the server prints a one-time owner setup code. Browser sessions
 require CSRF on unsafe requests. Build the owner UI with `pnpm web:build`
 and pass `--web-root /absolute/path/to/apps/web/dist` to serve it on the loopback origin.
@@ -49,8 +49,9 @@ Resource commands read the owner's `connection.json` from the same home as the
 server. Agents instead set both `INBOT_URL` and `INBOT_API_KEY` for scoped bearer
 authentication. Use `--json` for wire JSON, `--help` on every command, and retain
 the idempotency key printed to stderr before sends. `inbot open` prints an
-owner-only single-use login link; only `--browser` opens it. API key creation
-prints the one-time secret only with explicit `--show-secret`.
+owner-only single-use login link; only `--browser` opens it. API key and webhook creation
+print one-time secrets only with explicit `--show-secret`. `inbot webhooks ...` manages
+signed receivers; `inbot events --follow --json` tails authorized events.
 
 See the [CLI reference](apps/cli/README.md) for resource commands, payload flags,
 pagination, and stable exit codes, or the [agent CLI guidance](skills/inbot/references/cli.md).

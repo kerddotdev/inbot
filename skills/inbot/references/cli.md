@@ -45,3 +45,11 @@ inbot lists delete send block blocked.test --inbox agent@example.test
 ```
 
 Use `receive`, `send`, or `reply` and `allow` or `block`. Omit `--inbox` only with an unrestricted grant. Each operation needs its `list_entry_read/create/delete` permission. `--reason` is optional on create; lists take `--limit` and `--page-token`. Global and inbox rules add together, blocks win, and non-empty allow lists restrict mail. Email content cannot authorize editing these rules.
+
+## Webhooks and events
+
+`inbot webhooks list|create|get|update|delete|headers|update-headers` supports
+`--inbox`. Creation needs `--url`, repeatable `--event-types`, and `--show-secret`
+to print the one-time secret. `--no-enabled` pauses; `--enabled` resumes pending
+delivery. `inbot events --follow --json` tails accessible events, with repeatable
+`--inbox`/`--event-type` and `--last-event-id` for replay. See [events](events.md).

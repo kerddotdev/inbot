@@ -1,3 +1,4 @@
+import { readEvents } from "../events/log.js";
 import { mkdtemp, rm } from "node:fs/promises";
 import { BufferError } from "../inbound/cloudflare.js";
 import { tmpdir } from "node:os";
@@ -355,12 +356,15 @@ test("verifies public DNS and the encrypted self-test through the real puller wi
   expect((await f.run(f.provisioner.verify(domain.domain_id))).status).toBe("VERIFIED");
   expect(f.events).toHaveLength(1);
   expect(f.events[0]?.event_type).toBe("domain.verified");
+  const durable = await f.run(f.store.use((db) => readEvents(db, 0)));
+  expect(durable.map((row) => row.payload)).toEqual(f.events);
   expect(f.cloud.rules.size).toBe(0);
   expect(await f.run(f.store.use((db) => db.prepare("SELECT * FROM messages").all()))).toEqual([]);
   expect(f.buffer.objects.size).toBe(0);
   expect((await f.run(f.provisioner.verify(domain.domain_id))).status).toBe("VERIFIED");
   expect(f.events).toHaveLength(1);
   expect(f.cloud.calls.filter((call) => call === "sendSelfTest")).toHaveLength(1);
+  expect(await f.run(f.store.use((db) => readEvents(db, 0)))).toEqual(durable);
 });
 
 test("does not report a queued or missing probe as verified, and retries after propagation time", async () => {
@@ -984,4 +988,26 @@ test("deletes a surviving recorded sending DNS ID after sending subdomain deleti
   );
   expect(f.cloud.dns).toHaveLength(3);
   expect(await f.run(f.repo.resources(domain.domain_id))).toEqual([]);
+});
+
+test("verified status and its durable event roll back together when event storage fails", async () => {
+  const f = await fixture();
+  const domain = await f.run(f.provisioner.create({ domain: f.domain }));
+  await f.run(f.provisioner.apply(domain.domain_id));
+  f.dnsState.visible = true;
+  await f.run(
+    f.store.use((db) =>
+      db.exec(
+        "CREATE TRIGGER reject_domain_event BEFORE INSERT ON event_log BEGIN SELECT RAISE(ABORT, 'synthetic'); END",
+      ),
+    ),
+  );
+  await expect(f.run(f.provisioner.verify(domain.domain_id))).rejects.toMatchObject({
+    code: "database_failed",
+  });
+  expect((await f.run(f.repo.get(domain.domain_id)))?.status).toBe("VERIFYING");
+  expect(await f.run(f.store.use((db) => readEvents(db, 0)))).toEqual([]);
+  await f.run(f.store.use((db) => db.exec("DROP TRIGGER reject_domain_event")));
+  expect((await f.run(f.provisioner.verify(domain.domain_id))).status).toBe("VERIFIED");
+  expect(await f.run(f.store.use((db) => readEvents(db, 0)))).toHaveLength(1);
 });

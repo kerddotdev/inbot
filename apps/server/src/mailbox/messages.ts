@@ -1,4 +1,5 @@
 import type Database from "better-sqlite3-multiple-ciphers";
+import { receivedEvent } from "../events/log.js";
 import { Schema } from "effect";
 import {
   BatchGetMessagesRequest,
@@ -137,6 +138,8 @@ export function insertMessage(
     );
   }
   refreshThread(db, input.inbox_id, threadId, now);
+  if (input.direction === "received")
+    receivedEvent(db, input.inbox_id, input.message_id, nowMillis);
   return { message_id: input.message_id, thread_id: threadId };
 }
 

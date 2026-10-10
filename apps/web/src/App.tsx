@@ -7,6 +7,7 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import type { OwnerStatus } from "@inbot/contracts/src/owner.js";
+import { useLiveEvents } from "./events";
 import { api, ApiError, errorText } from "./api";
 import { authRedirect } from "./auth-route";
 import { Shell } from "./components/Shell";
@@ -43,6 +44,7 @@ function Screen({ route }: { route: OwnerRoute }) {
 }
 
 function OwnerApp({ route }: { route: OwnerRoute }) {
+  useLiveEvents();
   const inboxes = useQuery(inboxesQuery);
   const approvals = useQuery(approvalsQuery);
   const client = useQueryClient();

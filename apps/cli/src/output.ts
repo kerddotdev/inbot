@@ -40,8 +40,10 @@ function table(rows: readonly Record<string, unknown>[], columns: readonly strin
 export function humanOutput(value: unknown): string {
   if (value === undefined) return "Done.\n";
   if (!record(value)) return `${cell(value)}\n`;
-  if (typeof value.url === "string") return `${value.url}\n`;
+  if (typeof value.url === "string" && typeof value.webhook_id !== "string")
+    return `${value.url}\n`;
   const collections: Record<string, readonly string[]> = {
+    webhooks: ["webhook_id", "url", "enabled", "failure_count", "disabled_reason"],
     inboxes: ["inbox_id", "display_name", "status"],
     threads: ["thread_id", "inbox_id", "subject", "labels"],
     drafts: ["draft_id", "inbox_id", "subject", "approval_state", "send_status"],

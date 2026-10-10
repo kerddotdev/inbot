@@ -9,6 +9,7 @@ import { InboundBuffer, BufferError } from "../inbound/cloudflare.js";
 import { processInbound, reconcileInbound } from "../inbound/puller.js";
 import { fixture, inbox, key, receivedAt } from "../inbound/test-fixture.js";
 import { makeLists } from "./lists.js";
+import { readEvents } from "../events/log.js";
 
 const test = base.extend<{ api: Awaited<ReturnType<typeof fixture>> }>({
   api: async ({ task: _task }, use) => {
@@ -61,6 +62,7 @@ test("records a blocked sender durably before deleting ciphertext, then replays 
   expect(api.buffer.objects.size).toBe(0);
   expect(api.buffer.acks).toHaveLength(1);
   expect(await records(api)).toHaveLength(1);
+  expect(await api.run(api.store.use((db) => readEvents(db, 0)))).toEqual([]);
   expect(
     (
       await api.run(

@@ -20,6 +20,7 @@ import { Home } from "../home.js";
 import { DatabaseError, Store, migrate, migrations, type StoreService } from "../store.js";
 import { Mailbox, type MailboxService } from "./mailbox.js";
 import type { InsertMessage } from "./types.js";
+import { createInbox } from "./inboxes.js";
 
 const test = baseTest.extend<{ home: string; key: Uint8Array }>({
   home: async ({ task: _task }, use) => {
@@ -1215,40 +1216,68 @@ test("matches Unicode sender, recipient, and subject filters without SQL wildcar
   );
 });
 
-test("upgrades an encrypted version-one database without losing existing data", async ({
-  home,
-  key,
-}) => {
-  const db = new Database(join(home, "inbot.db"));
-  try {
-    db.pragma("cipher = 'chacha20'");
-    db.pragma("legacy = 0");
-    db.pragma("plaintext_header_size = 0");
-    db.pragma(`key = "x'${Buffer.from(key).toString("hex")}'"`);
-    await Effect.runPromise(migrate(db, migrations.slice(0, 1)));
-    db.prepare("INSERT INTO meta (key, value) VALUES (?, ?)").run("original", "preserved");
-  } finally {
-    db.close();
-  }
-  const inboxId = await withMailbox(home, key, (mailbox, store) =>
-    Effect.gen(function* () {
-      yield* store.use((database) => {
-        expect(database.pragma("user_version", { simple: true })).toBe(
-          migrations.at(-1)?.version ?? 0,
-        );
-        expect(database.prepare("SELECT value FROM meta WHERE key = ?").get("original")).toEqual({
-          value: "preserved",
+for (const version of [1, 10]) {
+  test(`upgrades an encrypted version-${version} database without losing existing data`, async ({
+    home,
+    key,
+  }) => {
+    const db = new Database(join(home, "inbot.db"));
+    try {
+      db.pragma("cipher = 'chacha20'");
+      db.pragma("legacy = 0");
+      db.pragma("plaintext_header_size = 0");
+      db.pragma(`key = "x'${Buffer.from(key).toString("hex")}'"`);
+      await Effect.runPromise(migrate(db, migrations.slice(0, version)));
+      db.prepare("INSERT INTO meta (key, value) VALUES (?, ?)").run("original", "preserved");
+      if (version === 10) {
+        const timestamp = new Date(now).toISOString();
+        createInbox(db, { username: "existing", domain: "example.test" }, timestamp);
+        db.prepare(
+          "INSERT INTO list_entries (scope, direction, list_type, entry, entry_type, created_at) VALUES ('', 'receive', 'block', 'blocked.test', 'domain', ?)",
+        ).run(timestamp);
+        db.prepare(
+          "INSERT INTO inbound_list_rejections (inbox_id, payload_hash, reason_code, received_at) VALUES ('existing@example.test', 'synthetic-hash', 'blocked_sender', ?)",
+        ).run(timestamp);
+      }
+    } finally {
+      db.close();
+    }
+    const inboxId = await withMailbox(home, key, (mailbox, store) =>
+      Effect.gen(function* () {
+        yield* store.use((database) => {
+          expect(database.pragma("user_version", { simple: true })).toBe(
+            migrations.at(-1)?.version ?? 0,
+          );
+          expect(database.prepare("SELECT value FROM meta WHERE key = ?").get("original")).toEqual({
+            value: "preserved",
+          });
         });
-      });
-      return (yield* mailbox.createInbox({ username: "migrated", domain: "example.test" }))
-        .inbox_id;
-    }),
-  );
-  await withMailbox(home, key, (mailbox) =>
-    Effect.gen(function* () {
-      expect((yield* mailbox.getInbox(inboxId)).inbox_id).toBe(inboxId);
-      yield* mailbox.insertMessage(message(inboxId, "after-migration"));
-      expect((yield* mailbox.searchMessages(inboxId, "project")).count).toBe(1);
-    }),
-  );
-});
+        if (version === 10) {
+          expect((yield* mailbox.getInbox("existing@example.test")).inbox_id).toBe(
+            "existing@example.test",
+          );
+          yield* store.use((database) => {
+            expect(database.prepare("SELECT entry FROM list_entries").all()).toEqual([
+              { entry: "blocked.test" },
+            ]);
+            expect(
+              database
+                .prepare("SELECT payload_hash, reason_code FROM inbound_list_rejections")
+                .all(),
+            ).toEqual([{ payload_hash: "synthetic-hash", reason_code: "blocked_sender" }]);
+            expect(database.prepare("SELECT * FROM event_log").all()).toEqual([]);
+          });
+        }
+        return (yield* mailbox.createInbox({ username: "migrated", domain: "example.test" }))
+          .inbox_id;
+      }),
+    );
+    await withMailbox(home, key, (mailbox) =>
+      Effect.gen(function* () {
+        expect((yield* mailbox.getInbox(inboxId)).inbox_id).toBe(inboxId);
+        yield* mailbox.insertMessage(message(inboxId, "after-migration"));
+        expect((yield* mailbox.searchMessages(inboxId, "project")).count).toBe(1);
+      }),
+    );
+  });
+}

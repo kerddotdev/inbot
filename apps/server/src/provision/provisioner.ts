@@ -1,3 +1,4 @@
+import { appendEvent } from "../events/log.js";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { domainToASCII } from "node:url";
@@ -657,11 +658,34 @@ export function makeProvisioner(options: {
             if (resource.owned === 1) yield* api.deleteRule(zone.id, resource.cloudflare_id);
             yield* repo.forget(resource.sequence);
           }
-        yield* store.use((db) => {
-          db.prepare(
-            "UPDATE domains SET verified_event_pending = CASE WHEN status = 'VERIFIED' THEN verified_event_pending ELSE 1 END, status = 'VERIFIED', reason = NULL, updated_at = ? WHERE domain_id = ?",
-          ).run(new Date(millis).toISOString(), id);
-        });
+        yield* store.use((db) =>
+          db
+            .transaction(() => {
+              db.prepare(
+                "UPDATE domains SET verified_event_pending = CASE WHEN status = 'VERIFIED' THEN verified_event_pending ELSE 1 END, status = 'VERIFIED', reason = NULL, updated_at = ? WHERE domain_id = ?",
+              ).run(new Date(millis).toISOString(), id);
+              const verified = Schema.decodeUnknownSync(DomainRow)(
+                db.prepare("SELECT * FROM domains WHERE domain_id = ?").get(id),
+              );
+              appendEvent(
+                db,
+                {
+                  type: "event",
+                  event_type: "domain.verified",
+                  event_id: `domain-${id}-${createHash("sha256")
+                    .update(verified.selftest_token ?? "")
+                    .digest("hex")}`,
+                  domain: domainWire(verified),
+                },
+                millis,
+              );
+              if (options.onVerified === undefined)
+                db.prepare("UPDATE domains SET verified_event_pending = 0 WHERE domain_id = ?").run(
+                  id,
+                );
+            })
+            .immediate(),
+        );
         row = yield* getRow(id);
         if (row.verified_event_pending === 1 && options.onVerified !== undefined) {
           yield* options.onVerified({

@@ -1,3 +1,6 @@
+import { EventLog } from "../events/log.js";
+import { Webhooks } from "../events/webhooks.js";
+import { websocket } from "../events/websocket.js";
 import { createServer } from "node:http";
 import { NodeHttpServer } from "@effect/platform-node";
 import { Cause, Context, Effect, Layer, Option, Redacted, Result, Schema } from "effect";
@@ -79,6 +82,11 @@ export function startHttpServer(
       host: "127.0.0.1",
       port,
       gracefulShutdownTimeout: "5 seconds",
+      websocket: {
+        maxPayload: 8192,
+        perMessageDeflate: false,
+        handleProtocols: (protocols) => (protocols.has("inbot.events") ? "inbot.events" : false),
+      },
     });
     const address = nodeServer.address();
     if (address === null || typeof address === "string")
@@ -98,6 +106,8 @@ export function startHttpServer(
     const services = Layer.mergeAll(
       Lists.Live.pipe(Layer.provide(Layer.succeed(Store, store))),
       ownerTransport,
+      EventLog.Live.pipe(Layer.provide(Layer.succeed(Store, store))),
+      Webhooks.Live.pipe(Layer.provide(Layer.succeed(Store, store))),
       Layer.succeed(Home, home),
       OwnerSessions.layer(options.setupRequired).pipe(Layer.provide(Layer.succeed(Store, store))),
       Layer.succeed(Mailbox, mailbox),
@@ -180,6 +190,7 @@ export function startHttpServer(
             ),
           );
       }
+      if (routePath === "/v0/ws") return yield* websocket(url).pipe(Effect.provideContext(context));
       const staticResponse =
         web === undefined ? undefined : yield* web(request.url, request.method);
       if (staticResponse !== undefined) return staticResponse;
@@ -255,6 +266,7 @@ export function startHttpServer(
             : original;
         return HttpServerResponse.setHeaders(response, {
           ...webSecurityHeaders,
+          "content-security-policy": `${webSecurityHeaders["content-security-policy"]}; connect-src 'self' ${url.replace(/^http/, "ws")}`,
           "cache-control": response.headers["cache-control"] ?? "no-store",
         });
       }),

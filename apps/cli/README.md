@@ -174,3 +174,38 @@ inbot lists delete send block blocked.test --inbox agent@example.test
 ```
 
 Directions: `receive`, `send`, `reply`; types: `allow`, `block`. Omit `--inbox` for global lists (owner or unrestricted grant required). Read/create/delete need their respective `list_entry_*` permissions. Entries are exact addresses or domains; entries normalize to lowercase and match case-insensitively. Global and inbox entries add together, blocks win, and non-empty allow lists restrict mail. Replies must pass send and reply rules. List pagination uses `--limit` and `--page-token`, lexically ascending. Duplicate creates return `already_exists`; rejected sends return `message_rejected` (exit 4), with nothing queued.
+
+## Webhooks and events
+
+`inbot webhooks list|create|get|update|delete|headers|update-headers` uses the
+shared global routes, or inbox routes with `--inbox <address>`. List accepts the
+usual pagination flags. Create requires `--url` and repeatable `--event-types`;
+`--inbox-ids` is repeatable for a globally scoped receiver. `--headers` accepts a
+JSON object. Pod filters are unavailable. `--data` can provide the full payload.
+
+```sh
+inbot webhooks create --inbox agent@example.test --url http://127.0.0.1:8081/events --event-types message.received --show-secret --json
+inbot webhooks update WEBHOOK_ID --no-enabled
+inbot webhooks headers WEBHOOK_ID --json
+inbot webhooks update-headers WEBHOOK_ID --headers '{"X-Receiver":"synthetic"}'
+inbot webhooks update-headers WEBHOOK_ID --remove-headers X-Receiver
+inbot webhooks delete WEBHOOK_ID
+inbot events --follow --json --inbox agent@example.test
+inbot events --follow --json --last-event-id EVENT_ID
+```
+
+The signing secret is shown only at creation with `--show-secret`; omitting it
+requires recreating the receiver if its secret is needed. Other reads and header
+commands never expose secret/header values. `--enabled` resumes pending delivery
+and resets sustained failure state. Deleting removes pending entries. See
+[event delivery](../server/src/events/README.md) for HMAC verification, retries,
+URL restrictions and at-least-once deduplication.
+
+`events --follow` authenticates with the same home connection or scoped environment
+as REST commands. It sends the WebSocket subscription, prints only contract events,
+and answers heartbeat. `--json` prints one event per line. `--inbox` and
+`--event-type` filters are repeatable. Resume after the last observed event ID;
+new connections without a cursor follow future events. Ctrl-C closes cleanly.
+Connection loss, revoked credentials or invalid resume fail with exit 10; there
+is no automatic reconnect. Event read permissions and inbox scope are enforced
+by the server; read-only send policy does not prevent authorized event reads.
