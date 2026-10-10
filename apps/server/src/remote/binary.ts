@@ -9,11 +9,13 @@ export const cloudflaredVersion = "2026.9.1";
 export const artifacts = {
   "darwin-arm64": {
     file: "cloudflared-darwin-arm64.tgz",
-    sha256: "9a0b19f67dc7a3011bc6b972c7ce06a5fcea8784ac6bd599ffa382ea4aeb5a6e",
+    sha256: "c27ab8fd0aa489449e3d201eb02f957ef460a13b613662928b1b23394bf1bcfe",
+    binarySha256: "9a0b19f67dc7a3011bc6b972c7ce06a5fcea8784ac6bd599ffa382ea4aeb5a6e",
   },
   "darwin-x64": {
     file: "cloudflared-darwin-amd64.tgz",
-    sha256: "1ea07ae775b03236bd6be18ca1848d6bdc4af2f4f3bce398823b5a36e5761b75",
+    sha256: "ff0d3b51d5ff70eceef89d6b32145fee985018a2174596a5dbe405e2766e2ac4",
+    binarySha256: "1ea07ae775b03236bd6be18ca1848d6bdc4af2f4f3bce398823b5a36e5761b75",
   },
   "linux-arm64": {
     file: "cloudflared-linux-arm64",
@@ -28,9 +30,12 @@ export const artifacts = {
     sha256: "2837888cc0f5d58f15b6dc478376de90b4d3ba5241c7947455d1e0a0df429712",
   },
 } as const;
+// Archive assets are pinned by their release asset digest; the release notes
+// list the digest of the extracted binary, which is checked after extraction.
 export interface Artifact {
   readonly file: string;
   readonly sha256: string;
+  readonly binarySha256?: string;
 }
 export type Downloader = (url: string, signal: AbortSignal) => Promise<Uint8Array>;
 export const download: Downloader = async (url, signal) => {
@@ -79,7 +84,7 @@ export function makeBinary(
   } = {},
 ) {
   const platform = options.platform ?? `${process.platform}-${process.arch}`;
-  const artifact =
+  const artifact: Artifact | undefined =
     options.artifact ?? Object.entries(artifacts).find(([key]) => key === platform)?.[1];
   const directory = join(home, "bin");
   const failure = () =>
@@ -121,6 +126,11 @@ export function makeBinary(
               "Remove the invalid cached artifact and enable again. Never run an unverified binary.",
             );
           const binary = extractBinary(bytes, artifact);
+          if (artifact.binarySha256 !== undefined && sha256(binary) !== artifact.binarySha256)
+            throw actionRequired(
+              "cloudflared checksum mismatch. Execution was refused.",
+              "Remove the invalid cached artifact and enable again. Never run an unverified binary.",
+            );
           const executable = join(
             directory,
             `cloudflared-${cloudflaredVersion}${platform.startsWith("win32-") ? ".exe" : ""}`,
