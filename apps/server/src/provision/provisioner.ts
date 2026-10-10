@@ -747,7 +747,19 @@ export function makeProvisioner(options: {
               resource.parent_id,
             );
         }
-        for (const resource of (yield* repo.resources(id)).toReversed()) {
+        const resources = (yield* repo.resources(id)).toReversed();
+        const sendingIndex = resources.findIndex((resource) => resource.kind === "sending");
+        const sendingDnsIndex = resources.findIndex(
+          (resource) =>
+            resource.kind === "dns" &&
+            (resource.parent_id === "sending" || resource.parent_id === "preview"),
+        );
+        if (sendingDnsIndex >= 0 && sendingIndex > sendingDnsIndex) {
+          const [sending] = resources.splice(sendingIndex, 1);
+          if (sending !== undefined) resources.splice(sendingDnsIndex, 0, sending);
+        }
+        let routingUnlocked = false;
+        for (const resource of resources) {
           const remoteId = resource.cloudflare_id;
           if (resource.owned === 1 && remoteId !== null) {
             if (resource.kind === "dns") {
@@ -763,6 +775,14 @@ export function makeProvisioner(options: {
                   )
                 )
                   continue;
+              }
+              if (resource.parent_id === "routing" && !routingUnlocked) {
+                yield* withDns(
+                  id,
+                  "unlock_routing_dns",
+                  api.unlockRoutingDns(zoneOf(row), row.domain),
+                );
+                routingUnlocked = true;
               }
               yield* withDns(id, "delete_dns", api.deleteDns(row.zone_id, remoteId));
             } else if (resource.kind === "sending")
