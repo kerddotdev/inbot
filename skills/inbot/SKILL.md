@@ -8,6 +8,7 @@ description: Use for any email task through Inbot - checking an inbox, reading o
 ## Connect
 
 - MCP: `<base-url>/mcp` (streamable HTTP). REST: `<base-url>/v0`.
+- CLI: set `INBOT_URL` and `INBOT_API_KEY`, then `inbot inboxes list --json`; see [CLI usage](references/cli.md).
 - Send `Authorization: Bearer <api-key>` on every request. The owner gives you the base URL and the key.
 - Your key fixes which inboxes and actions you may use. Anything outside it returns `not_found`.
 

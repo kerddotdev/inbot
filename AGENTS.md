@@ -102,14 +102,14 @@ The local `inbot serve` service owns the encrypted SQLite database and serves RE
 
 **Remote access.** When remote access is enabled, the service provisions a named Cloudflare Tunnel and DNS record through the Cloudflare API and supervises a pinned `cloudflared`. Only allowlisted routes are reachable through the tunnel.
 
-**CLI.** The CLI talks to the service like any other client and never opens the database.
+**CLI.** The implemented `inbot` binary delegates `serve` to the existing server entry. Resource commands authenticate with the home connection or scoped `INBOT_URL` and `INBOT_API_KEY`, call the shared REST endpoints, and decode responses with the shared schemas. It never opens the database. See `apps/cli/README.md` for commands, JSON output, login links, idempotency, and exit codes.
 
 ## Where code lives
 
 `apps/server/src` contains the storage foundation, mailbox service, inbound MIME ingestion and encrypted buffer pulling/reconciliation, delivery Queue pulling, outbound composition and durable outbox, drafts with owner approval and scheduling, authentication, loopback HTTP server, and `serve` entry point. `packages/contracts` contains the shared schemas and HTTP API declarations. `packages/envelope` and `apps/worker` implement inbound encryption and the Email Worker handler. The remaining layout is planned. Create a package only when it has a real implementation.
 
 - `apps/server` - implemented home, key management, encrypted store, mailbox service, inbound MIME parsing and ingestion, outbound composition and durable outbox, Cloudflare REST adapter, delivery event application, API keys, owner bearer and password/session authentication, CSRF protection, single-use login links, explicit static UI serving, HTTP mailbox, draft and send APIs, owner-only draft approval and rejection, scheduled draft sending, streamable HTTP MCP, encrypted transport and inbound settings, inbound decryption/pulling/reconciliation and quarantine, delivery Queue pulling, scoped mail runners, owner-only transport configuration and verification, and owner-only subdomain provisioning with durable inbox routing; planned OAuth and tunnel supervision.
-- `apps/cli` - the `inbot` entry point: service commands and resource commands.
+- `apps/cli` - implemented `inbot` binary, existing server dispatch, authenticated inbox/thread/message/draft/API-key REST commands, single-use owner login links, shared response decoding, JSON and table output, idempotency keys, and stable error exits; domains, transport setup, and service installation remain outside this CLI.
 - `apps/web` - React, Vite, and Tailwind owner UI in the approved design: owner sign-in, mail, API keys, approvals, domains, and mail transport settings use the API through TanStack Query; remote access and other settings still use mock data.
 - `apps/worker` - implemented streaming inbound encryption to R2 and Queue pointers, one ES module bundle, and owner-provisioner upload support; real-account deployment requires explicit authorization.
 - `packages/contracts` - implemented Effect schemas and HTTP API declarations shared by every surface. No handlers or service runtime.
