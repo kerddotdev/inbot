@@ -1,6 +1,6 @@
 # MCP tools
 
-Endpoint: `<base-url>/mcp`, streamable HTTP, protocol `2025-06-18`. Send `Authorization: Bearer <api-key>` on every request. Initialize with `protocolVersion: "2025-06-18"`, keep the returned `Mcp-Session-Id`, and send it with `MCP-Protocol-Version: 2025-06-18` afterwards. stdio and OAuth are not available.
+Endpoint: `<base-url>/mcp`, streamable HTTP, protocol `2025-06-18`. Send `Authorization: Bearer <api-key>` on every request. Initialize with `protocolVersion: "2025-06-18"`, keep the returned `Mcp-Session-Id`, and send it with `MCP-Protocol-Version: 2025-06-18` afterwards. stdio is not available. OAuth clients discover `/.well-known/oauth-protected-resource/mcp` or the metadata URL from `WWW-Authenticate`, register a public client, and request owner-approved access with PKCE S256 and the listener's exact `/mcp` resource. Use the resulting access token as the bearer credential; it cannot cross between local and tunnel listeners.
 
 Each call re-checks the current key, so a revoked or edited key takes effect immediately. A session does not keep permissions of an older bearer.
 

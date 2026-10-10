@@ -241,7 +241,9 @@ test("conceals out-of-scope resources and enforces hidden labels and current per
     headers: { accept: "application/json, text/event-stream" },
   });
   expect(response.status).toBe(401);
-  expect(response.headers.get("www-authenticate")).toBe("Bearer");
+  expect(response.headers.get("www-authenticate")).toBe(
+    `Bearer resource_metadata="${api.url}/.well-known/oauth-protected-resource/mcp", scope="inbot", error="invalid_token"`,
+  );
 });
 
 test("authenticates every MCP HTTP request, supports owner tokens and rejects invalid arguments safely", async ({
@@ -257,7 +259,9 @@ test("authenticates every MCP HTTP request, supports owner tokens and rejects in
           : {}),
       });
       expect(response.status).toBe(401);
-      expect(response.headers.get("www-authenticate")).toBe("Bearer");
+      expect(response.headers.get("www-authenticate")).toBe(
+        `Bearer resource_metadata="${api.url}/.well-known/oauth-protected-resource/mcp", scope="inbot"${token === null ? "" : ', error="invalid_token"'}`,
+      );
       expect(Schema.decodeUnknownSync(ErrorResponse)(await response.json()).code).toBe(
         "unauthorized",
       );

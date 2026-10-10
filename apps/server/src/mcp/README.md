@@ -14,12 +14,12 @@ The initialized notification receives HTTP 202. OAuth, stdio, resumable MCP even
 streams, and remote tunnel exposure are not implemented here. Mail events support
 replay through the separate authenticated `/v0/ws` WebSocket.
 
-Every HTTP request requires `Authorization: Bearer <owner-token-or-api-key>`
+Every HTTP request requires `Authorization: Bearer <owner-token-api-key-or-oauth-access-token>`
 or an owner browser session cookie. Cookie-authenticated POST/DELETE requests
 also require `X-Inbot-CSRF`; see [owner authentication](../http/README.md#owner-browser-authentication).
 An Authorization header takes precedence over cookies.
 Missing, invalid, expired, and revoked credentials return HTTP 401 with
-`WWW-Authenticate: Bearer`. Foreign browser origins are rejected. Tools
+`WWW-Authenticate: Bearer resource_metadata="<origin>/.well-known/oauth-protected-resource/mcp", scope="inbot"`. Foreign browser origins are rejected. Tools
 reauthenticate the current request, never a captured session credential or a
 registration-time principal. Effect dispatches tool handlers in request fibers;
 the registrations capture only the service handles and read request headers at
@@ -138,3 +138,5 @@ read-only, deletes destructive, and updates/deletes idempotent. Creation returns
 the secret once; header reads expose names only. Required permissions are named
 in descriptions and enforced by the service. No stream subscription or owner-only
 domain, session, settings, or key tools are added.
+
+OAuth-capable MCP clients can connect without an API key after browser approval by the owner. See [OAuth authorization](../oauth/README.md).

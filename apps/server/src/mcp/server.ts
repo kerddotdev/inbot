@@ -10,6 +10,7 @@ import { Webhooks } from "../events/webhooks.js";
 import * as Threads from "../../../../packages/contracts/src/threads.js";
 import * as Lists from "../../../../packages/contracts/src/lists.js";
 import { CurrentPrincipal } from "../../../../packages/contracts/src/security.js";
+import { OAuth } from "../oauth/service.js";
 import { ApiKeys } from "../auth/api-keys.js";
 import { OwnerAuth } from "../auth/owner.js";
 import { AgentOperations } from "../agent/operations.js";
@@ -123,6 +124,7 @@ export const McpTools = (origin: string) =>
       const operations = yield* AgentOperations;
       const owner = yield* OwnerAuth;
       const keys = yield* ApiKeys;
+      const oauth = yield* OAuth;
       const sessions = yield* OwnerSessions;
       const webhooks = yield* Webhooks;
 
@@ -174,7 +176,7 @@ export const McpTools = (origin: string) =>
                   : undefined;
               const principal =
                 session === undefined
-                  ? yield* authenticatePrincipal(Redacted.make(bearer), owner, keys)
+                  ? yield* authenticatePrincipal(Redacted.make(bearer), owner, keys, oauth)
                   : { kind: "owner" as const };
               const decoded = yield* Schema.decodeUnknownEffect(parameters)(input ?? {}, {
                 onExcessProperty: "error",

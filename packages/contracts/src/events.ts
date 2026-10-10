@@ -154,6 +154,13 @@ export const DomainVerifiedEvent = Schema.Struct({
 }).annotate({ identifier: "DomainVerifiedEvent" });
 export type DomainVerifiedEvent = typeof DomainVerifiedEvent.Type;
 
+export const OAuthGrantEvent = Schema.Struct({
+  type: Schema.Literal("event"),
+  event_type: Schema.Literals(["oauth.authorized", "oauth.revoked", "oauth.tokens_revoked"]),
+  event_id: Schema.String,
+  oauth: Schema.Struct({ grant_id: Schema.String, client_id: Schema.String, timestamp: Timestamp }),
+});
+
 export const EventEnvelope = Schema.Struct({
   type: Schema.Literal("event"),
   event_type: EventType,
@@ -172,6 +179,7 @@ export const Event = Schema.Union([
   MessageSendUnknownEvent,
   DraftEvent,
   DomainVerifiedEvent,
+  OAuthGrantEvent,
 ]).annotate({ identifier: "Event" });
 export type Event = typeof Event.Type;
 

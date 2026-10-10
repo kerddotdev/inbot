@@ -259,3 +259,5 @@ rejected. Status distinguishes disabled, provisioning, connecting, connected and
 action_required; it never includes tunnel credentials. After a client timeout,
 inspect status and retry the same hostname to reconcile, or disable to clean up.
 See [remote access](../server/src/remote/README.md) for the exact tunnel policy.
+
+`inbot oauth clients` lists approved OAuth grants as owner; `inbot oauth revoke <grant_id>` revokes a grant and every associated token. `inbot oauth purge` deletes unused client registrations without revoking existing grants and reports `deleted_clients`. These management commands use the local owner API.

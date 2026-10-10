@@ -63,7 +63,7 @@ and does not enqueue. Configure the transport in Settings > Mail transport or th
 Webhook CRUD/header routes and authenticated `/v0/ws` are implemented; see
 [event delivery](../events/README.md) for scope, signing, SSRF guards, retries,
 resume and the owner cookie/CSRF handshake. Optional [remote access](../remote/README.md)
-guards these routes on a separate tunnel listener. OAuth remains planned. The same server
+guards these routes on a separate tunnel listener. OAuth authorization is implemented. The same server
 exposes authenticated streamable HTTP MCP at `/mcp`; see
 [the MCP reference](../mcp/README.md).
 
@@ -410,3 +410,43 @@ scope/send policy, and accepts secure owner browser sessions with CSRF and exact
 public Host/Origin checks. Download URLs use the public HTTPS origin. Ordinary
 loopback requests keep their existing behavior. Remote access uses migration 12
 after lists (10) and events (11); the runner remains strict.
+
+## OAuth clients
+
+Public clients discover path-specific resources at
+`/.well-known/oauth-protected-resource/mcp` and `/.well-known/oauth-protected-resource/v0`.
+The root `/.well-known/oauth-protected-resource` describes the origin itself.
+`/.well-known/oauth-authorization-server` advertises PKCE S256 and issuer responses.
+Protocol routes are `/oauth/register`, `/oauth/authorize`, `/oauth/authorize/details`,
+`/oauth/token`, and `/oauth/revoke`. Public requests ignore unknown parameters.
+Registration accepts common DCR metadata and returns the supported grant-type subset;
+invalid metadata returns `invalid_client_metadata`. Native private-use scheme redirects
+are supported; loopback callback ports may vary at authorization, but the token
+exchange binds the exact callback, including its port. Authorization responses include
+`iss`; errors redirect with `error` and `state` only after callback validation.
+
+Consent requires an owner browser session, exact Origin and CSRF on POST, and its
+body remains strict. Public discovery, registration, token and revocation routes permit
+any Origin without credentials and support OPTIONS. Consent and owner routes never
+permit cross-origin requests or credentialed CORS.
+
+PKCE S256 and the listener's exact `resource` are mandatory. The loopback listener
+always advertises loopback URLs; the tunnel advertises its usable public HTTPS origin.
+Opaque tokens share API key grants but are bound to that listener and MCP or REST;
+owner-only routes reject them. 401 challenges include the matching `resource_metadata`
+URL and add `error="invalid_token"` for invalid presented credentials.
+
+Owner-only local `GET /v0/owner/oauth/clients` lists approved grants;
+`DELETE /v0/owner/oauth/grants/:grant_id` revokes them and all credentials.
+`POST /v0/owner/oauth/clients/purge` deletes registrations without grants and returns
+`{ "deleted_clients": <count> }`. These routes are blocked over the tunnel and never
+exposed as MCP tools. The owner UI and `inbot oauth clients|revoke|purge` use the same API.
+Unexchanged consent grants expire with their five-minute codes. Unapproved client
+registrations expire after 24 hours. Loopback and tunnel rate buckets are separate;
+only the dedicated cloudflared listener trusts `CF-Connecting-IP` for per-IP buckets.
+It must receive Internet traffic exclusively from cloudflared, with the owner's host
+trusted. The loopback listener ignores proxy headers; unknown client IDs cannot spend
+the token bucket.
+
+See [OAuth security and lifecycle](../oauth/README.md) for migration 13,
+registration limits, refresh rotation, family reuse detection and event handling.

@@ -18,8 +18,21 @@ export function tunnelRoute(url: string): TunnelRoute {
   if (path === "/mcp") return "agent";
   if (path === "/v0/ws") return "agent";
   if (path.startsWith("/mcp/")) return "blocked";
-  if (["/oauth", "/.well-known"].some((prefix) => path === prefix || path.startsWith(`${prefix}/`)))
+  if (["/oauth/authorize", "/oauth/authorize/details"].includes(path)) return "auth";
+  if (
+    [
+      "/oauth/register",
+      "/oauth/token",
+      "/oauth/revoke",
+      "/.well-known/oauth-authorization-server",
+      "/.well-known/oauth-protected-resource",
+      "/.well-known/oauth-protected-resource/mcp",
+      "/.well-known/oauth-protected-resource/v0",
+    ].includes(path)
+  )
     return "agent";
+  if (["/oauth", "/.well-known"].some((prefix) => path === prefix || path.startsWith(`${prefix}/`)))
+    return "blocked";
   if (
     [
       "/v0/owner/status",
