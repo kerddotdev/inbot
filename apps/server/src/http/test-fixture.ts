@@ -13,6 +13,10 @@ import { Outbox, type OutboxService } from "../outbound/outbox.js";
 import { OutboundProvider, type ProviderMessage } from "../outbound/cloudflare.js";
 import { TransportConfig } from "../outbound/transport-config.js";
 import { Store } from "../store.js";
+import { InboundConfig } from "../inbound/config.js";
+import { memoryBuffer } from "../inbound/cloudflare.js";
+import { fakeCloudflare } from "../provision/fake-cloudflare.js";
+import { makeProvisioner, Provisioner } from "../provision/provisioner.js";
 import { startHttpServer } from "./server.js";
 
 const inboxId = "agent@example.test";
@@ -67,12 +71,13 @@ export async function fixture(home: string, options: { readonly webRoot?: string
         ),
       ),
     );
-    const services = await run(
+    const baseServices = await run(
       Layer.buildWithScope(
         Layer.mergeAll(
           Mailbox.Live,
           ApiKeys.Live,
           TransportConfig.Live,
+          InboundConfig.Live,
           Drafts.Live.pipe(Layer.provideMerge(outbound)),
         ).pipe(
           Layer.provideMerge(TransportConfig.Live),
@@ -83,6 +88,18 @@ export async function fixture(home: string, options: { readonly webRoot?: string
       ),
       Context.empty(),
     );
+    const cloud = fakeCloudflare();
+    const provisioner = makeProvisioner({
+      store: Context.get(baseServices, Store),
+      api: cloud.service,
+      buffer: memoryBuffer().service,
+      dns: { check: (records) => Effect.succeed(records) },
+      inbound: Context.get(baseServices, InboundConfig),
+      transport: Context.get(baseServices, TransportConfig),
+      mailbox: Context.get(baseServices, Mailbox),
+      readWorker: async () => "export default { email() {} };",
+    });
+    const services = Context.add(baseServices, Provisioner, provisioner);
     dek.fill(0);
     let setupCode: string | undefined;
     const server = await run(
@@ -134,6 +151,8 @@ export async function fixture(home: string, options: { readonly webRoot?: string
     return {
       home,
       setupCode,
+      cloud,
+      provisioner,
       url: server.url,
       token: connection.token,
       raw,

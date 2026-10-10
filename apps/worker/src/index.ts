@@ -1,5 +1,7 @@
-import { encrypt, frameInbound, maxMessageSize } from "../../../packages/envelope/src/index.js";
-import { createInboundKey, type InboundPointer } from "../../../packages/envelope/src/pointer.js";
+import { encrypt } from "../../../packages/envelope/src/crypto.js";
+import { frameInbound, maxMessageSize } from "../../../packages/envelope/src/frame.js";
+import { createInboundKey } from "../../../packages/envelope/src/key.js";
+import type { InboundPointer } from "../../../packages/envelope/src/pointer.js";
 
 export interface Env {
   readonly INBOUND_BUCKET: Pick<R2Bucket, "put">;

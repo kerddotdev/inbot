@@ -43,6 +43,16 @@ export const DomainsApi = HttpApiGroup.make("domains")
       success: HttpApiSchema.Empty(200),
       error: Errors.WriteErrors,
     }),
+    HttpApiEndpoint.post("domains_apply", "/v0/domains/:domain_id/apply", {
+      params: { domain_id: Common.DomainId },
+      success: Domains.Domain,
+      error: Errors.WriteErrors,
+    }),
+    HttpApiEndpoint.post("domains_teardown", "/v0/domains/:domain_id/teardown", {
+      params: { domain_id: Common.DomainId },
+      success: Domains.Domain,
+      error: Errors.WriteErrors,
+    }),
   )
   .middleware(OwnerOnly)
   .middleware(BearerAuth);

@@ -18,12 +18,12 @@ pnpm start:server --home /path/to/explicit/inbot-home --port 0 --init
 Choose an explicit home directory for development. Initialization uses the OS
 keychain. Later starts omit `--init` and unlock through the keychain. The server
 prints its URL once and writes the owner token to the home directory's private
-`connection.json`. Sending requires a configured Cloudflare transport. Draft CRUD,
-owner approval, and scheduled sending are implemented; lists, webhooks, and domains return
-`not_supported`. Passphrase startup remains planned. Before password setup, the
-server prints a one-time owner setup code. Browser sessions require CSRF on
-unsafe requests. Build the presentational UI with `pnpm web:build` and pass
-`--web-root /absolute/path/to/apps/web/dist` to serve it on the loopback origin.
+`connection.json`. Sending and domain provisioning require a configured Cloudflare
+transport. Draft CRUD, owner approval, and scheduled sending are implemented; lists
+and webhooks return `not_supported`. Passphrase startup remains planned. Before
+password setup, the server prints a one-time owner setup code. Browser sessions
+require CSRF on unsafe requests. Build the presentational UI with `pnpm web:build`
+and pass `--web-root /absolute/path/to/apps/web/dist` to serve it on the loopback origin.
 
 Inbound and delivery pulling require internal encrypted buffer configuration and
 the existing Cloudflare transport token. `serve` starts their scoped loops after
@@ -31,3 +31,9 @@ unlock, including startup and periodic inbound reconciliation. Owner transport
 setup routes are not implemented. Inbound R2 stores ciphertext only; provider-generated delivery
 events can contain plaintext subjects in their Queue until acknowledged. See the
 linked consumer documentation for configuration, quarantine, and API boundaries.
+
+The owner-only [domain API and subdomain provisioner](apps/server/src/provision/README.md)
+plan and provision Cloudflare infrastructure with apex DNS protection, encrypted
+self-test verification, exact teardown, and durable inbox routing jobs.
+`pnpm build` ships a single Worker bundle; real-account deployment is not part of
+build or tests.

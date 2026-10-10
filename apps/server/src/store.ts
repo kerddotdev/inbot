@@ -8,6 +8,7 @@ import { Home } from "./home.js";
 import { apiKeysSchema, ownerSessionsSchema } from "./auth/schema.js";
 import { mailboxSchema } from "./mailbox/schema.js";
 import { outboxSchema, transportConfigSchema } from "./outbound/schema.js";
+import { provisionSchema } from "./provision/schema.js";
 
 export class DatabaseKeyInvalid extends Schema.TaggedError<DatabaseKeyInvalid>()(
   "DatabaseKeyInvalid",
@@ -42,6 +43,7 @@ export const migrations: readonly Migration[] = [
   { version: 6, sql: inboundSchema },
   { version: 7, sql: draftsSchema },
   { version: 8, sql: ownerSessionsSchema },
+  { version: 9, sql: provisionSchema },
 ];
 
 export function migrate(database: Database.Database, ordered: readonly Migration[] = migrations) {

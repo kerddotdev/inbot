@@ -1,6 +1,6 @@
 import { createServer } from "node:http";
 import { NodeHttpServer } from "@effect/platform-node";
-import { Cause, Context, Effect, Layer, Redacted, Result, Schema } from "effect";
+import { Cause, Context, Effect, Layer, Option, Redacted, Result, Schema } from "effect";
 import { HttpRouter, HttpServerError, HttpServerRequest, HttpServerResponse } from "effect/http";
 import { HttpApiBuilder, HttpApiError } from "effect/http-api";
 import { ApiKeys } from "../auth/api-keys.js";
@@ -10,6 +10,10 @@ import { ownerHandlers } from "./owner.js";
 import { CurrentOwnerSession, cookieName, matchesCsrf, sessionCookie } from "./owner-session.js";
 import { staticWeb, webSecurityHeaders } from "./static.js";
 import { OwnerAuth } from "../auth/owner.js";
+import { InboundConfig } from "../inbound/config.js";
+import { CloudflareApi } from "../provision/cloudflare-api.js";
+import { PublicDns } from "../provision/dns.js";
+import { Provisioner } from "../provision/provisioner.js";
 import { Home } from "../home.js";
 import { Mailbox } from "../mailbox/mailbox.js";
 import { AgentOperations } from "../agent/operations.js";
@@ -48,6 +52,25 @@ export function startHttpServer(
     const outbox = yield* Outbox;
     const config = yield* TransportConfig;
     const drafts = yield* Drafts;
+    const supplied = yield* Effect.serviceOption(Provisioner);
+    const provisioner = Option.isSome(supplied)
+      ? supplied.value
+      : yield* Provisioner.pipe(
+          Effect.provide(
+            Provisioner.Live.pipe(
+              Layer.provide(
+                Layer.mergeAll(
+                  CloudflareApi.live().pipe(Layer.provide(Layer.succeed(TransportConfig, config))),
+                  PublicDns.live(),
+                  InboundConfig.Live.pipe(Layer.provide(Layer.succeed(Store, store))),
+                  Layer.succeed(Store, store),
+                  Layer.succeed(TransportConfig, config),
+                  Layer.succeed(Mailbox, mailbox),
+                ),
+              ),
+            ),
+          ),
+        );
     const nodeServer = createServer();
     const server = yield* NodeHttpServer.make(() => nodeServer, {
       host: "127.0.0.1",
@@ -65,6 +88,7 @@ export function startHttpServer(
       Layer.succeed(ApiKeys, keys),
       Layer.succeed(Outbox, outbox),
       Layer.succeed(Drafts, drafts),
+      Layer.succeed(Provisioner, provisioner),
       Layer.succeed(TransportConfig, config),
       Downloads.layer(url),
       OwnerAuth.layer(url).pipe(Layer.provide(Layer.succeed(Home, home))),

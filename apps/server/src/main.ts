@@ -15,6 +15,10 @@ import { Mailbox } from "./mailbox/mailbox.js";
 import { Outbox } from "./outbound/outbox.js";
 import { TransportConfig } from "./outbound/transport-config.js";
 import { ConfiguredProvider } from "./outbound/runtime.js";
+import { CloudflareApi } from "./provision/cloudflare-api.js";
+import { PublicDns } from "./provision/dns.js";
+import { Provisioner } from "./provision/provisioner.js";
+import { startProvisionLoop } from "./provision/runtime.js";
 import { Store } from "./store.js";
 
 function options():
@@ -108,12 +112,21 @@ async function serve() {
         Layer.provide(ConfiguredProvider),
         Layer.provideMerge(config),
       );
-      const services = Layer.mergeAll(
+      const baseServices = Layer.mergeAll(
         Mailbox.Live,
         ApiKeys.Live,
         InboundConfig.Live,
         Drafts.Live.pipe(Layer.provideMerge(outbound)),
       ).pipe(Layer.provideMerge(store));
+      const services = Provisioner.Live.pipe(
+        Layer.provideMerge(
+          Layer.mergeAll(
+            baseServices,
+            PublicDns.live(),
+            CloudflareApi.live().pipe(Layer.provide(config)),
+          ),
+        ),
+      );
       yield* Effect.gen(function* () {
         const server = yield* startHttpServer({
           port: input.port,
@@ -125,9 +138,11 @@ async function serve() {
         });
         const inbound = yield* startInboundLoop();
         const events = yield* startEventsLoop();
+        const provision = yield* startProvisionLoop();
         const runners = [
           inbound,
           events,
+          provision,
           ...(server.runner === undefined ? [] : [server.runner]),
           ...(server.scheduler === undefined ? [] : [server.scheduler]),
         ];
