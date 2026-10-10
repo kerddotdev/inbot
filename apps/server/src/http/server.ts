@@ -4,20 +4,36 @@ import { websocket } from "../events/websocket.js";
 import { createServer } from "node:http";
 import { NodeHttpServer } from "@effect/platform-node";
 import { Cause, Context, Effect, Layer, Option, Redacted, Result, Schema } from "effect";
-import { HttpRouter, HttpServerError, HttpServerRequest, HttpServerResponse } from "effect/http";
+import {
+  Headers,
+  HttpRouter,
+  HttpServerError,
+  HttpServerRequest,
+  HttpServerResponse,
+} from "effect/http";
 import { HttpApiBuilder, HttpApiError } from "effect/http-api";
 import { ApiKeys } from "../auth/api-keys.js";
 import { OwnerSessions } from "../auth/sessions.js";
 import { Store } from "../store.js";
 import { Lists } from "../lists/lists.js";
 import { ownerHandlers } from "./owner.js";
-import { CurrentOwnerSession, cookieName, matchesCsrf, sessionCookie } from "./owner-session.js";
+import {
+  CurrentOwnerSession,
+  CurrentRequestOrigin,
+  cookieName,
+  matchesCsrf,
+  sessionCookie,
+} from "./owner-session.js";
 import { staticWeb, webSecurityHeaders } from "./static.js";
 import { OwnerAuth } from "../auth/owner.js";
 import { InboundConfig } from "../inbound/config.js";
 import { CloudflareApi } from "../provision/cloudflare-api.js";
 import { PublicDns } from "../provision/dns.js";
 import { Provisioner } from "../provision/provisioner.js";
+import { RemoteAccess, makeRemote } from "../remote/remote.js";
+import { makeBinary } from "../remote/binary.js";
+import { RemoteHandlers } from "./remote.js";
+import { tunnelPath, tunnelRoute, TunnelTraffic } from "./tunnel-policy.js";
 import { Home } from "../home.js";
 import { Mailbox } from "../mailbox/mailbox.js";
 import { AgentOperations } from "../agent/operations.js";
@@ -77,6 +93,21 @@ export function startHttpServer(
             ),
           ),
         );
+    const suppliedRemote = yield* Effect.serviceOption(RemoteAccess);
+    const remote = Option.isSome(suppliedRemote)
+      ? suppliedRemote.value
+      : makeRemote({
+          store,
+          provisioner,
+          binary: makeBinary(home.path),
+          api: yield* CloudflareApi.pipe(
+            Effect.provide(
+              CloudflareApi.live().pipe(Layer.provide(Layer.succeed(TransportConfig, config))),
+            ),
+          ),
+        });
+    if (Option.isNone(suppliedRemote))
+      yield* Effect.addFinalizer(() => remote.shutdown().pipe(Effect.orDie));
     const nodeServer = createServer();
     const server = yield* NodeHttpServer.make(() => nodeServer, {
       host: "127.0.0.1",
@@ -108,6 +139,7 @@ export function startHttpServer(
       ownerTransport,
       EventLog.Live.pipe(Layer.provide(Layer.succeed(Store, store))),
       Webhooks.Live.pipe(Layer.provide(Layer.succeed(Store, store))),
+      Layer.succeed(RemoteAccess, remote),
       Layer.succeed(Home, home),
       OwnerSessions.layer(options.setupRequired).pipe(Layer.provide(Layer.succeed(Store, store))),
       Layer.succeed(Mailbox, mailbox),
@@ -123,7 +155,7 @@ export function startHttpServer(
     const owner = Context.get(context, OwnerAuth);
     const sessions = Context.get(context, OwnerSessions);
     const shared = AgentOperations.Live.pipe(Layer.provideMerge(Layer.succeedContext(context)));
-    const handlers = Layer.mergeAll(HandlersLive, ownerHandlers(url)).pipe(
+    const handlers = Layer.mergeAll(HandlersLive, ownerHandlers(url), RemoteHandlers).pipe(
       Layer.provide(Layer.mergeAll(AuthLive, OwnerOnlyLive, WireErrorsLive)),
     );
     const routes = Layer.mergeAll(
@@ -132,20 +164,63 @@ export function startHttpServer(
       mcpRoutes(url),
     ).pipe(Layer.provide(shared));
     const app = yield* HttpRouter.toHttpEffect(routes).pipe(
-      Effect.provideService(HttpRouter.RouterConfig, { maxParamLength: 8192 }),
+      Effect.provideService(HttpRouter.RouterConfig, { caseSensitive: true, maxParamLength: 8192 }),
     );
     const guarded = Effect.gen(function* () {
+      const tunnel = yield* TunnelTraffic;
       const request = yield* HttpServerRequest.HttpServerRequest;
       let routePath: string;
       try {
-        routePath = decodeURIComponent(request.url.split("?")[0] ?? "");
+        routePath = tunnel
+          ? tunnelPath(request.url)
+          : decodeURIComponent(request.url.split("?")[0] ?? "");
       } catch {
         return errorResponse(
           wireError("validation_error", "The request path is invalid.", "Use a valid URL path."),
         );
       }
+      const requestOrigin = tunnel ? yield* remote.publicOrigin() : url;
+      if (requestOrigin === undefined)
+        return errorResponse(
+          wireError(
+            "missing_permission",
+            "Remote access is disabled or requires local action.",
+            "Enable or repair remote access locally.",
+          ),
+        );
+      let policy: ReturnType<typeof tunnelRoute> | undefined;
+      if (tunnel) {
+        try {
+          policy = tunnelRoute(request.url);
+        } catch {
+          return errorResponse(
+            wireError(
+              "validation_error",
+              "The tunnel request path is invalid.",
+              "Use a canonical URL path.",
+            ),
+          );
+        }
+        if (policy === "blocked")
+          return errorResponse(
+            wireError(
+              "missing_permission",
+              "This management route is unavailable over the tunnel.",
+              "Use the local Inbot URL for owner management.",
+            ),
+          );
+        const bearer = request.headers.authorization?.match(/^Bearer\s+(.+)$/i)?.[1] ?? "";
+        if (owner.authenticate(bearer))
+          return errorResponse(
+            wireError(
+              "missing_permission",
+              "The local owner bearer token is not accepted over the tunnel.",
+              "Use a scoped API key or sign in with an owner browser session.",
+            ),
+          );
+      }
       const origin = request.headers.origin;
-      if (request.headers.host !== new URL(url).host)
+      if (request.headers.host !== new URL(requestOrigin).host)
         return errorResponse(
           wireError(
             "missing_permission",
@@ -153,7 +228,7 @@ export function startHttpServer(
             "Use the local server URL.",
           ),
         );
-      if (origin !== undefined && origin !== url)
+      if (origin !== undefined && origin !== requestOrigin)
         return errorResponse(
           wireError(
             "missing_permission",
@@ -163,8 +238,16 @@ export function startHttpServer(
         );
       const session =
         request.headers.authorization === undefined
-          ? yield* sessions.authenticate(request.cookies[cookieName(url)] ?? "")
+          ? yield* sessions.authenticate(request.cookies[cookieName(requestOrigin)] ?? "")
           : undefined;
+      if (tunnel && routePath === "/v0/ws" && session !== undefined && origin !== requestOrigin)
+        return errorResponse(
+          wireError(
+            "missing_permission",
+            "Owner WebSocket sessions require the public HTTPS origin.",
+            "Send the exact public origin in the Origin header.",
+          ),
+        );
       if (
         session !== undefined &&
         !["GET", "HEAD", "OPTIONS"].includes(request.method) &&
@@ -190,7 +273,10 @@ export function startHttpServer(
             ),
           );
       }
-      if (routePath === "/v0/ws") return yield* websocket(url).pipe(Effect.provideContext(context));
+      if (routePath === "/v0/ws")
+        return yield* websocket(requestOrigin).pipe(Effect.provideContext(context));
+      if (tunnel && policy === "web" && session === undefined)
+        return HttpServerResponse.redirect("/login");
       const staticResponse =
         web === undefined ? undefined : yield* web(request.url, request.method);
       if (staticResponse !== undefined) return staticResponse;
@@ -201,6 +287,14 @@ export function startHttpServer(
       }
       const response = yield* app.pipe(
         Effect.provideService(CurrentOwnerSession, session),
+        Effect.provideService(CurrentRequestOrigin, requestOrigin),
+        // The outer guard validates the dynamic public origin before MCP's static origin check.
+        Effect.provideService(
+          HttpServerRequest.HttpServerRequest,
+          tunnel && routePath === "/mcp"
+            ? request.modify({ headers: Headers.remove(request.headers, "origin") })
+            : request,
+        ),
         Effect.catchCause((cause) => {
           const error =
             Result.getOrUndefined(Cause.findError(cause)) ??
@@ -248,9 +342,10 @@ export function startHttpServer(
           return Effect.succeed(unavailable());
         }),
       );
-      return session === undefined || response.cookies.cookies[cookieName(url)] !== undefined
+      return session === undefined ||
+        response.cookies.cookies[cookieName(requestOrigin)] !== undefined
         ? response
-        : sessionCookie(response, url, session);
+        : sessionCookie(response, requestOrigin, session);
     }).pipe(
       Effect.catch(() => Effect.succeed(unavailable())),
       Effect.map((original) => {
@@ -272,12 +367,29 @@ export function startHttpServer(
       }),
     );
     yield* server.serve(guarded);
+    const tunnelNodeServer = createServer();
+    const tunnelServer = yield* NodeHttpServer.make(() => tunnelNodeServer, {
+      host: "127.0.0.1",
+      port: 0,
+      gracefulShutdownTimeout: "5 seconds",
+      websocket: {
+        maxPayload: 8192,
+        perMessageDeflate: false,
+        handleProtocols: (protocols) => (protocols.has("inbot.events") ? "inbot.events" : false),
+      },
+    });
+    const tunnelAddress = tunnelNodeServer.address();
+    if (tunnelAddress === null || typeof tunnelAddress === "string")
+      return yield* Effect.die("Expected a tunnel loopback address");
+    const tunnelUrl = `http://127.0.0.1:${tunnelAddress.port}`;
+    yield* remote.attach(tunnelUrl);
+    yield* tunnelServer.serve(guarded.pipe(Effect.provideService(TunnelTraffic, true)));
     const scheduler =
       options.runOutbox === false || options.runScheduler === false
         ? undefined
         : yield* startDraftLoop();
     const runner = options.runOutbox === false ? undefined : yield* startOutboxLoop();
     yield* Effect.sync(() => options.ready?.(url));
-    return { url, runner, scheduler };
+    return { url, tunnelUrl, remote, runner, scheduler };
   }).pipe(Effect.provide(NodeHttpServer.layerHttpServices));
 }

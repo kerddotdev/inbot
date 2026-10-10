@@ -1,7 +1,9 @@
-import { Effect } from "effect";
+import { Effect, Redacted } from "effect";
 import {
   assertSubdomain,
   sendingEvents,
+  remoteTokenPermission,
+  type Tunnel,
   tokenPermissions,
   type CloudflareApiService,
   type Consumer,
@@ -41,6 +43,8 @@ export function fakeCloudflare() {
       ttl: 3600,
     },
   ];
+  const tunnels = new Map<string, Tunnel>();
+  const tunnelConfigs = new Map<string, { hostname: string; origin: string }>();
   const sending = new Map<string, SendingDomain>();
   const buckets = new Set<string>();
   const queues = new Map<string, Queue>();
@@ -51,7 +55,7 @@ export function fakeCloudflare() {
   const subscriptions = new Map<string, Subscription>();
   const rules = new Map<string, Rule>();
   const routed = new Set<string>();
-  const permissions = new Set(tokenPermissions);
+  const permissions = new Set([...tokenPermissions, remoteTokenPermission]);
   const calls: string[] = [];
   const mutations: string[] = [];
   const state: {
@@ -153,6 +157,65 @@ export function fakeCloudflare() {
   }
   const service: CloudflareApiService = {
     accountId: () => perform("accountId", () => account.id),
+    tunnels: () =>
+      perform("tunnels", () => {
+        if (!permissions.has(remoteTokenPermission)) throw missingPermission(remoteTokenPermission);
+        return Array.from(tunnels.values());
+      }),
+    createTunnel: (name) =>
+      perform(
+        "createTunnel",
+        () => {
+          if (!permissions.has(remoteTokenPermission))
+            throw missingPermission(remoteTokenPermission);
+          const tunnel = { id: id(), name, config_src: "cloudflare" };
+          tunnels.set(tunnel.id, tunnel);
+          return tunnel;
+        },
+        true,
+      ),
+    configureTunnel: (tunnelId, hostname, origin) =>
+      perform(
+        "configureTunnel",
+        () => {
+          if (!tunnels.has(tunnelId)) throw unavailable();
+          tunnelConfigs.set(tunnelId, { hostname, origin });
+        },
+        true,
+      ),
+    tunnelToken: (tunnelId) =>
+      perform("tunnelToken", () => {
+        if (!tunnels.has(tunnelId)) throw unavailable();
+        return Redacted.make(`synthetic-tunnel-token-${tunnelId}`);
+      }),
+    deleteTunnel: (tunnelId) =>
+      perform(
+        `deleteTunnel:${tunnelId}`,
+        () => {
+          tunnels.delete(tunnelId);
+          tunnelConfigs.delete(tunnelId);
+        },
+        true,
+      ),
+    createTunnelDns: (zone, hostname, tunnelId, marker) =>
+      perform(
+        "createTunnelDns",
+        () => {
+          assertSubdomain(zone, hostname);
+          const record = {
+            id: id(),
+            type: "CNAME",
+            name: hostname,
+            content: `${tunnelId}.cfargotunnel.com`,
+            proxied: true,
+            comment: marker,
+            ttl: 1,
+          };
+          dns.push(record);
+          return record;
+        },
+        true,
+      ),
     verifyToken: () =>
       perform("verifyToken", () => {
         for (const permission of tokenPermissions)
@@ -446,6 +509,8 @@ export function fakeCloudflare() {
     zones,
     dns,
     sending,
+    tunnels,
+    tunnelConfigs,
     buckets,
     queues,
     retention,

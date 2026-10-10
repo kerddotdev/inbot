@@ -188,9 +188,11 @@ domain queries and refreshes caches when reconnecting. CLI `inbot events --follo
 prints events, responds to heartbeat, and accepts `--last-event-id` and `--json`.
 
 MCP exposes webhook CRUD/header tools using this service; it has no subscription
-or owner-domain management tools. Remote tunnel supervision is still planned in
-this branch. Its future agent allowlist should include `/v0/ws` and webhook REST
-routes with the same bearer checks, never owner session/setup/settings routes.
+or owner-domain management tools. Optional [remote access](../remote/README.md)
+allows `/v0/ws` and webhook REST routes with the same agent permissions and inbox
+scope. Its request guard rejects local owner bearer tokens before WebSocket
+upgrades. Owner browser upgrades require the exact public HTTPS Origin and CSRF
+subprotocol; local management routes remain excluded.
 
 ## Migration and verification
 

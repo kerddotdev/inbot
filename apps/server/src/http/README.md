@@ -62,7 +62,8 @@ and does not enqueue. Configure the transport in Settings > Mail transport or th
 
 Webhook CRUD/header routes and authenticated `/v0/ws` are implemented; see
 [event delivery](../events/README.md) for scope, signing, SSRF guards, retries,
-resume and the owner cookie/CSRF handshake. Tunnels and OAuth remain planned. The same server
+resume and the owner cookie/CSRF handshake. Optional [remote access](../remote/README.md)
+guards these routes on a separate tunnel listener. OAuth remains planned. The same server
 exposes authenticated streamable HTTP MCP at `/mcp`; see
 [the MCP reference](../mcp/README.md).
 
@@ -283,7 +284,7 @@ owner bearer and opens the browser only with `--browser`.
 
 `locked` is currently false because HTTP starts only after the database unlocks.
 There is no browser database-unlock endpoint. Owner sessions and setup do not
-change agent grants or the planned tunnel allowlist.
+change agent grants or the implemented tunnel allowlist.
 
 ## Static owner UI serving
 
@@ -292,7 +293,7 @@ The path is resolved explicitly; there is no automatic repository or `dist`
 discovery and no UI when the flag is omitted. An invalid root or missing `index.html` fails startup.
 Build the React bundle with `pnpm web:build`. The bundle and owner authentication
 API share the loopback origin. The UI connects owner authentication, mail, API keys, approvals, and mail transport settings to these routes.
-Domains, remote access, and other settings still use mock data. See [owner UI](../../../web/README.md).
+Domains and optional remote access use owner-only APIs; other settings still use mock data. See [owner UI](../../../web/README.md).
 
 GET requests first try files under the canonical web root, then fall back to
 `index.html`. `/v0`, `/mcp`, `/oauth`, and `/.well-known`, including their
@@ -371,5 +372,22 @@ after 30 days unless webhook delivery still needs it; pruned resume IDs fail
 slow clients or oversized events.
 Owner cookie upgrades require exact Origin plus `inbot.events` and
 `csrf.<token>` subprotocols; API keys use a bearer header. See the module README
-for durable resume, heartbeat and revocation. Remote tunnel integration remains
-planned; no remote owner capability is introduced by these routes.
+for durable resume, heartbeat and revocation. The tunnel listener applies its
+policy before upgrades: agent keys retain their
+permissions and inbox scope, owner sessions require the exact public HTTPS Origin
+and CSRF subprotocol, and local owner bearer tokens are rejected.
+
+## Optional remote access
+
+Local owner routes are `GET /v0/owner/remote`,
+`POST /v0/owner/remote/enable` with `{ "hostname": "inbot.example.com" }`, and
+`POST /v0/owner/remote/disable`. Responses contain state, hostname, reason and
+connector version, never credentials. These routes are rejected over the tunnel.
+
+The tunnel has a dedicated loopback listener and the exact allowlist documented
+in [remote access](../remote/README.md#security-boundary-and-exact-allowlist).
+It rejects local owner bearer tokens and management routes, preserves API key
+scope/send policy, and accepts secure owner browser sessions with CSRF and exact
+public Host/Origin checks. Download URLs use the public HTTPS origin. Ordinary
+loopback requests keep their existing behavior. Remote access uses migration 12
+after lists (10) and events (11); the runner remains strict.

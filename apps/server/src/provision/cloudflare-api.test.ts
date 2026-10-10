@@ -399,3 +399,71 @@ test("names routing unlock permission failures while preserving the permission f
     fix: "Grant Zone Settings Write on the configured account or zone, then retry.",
   });
 });
+
+test("remote adapter uses remotely managed tunnels, secret tokens and proxied owned DNS", async () => {
+  const calls: { path: string; method: string; body: unknown }[] = [];
+  const tunnel = { id: "tunnel-id", name: "inbot-remote-synthetic", config_src: "cloudflare" };
+  const api = await service(async (input, options) => {
+    const url = new URL(String(input));
+    const method = options?.method ?? "GET";
+    const body: unknown = typeof options?.body === "string" ? JSON.parse(options.body) : undefined;
+    calls.push({ path: url.pathname + url.search, method, body });
+    if (url.pathname.endsWith("/token")) return response("synthetic-secret");
+    if (url.pathname.endsWith("/dns_records") && method === "POST")
+      return response({
+        id: "dns-id",
+        type: "CNAME",
+        name: "inbot.example.test",
+        content: "tunnel-id.cfargotunnel.com",
+        proxied: true,
+        comment: "inbot:synthetic",
+      });
+    if (method === "GET") return response([tunnel]);
+    return method === "POST" ? response(tunnel) : response(null);
+  });
+  expect(await Effect.runPromise(api.tunnels())).toEqual([tunnel]);
+  await Effect.runPromise(api.createTunnel(tunnel.name));
+  await Effect.runPromise(
+    api.configureTunnel(tunnel.id, "inbot.example.test", "http://127.0.0.1:3456"),
+  );
+  expect(Redacted.value(await Effect.runPromise(api.tunnelToken(tunnel.id)))).toBe(
+    "synthetic-secret",
+  );
+  await Effect.runPromise(
+    api.createTunnelDns(zone, "inbot.example.test", tunnel.id, "inbot:synthetic"),
+  );
+  await Effect.runPromise(api.deleteTunnel(tunnel.id));
+  expect(calls[0]?.path).toContain("cfd_tunnel?is_deleted=false");
+  expect(calls[1]).toMatchObject({
+    method: "POST",
+    body: { name: tunnel.name, config_src: "cloudflare" },
+  });
+  expect(calls[2]).toMatchObject({
+    path: "/client/v4/accounts/account/cfd_tunnel/tunnel-id/configurations",
+    method: "PUT",
+    body: {
+      config: {
+        ingress: [
+          { hostname: "inbot.example.test", service: "http://127.0.0.1:3456" },
+          { service: "http_status:404" },
+        ],
+      },
+    },
+  });
+  expect(calls[4]).toMatchObject({
+    method: "POST",
+    body: {
+      type: "CNAME",
+      name: "inbot.example.test",
+      content: "tunnel-id.cfargotunnel.com",
+      proxied: true,
+      ttl: 1,
+      comment: "inbot:synthetic",
+    },
+  });
+  expect(calls[5]?.method).toBe("DELETE");
+  await expect(
+    Effect.runPromise(api.createTunnelDns(zone, zone.name, tunnel.id, "marker")),
+  ).rejects.toMatchObject({ code: "validation_error" });
+  expect(calls).toHaveLength(6);
+});

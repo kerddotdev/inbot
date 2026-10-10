@@ -5,6 +5,7 @@ import { ThreadsApi } from "../../../packages/contracts/src/api/threads.js";
 import { MessagesApi } from "../../../packages/contracts/src/api/messages.js";
 import { DraftsApi } from "../../../packages/contracts/src/api/drafts.js";
 import { ApiKeysApi } from "../../../packages/contracts/src/api/api-keys.js";
+import { RemoteApiGroup } from "../../../packages/contracts/src/api/remote.js";
 import { OwnerApiGroup } from "../../../packages/contracts/src/api/owner.js";
 import { ListsApi } from "../../../packages/contracts/src/api/lists.js";
 
@@ -146,6 +147,22 @@ export const commands: readonly Command[] = [
     scopedEndpoint: WebhooksApi.endpoints.inboxes_webhooks_updateHeaders,
     params: ["webhook_id"],
     body: { headers: "object", remove_headers: "array" },
+  },
+  {
+    name: "remote status",
+    description: "Inspect optional remote access (owner, local URL).",
+    endpoint: RemoteApiGroup.endpoints.remote_status,
+  },
+  {
+    name: "remote enable",
+    description: "Download the verified connector and provision remote access (owner, local URL).",
+    endpoint: RemoteApiGroup.endpoints.remote_enable,
+    body: { hostname: "string" },
+  },
+  {
+    name: "remote disable",
+    description: "Stop the connector and remove its recorded DNS and tunnel (owner, local URL).",
+    endpoint: RemoteApiGroup.endpoints.remote_disable,
   },
   {
     name: "open",

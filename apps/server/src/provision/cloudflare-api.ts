@@ -10,6 +10,8 @@ export const DnsRecord = Schema.Struct({
   content: Schema.String,
   priority: Schema.optionalKey(Schema.Int),
   ttl: Schema.optionalKey(Schema.Int),
+  proxied: Schema.optionalKey(Schema.Boolean),
+  comment: Schema.optionalKey(Schema.String),
 });
 export type DnsRecord = typeof DnsRecord.Type;
 export const Zone = Schema.Struct({
@@ -58,6 +60,15 @@ export const Subscription = Schema.Struct({
   events: Schema.Array(Schema.String),
 });
 export type Subscription = typeof Subscription.Type;
+export const Tunnel = Schema.Struct({
+  id: Schema.String,
+  name: Schema.String,
+  config_src: Schema.optionalKey(Schema.String),
+  remote_config: Schema.optionalKey(Schema.Boolean),
+});
+export type Tunnel = typeof Tunnel.Type;
+export const remoteTokenPermission = "Cloudflare Tunnel Write";
+
 export const sendingEvents = [
   "message.delivered",
   "message.deferred",
@@ -86,6 +97,17 @@ export interface WorkerInput {
 }
 export interface CloudflareApiService {
   readonly accountId: () => ApiEffect<string>;
+  readonly tunnels: () => ApiEffect<readonly Tunnel[]>;
+  readonly createTunnel: (name: string) => ApiEffect<Tunnel>;
+  readonly configureTunnel: (id: string, hostname: string, origin: string) => ApiEffect<void>;
+  readonly tunnelToken: (id: string) => ApiEffect<Redacted.Redacted<string>>;
+  readonly deleteTunnel: (id: string) => ApiEffect<void>;
+  readonly createTunnelDns: (
+    zone: Zone,
+    hostname: string,
+    tunnelId: string,
+    marker: string,
+  ) => ApiEffect<DnsRecord>;
   readonly verifyToken: () => ApiEffect<void>;
   readonly zones: (name: string) => ApiEffect<readonly Zone[]>;
   readonly dns: (zoneId: string) => ApiEffect<readonly DnsRecord[]>;
@@ -158,6 +180,7 @@ const ApiEnvelope = Schema.Struct({
 function operationName(path: string, method = "GET") {
   const resources: ReadonlyArray<readonly [string, string]> = [
     ["/tokens/verify", "token verification"],
+    ["/cfd_tunnel", "tunnel"],
     ["/dns_records/export", "DNS export"],
     ["/dns_records", "DNS records"],
     ["/email/sending/subdomains", "sending subdomain"],
@@ -304,6 +327,48 @@ export class CloudflareApi extends Context.Service<CloudflareApi, CloudflareApiS
           );
         return {
           accountId,
+          tunnels: () => aList("/cfd_tunnel?is_deleted=false", remoteTokenPermission, Tunnel),
+          createTunnel: (name) =>
+            aCreate("/cfd_tunnel", remoteTokenPermission, Tunnel, {
+              name,
+              config_src: "cloudflare",
+            }),
+          configureTunnel: (id, hostname, origin) =>
+            aMutate(
+              `/cfd_tunnel/${encodeURIComponent(id)}/configurations`,
+              remoteTokenPermission,
+              "PUT",
+              {
+                config: {
+                  ingress: [{ hostname, service: origin }, { service: "http_status:404" }],
+                },
+              },
+            ),
+          tunnelToken: (id) =>
+            Effect.flatMap(account(`/cfd_tunnel/${encodeURIComponent(id)}/token`), (path) =>
+              Effect.map(
+                get(path, remoteTokenPermission, Schema.String.check(Schema.isMinLength(1))),
+                Redacted.make,
+              ),
+            ),
+          deleteTunnel: (id) =>
+            aMutate(`/cfd_tunnel/${encodeURIComponent(id)}`, remoteTokenPermission, "DELETE"),
+          createTunnelDns: (zone, hostname, tunnelId, marker) =>
+            Effect.gen(function* () {
+              yield* Effect.try({
+                try: () => assertSubdomain(zone, hostname),
+                catch: () => invalid("A literal tunnel subdomain is required."),
+              });
+              const response = yield* request(z(zone.id, "/dns_records"), "DNS Write", "POST", {
+                type: "CNAME",
+                name: hostname,
+                content: `${tunnelId}.cfargotunnel.com`,
+                proxied: true,
+                ttl: 1,
+                comment: marker,
+              });
+              return yield* decode(DnsRecord, response.result, "POST tunnel DNS");
+            }),
           verifyToken: () =>
             Effect.gen(function* () {
               const path = yield* account("/tokens/verify");

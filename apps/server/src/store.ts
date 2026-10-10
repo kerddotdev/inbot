@@ -9,6 +9,7 @@ import { Home } from "./home.js";
 import { apiKeysSchema, ownerSessionsSchema } from "./auth/schema.js";
 import { mailboxSchema } from "./mailbox/schema.js";
 import { outboxSchema, transportConfigSchema } from "./outbound/schema.js";
+import { remoteSchema } from "./remote/schema.js";
 import { provisionSchema } from "./provision/schema.js";
 import { listsSchema } from "./lists/schema.js";
 
@@ -48,6 +49,7 @@ export const migrations: readonly Migration[] = [
   { version: 9, sql: provisionSchema },
   { version: 10, sql: listsSchema },
   { version: 11, sql: eventsSchema },
+  { version: 12, sql: remoteSchema },
 ];
 
 export function migrate(database: Database.Database, ordered: readonly Migration[] = migrations) {

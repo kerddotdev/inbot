@@ -47,3 +47,15 @@ export const webhooksQuery = queryOptions({
   queryFn: ({ signal }) => api.webhooks(signal),
   staleTime: 0,
 });
+
+export const remoteQuery = queryOptions({
+  queryKey: ["remote"],
+  queryFn: ({ signal }) => api.remote(signal),
+  staleTime: 0,
+  refetchInterval: (query) =>
+    query.state.error ||
+    query.state.data?.state === "disabled" ||
+    query.state.data?.state === "action_required"
+      ? false
+      : 2000,
+});

@@ -14,7 +14,7 @@ import { ApiKeys } from "../auth/api-keys.js";
 import { OwnerAuth } from "../auth/owner.js";
 import { AgentOperations } from "../agent/operations.js";
 import { OwnerSessions } from "../auth/sessions.js";
-import { cookieName } from "../http/owner-session.js";
+import { cookieName, CurrentRequestOrigin } from "../http/owner-session.js";
 import { authenticatePrincipal } from "../auth/bearer.js";
 import { wireError, wireFailure } from "../http/errors.js";
 import { toolResult } from "./results.js";
@@ -168,7 +168,9 @@ export const McpTools = (origin: string) =>
               const bearer = request.headers.authorization?.match(/^Bearer\s+(.+)$/i)?.[1] ?? "";
               const session =
                 request.headers.authorization === undefined
-                  ? yield* sessions.authenticate(request.cookies[cookieName(origin)] ?? "")
+                  ? yield* sessions.authenticate(
+                      request.cookies[cookieName((yield* CurrentRequestOrigin) ?? origin)] ?? "",
+                    )
                   : undefined;
               const principal =
                 session === undefined

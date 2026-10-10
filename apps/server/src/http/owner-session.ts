@@ -12,6 +12,10 @@ export const CurrentOwnerSession = Context.Reference<BrowserSession | undefined>
   "inbot/CurrentOwnerSession",
   { defaultValue: () => undefined },
 );
+export const CurrentRequestOrigin = Context.Reference<string | undefined>(
+  "inbot/CurrentRequestOrigin",
+  { defaultValue: () => undefined },
+);
 export const cookieName = (origin: string) =>
   origin.startsWith("https://") ? "__Host-inbot_session" : "inbot_session";
 export function sessionCookie(
