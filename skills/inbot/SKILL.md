@@ -11,6 +11,7 @@ description: Use for any email task through Inbot - checking an inbox, reading o
 - Events: signed webhooks or authenticated `/v0/ws`; see [events](references/events.md).
 - CLI: set `INBOT_URL` and `INBOT_API_KEY`, then `inbot inboxes list --json`; see [CLI usage](references/cli.md).
 - Send `Authorization: Bearer <api-key>` on every request. The owner gives you the base URL and the key.
+- For cloud agents, use the owner-provided HTTPS remote URL with the same API key; local owner tokens and management routes are unavailable there.
 - Your key fixes which inboxes and actions you may use. Anything outside it returns `not_found`.
 
 ```json

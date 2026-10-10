@@ -14,7 +14,6 @@ import { Shell } from "./components/Shell";
 import { Button, ListMessage, Status } from "./components/ui";
 import { LoadError, ErrorNotice } from "./feedback";
 import { approvalsQuery, inboxesQuery } from "./queries";
-import { remoteAccess } from "./mock";
 import { Approvals } from "./screens/Approvals";
 import { ApiKeys } from "./screens/ApiKeys";
 import { Locked, Login, Setup } from "./screens/Auth";
@@ -37,7 +36,7 @@ function Screen({ route }: { route: OwnerRoute }) {
     case "keys":
       return <ApiKeys />;
     case "remote":
-      return <Remote initial={remoteAccess} />;
+      return <Remote />;
     case "settings":
       return <Settings />;
   }

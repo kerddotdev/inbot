@@ -17,6 +17,7 @@ import { InboundConfig } from "../inbound/config.js";
 import { memoryBuffer } from "../inbound/cloudflare.js";
 import { fakeCloudflare } from "../provision/fake-cloudflare.js";
 import { makeProvisioner, Provisioner } from "../provision/provisioner.js";
+import { RemoteAccess, makeRemote } from "../remote/remote.js";
 import { startHttpServer } from "./server.js";
 
 const inboxId = "agent@example.test";
@@ -105,7 +106,31 @@ export async function fixture(
       mailbox: Context.get(baseServices, Mailbox),
       readWorker: async () => "export default { email() {} };",
     });
-    const services = Context.add(baseServices, Provisioner, provisioner);
+    const connector = { running: false, ready: false, starts: 0, stops: 0 };
+    const remote = makeRemote({
+      store: Context.get(baseServices, Store),
+      api: cloud.service,
+      provisioner,
+      binary: { ensure: () => Effect.succeed("/synthetic/cloudflared") },
+      spawn: async () => {
+        connector.running = true;
+        connector.starts++;
+        return {
+          pid: connector.starts,
+          exited: () => !connector.running,
+          ready: async () => connector.ready && connector.running,
+          stop: async () => {
+            connector.running = false;
+            connector.stops++;
+          },
+        };
+      },
+    });
+    const services = Context.add(
+      Context.add(baseServices, Provisioner, provisioner),
+      RemoteAccess,
+      remote,
+    );
     dek.fill(0);
     let setupCode: string | undefined;
     const server = await run(
@@ -160,6 +185,9 @@ export async function fixture(
       setupCode,
       cloud,
       provisioner,
+      remote,
+      connector,
+      tunnelUrl: server.tunnelUrl,
       url: server.url,
       token: connection.token,
       raw,
@@ -239,7 +267,10 @@ export async function fixture(
           },
           ...(options.body === undefined ? {} : { body: JSON.stringify(options.body) }),
         }),
-      close: () => Effect.runPromise(Scope.close(scope, Exit.void)),
+      close: async () => {
+        await run(remote.shutdown(), Context.empty());
+        await Effect.runPromise(Scope.close(scope, Exit.void));
+      },
     };
   } catch (error) {
     await Effect.runPromise(Scope.close(scope, Exit.void));

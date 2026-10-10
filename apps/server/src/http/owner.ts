@@ -6,7 +6,12 @@ import { OwnerTransport } from "../outbound/owner-transport.js";
 import { OwnerAuth } from "../auth/owner.js";
 import { ServerApi } from "./api.js";
 import { respond, wireError } from "./errors.js";
-import { CurrentOwnerSession, sessionCookie, type BrowserSession } from "./owner-session.js";
+import {
+  CurrentOwnerSession,
+  CurrentRequestOrigin,
+  sessionCookie,
+  type BrowserSession,
+} from "./owner-session.js";
 
 export function ownerHandlers(origin: string) {
   return HttpApiBuilder.group(ServerApi, "owner", (handlers) =>
@@ -25,7 +30,7 @@ export function ownerHandlers(origin: string) {
                 csrf_token: session.csrf_token,
                 expires_at: session.expires_at,
               }),
-              origin,
+              (yield* CurrentRequestOrigin) ?? origin,
               session,
             );
           }),
@@ -74,7 +79,10 @@ export function ownerHandlers(origin: string) {
             Effect.gen(function* () {
               const session = yield* CurrentOwnerSession;
               if (session !== undefined) yield* sessions.revoke(session.id);
-              return sessionCookie(HttpServerResponse.empty({ status: 200 }), origin);
+              return sessionCookie(
+                HttpServerResponse.empty({ status: 200 }),
+                (yield* CurrentRequestOrigin) ?? origin,
+              );
             }),
           ),
         )
@@ -87,7 +95,9 @@ export function ownerHandlers(origin: string) {
               yield* sessions.revoke(params.id);
               const session = yield* CurrentOwnerSession;
               const response = HttpServerResponse.empty({ status: 200 });
-              return session?.id === params.id ? sessionCookie(response, origin) : response;
+              return session?.id === params.id
+                ? sessionCookie(response, (yield* CurrentRequestOrigin) ?? origin)
+                : response;
             }),
           ),
         )

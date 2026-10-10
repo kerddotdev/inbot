@@ -7,6 +7,7 @@ import { CloudflareApi } from "../provision/cloudflare-api.js";
 import { ProvisionError, actionRequired } from "../provision/errors.js";
 import { Provisioner } from "../provision/provisioner.js";
 import { repository } from "../provision/repository.js";
+import { remoteRepository } from "../remote/repository.js";
 import { Store } from "../store.js";
 import { TransportConfig } from "./transport-config.js";
 
@@ -45,6 +46,12 @@ function makeOwnerTransport(
                 }),
             ),
           );
+          const remote = yield* remoteRepository(store).get();
+          if (remote !== undefined && remote.account_id !== settings.account_id)
+            return yield* actionRequired(
+              "Remote access belongs to a different Cloudflare account.",
+              "Disable remote access before changing accounts.",
+            );
           if ((yield* repo.all()).some((domain) => domain.account_id !== settings.account_id))
             return yield* actionRequired(
               "Registered domains belong to a different Cloudflare account.",
@@ -81,6 +88,11 @@ function makeOwnerTransport(
     clear: () =>
       provisioner.withConfigurationLock(
         Effect.gen(function* () {
+          if ((yield* remoteRepository(store).get()) !== undefined)
+            return yield* actionRequired(
+              "Remote access still needs the configured transport.",
+              "Disable remote access before clearing the transport.",
+            );
           for (const domain of yield* repo.all()) {
             if (
               domain.phase !== "registered" ||

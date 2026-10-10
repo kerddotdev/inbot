@@ -42,7 +42,7 @@ Implemented screens:
 Registration requires a configured transport; without one the server's
 `validation_error` message and fix are shown as returned.
 
-Remote access and other Settings sections retain their existing mock data. Browser
+Remote access uses the owner API with explicit download confirmation and observed connector state. Other Settings sections retain their existing mock data. Browser
 database unlock, detailed authentication results, per-inbox unread totals, and
 detailed event-history browsing is unavailable.
 The locked view directs the owner to unlock locally. Mail bodies and attachments

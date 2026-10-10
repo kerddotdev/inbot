@@ -20,6 +20,8 @@ import { CloudflareApi } from "./provision/cloudflare-api.js";
 import { PublicDns } from "./provision/dns.js";
 import { Provisioner } from "./provision/provisioner.js";
 import { startProvisionLoop } from "./provision/runtime.js";
+import { RemoteAccess } from "./remote/remote.js";
+import { startRemoteLoop } from "./remote/runtime.js";
 import { Store } from "./store.js";
 
 function options():
@@ -119,7 +121,7 @@ async function serve() {
         InboundConfig.Live,
         Drafts.Live.pipe(Layer.provideMerge(outbound)),
       ).pipe(Layer.provideMerge(store));
-      const services = Provisioner.Live.pipe(
+      const provisionServices = Provisioner.Live.pipe(
         Layer.provideMerge(
           Layer.mergeAll(
             baseServices,
@@ -127,6 +129,10 @@ async function serve() {
             CloudflareApi.live().pipe(Layer.provide(config)),
           ),
         ),
+      );
+      const services = RemoteAccess.Live.pipe(
+        Layer.provideMerge(provisionServices),
+        Layer.provideMerge(config),
       );
       yield* Effect.gen(function* () {
         const server = yield* startHttpServer({
@@ -141,11 +147,13 @@ async function serve() {
         const events = yield* startEventsLoop();
         const provision = yield* startProvisionLoop();
         const webhooks = yield* startWebhookLoop();
+        const remote = yield* startRemoteLoop();
         const runners = [
           inbound,
           events,
           provision,
           webhooks,
+          remote,
           ...(server.runner === undefined ? [] : [server.runner]),
           ...(server.scheduler === undefined ? [] : [server.scheduler]),
         ];
