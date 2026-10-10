@@ -2,7 +2,7 @@
 
 Inbot is self-hosted, privacy-first email for AI agents. It gives each agent its own inbox on the owner's custom domain and runs on the owner's machine, with mail stored in an encrypted local database. Agents use it through MCP, a CLI, and a REST API. The owner manages it through a local web UI. An optional Cloudflare Tunnel lets cloud-hosted agents reach the local instance with scoped credentials.
 
-The workspace, the home, key management, and encrypted SQLite storage services in `apps/server/src`, and the shared contracts in `packages/contracts` are implemented. There is no runnable email service or public transport yet. Other sections that describe runtime behavior and packages describe the agreed design. Update them as the code lands, and never present a planned capability as implemented.
+The workspace, home, key management, encrypted SQLite storage, mailbox service, inbound MIME ingestion, and authenticated loopback HTTP API in `apps/server/src`, and the shared contracts in `packages/contracts` are implemented. Live mail transport, MCP, and the owner web UI remain planned. Update descriptions as the code lands, and never present a planned capability as implemented.
 
 ## What we never compromise on
 
@@ -70,6 +70,7 @@ Before calling a change done, walk this list and say which entries applied:
 ## Development
 
 - Node 24 and pnpm, with one committed workspace lockfile. Read the root `package.json` for the commands that actually exist. Do not assume a script exists before it lands.
+- Build with `pnpm build`, then run `pnpm start:server --home <explicit-directory> --port 0 --init`. Initialization uses the OS keychain; subsequent starts unlock with it. `connection.json` holds the loopback URL and owner bearer token. See `apps/server/src/http/README.md` for implemented routes and test-only startup.
 - Do not add another package manager, lockfile, automatic Git hook, or install-time script that rewrites repository files.
 - Never deploy, publish packages, push tags, or create releases unless asked.
 - Keep setup and checks independent of private files and machine-specific paths.
@@ -105,9 +106,9 @@ The planned runtime has one local `inbot` service. It serves REST under `/v0`, M
 
 ## Where code lives
 
-`apps/server/src` contains the storage foundation, mailbox service, and inbound MIME ingestion, and `packages/contracts` contains the shared schemas and HTTP API declarations. The remaining layout is planned. Create a package only when it has a real implementation.
+`apps/server/src` contains the storage foundation, mailbox service, inbound MIME ingestion, authentication, loopback HTTP server, and `serve` entry point. `packages/contracts` contains the shared schemas and HTTP API declarations. The remaining layout is planned. Create a package only when it has a real implementation.
 
-- `apps/server` - implemented home, key management, encrypted store, mailbox service, and inbound MIME parsing and ingestion; planned HTTP API, MCP, OAuth, inbound decryption and pulling, outbound pipeline, provisioning, and tunnel supervision.
+- `apps/server` - implemented home, key management, encrypted store, mailbox service, inbound MIME parsing and ingestion, API keys, owner bearer authentication, and HTTP mailbox API; planned MCP, owner web sessions, OAuth, inbound decryption and pulling, outbound pipeline, provisioning, and tunnel supervision.
 - `apps/cli` - the `inbot` entry point: service commands and resource commands.
 - `apps/web` - React, Vite, and Tailwind owner UI.
 - `apps/worker` - Cloudflare Email Worker that encrypts inbound mail into the buffer.

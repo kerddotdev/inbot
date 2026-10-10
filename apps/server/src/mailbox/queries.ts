@@ -39,6 +39,12 @@ export class Where {
 
 export const hiddenLabels = ["spam", "blocked", "unauthenticated", "trash"] as const;
 
+export function inboxScopeWhere(where: Where, inboxIds: readonly string[] | undefined) {
+  if (inboxIds === undefined) return;
+  if (inboxIds.length === 0) where.add("0");
+  else where.add(`i.inbox_id IN (${inboxIds.map(() => "?").join(", ")})`, ...inboxIds);
+}
+
 export function normalizedMailQuery<Q extends MailQuery>(query: Q) {
   return {
     ...query,

@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
+    "start:server": "node dist/apps/server/src/main.js serve",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "lint": "oxlint --deny-warnings apps packages",
@@ -13,6 +14,7 @@
     "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test"
   },
   "dependencies": {
+    "@effect/platform-node": "4.0.2",
     "@napi-rs/keyring": "2.1.0",
     "agentextract": "0.3.0",
     "better-sqlite3-multiple-ciphers": "13.0.3",
@@ -29,5 +31,10 @@
   "engines": {
     "node": ">=24.21.0 <25"
   },
-  "packageManager": "pnpm@10.24.0"
+  "packageManager": "pnpm@10.24.0",
+  "pnpm": {
+    "overrides": {
+      "@effect/platform-node-shared": "4.0.2"
+    }
+  }
 }

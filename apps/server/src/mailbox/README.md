@@ -14,6 +14,8 @@ contract codes and actionable fixes. Storage failures remain `DatabaseError`.
   characters. Local parts and domains are lowercase, domains are converted to
   ASCII, and `client_id` replays the original inbox. Metadata updates merge,
   null values remove keys, and `metadata: null` clears everything.
+  Creation, listing, and search accept an optional inbox allowlist. Creation
+  outside that list rolls back; list and search tokens bind the allowlist.
 - Ingestion: `insertMessage` takes `InsertMessage` from `types.ts`, including
   explicit `inbox_id`, direction, parsed fields, timestamp, `raw` MIME bytes,
   optional attachments with `content` bytes, labels, and aliases. It returns
@@ -35,6 +37,8 @@ contract codes and actionable fixes. Storage failures remain `DatabaseError`.
   grant's scope and enforce permissions. Inbox-scoped reads require an existing
   inbox. Direct resource reads can return hidden mail; caller permissions still
   apply.
+  `resolveThreadInbox(thread_id, scope)` resolves organization routes inside
+  their allowed scope without exposing other inboxes.
 
 ## Storage and threading
 
