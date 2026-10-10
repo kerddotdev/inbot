@@ -59,6 +59,14 @@ export const Domain = Schema.Struct({
 }).annotate({ identifier: "Domain" });
 export type Domain = typeof Domain.Type;
 
+export const ProvisionPlan = Schema.Struct({
+  domain: Schema.String,
+  steps: Schema.Array(Schema.String),
+  records: Schema.Array(VerificationRecord),
+  warnings: Schema.Array(Schema.String),
+}).annotate({ identifier: "ProvisionPlan" });
+export type ProvisionPlan = typeof ProvisionPlan.Type;
+
 export const CreateDomainRequest = Schema.Struct({
   domain: Schema.String,
   allow_conflicting_provider: Schema.optionalKey(Schema.Boolean),

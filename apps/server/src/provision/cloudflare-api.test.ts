@@ -1,0 +1,286 @@
+import { Effect, Layer, Redacted } from "effect";
+import { expect, test } from "vitest";
+import { TransportConfig } from "../outbound/transport-config.js";
+import { CloudflareApi, sendingEvents, type Zone } from "./cloudflare-api.js";
+
+const zone: Zone = { id: "zone", name: "example.test", account: { id: "account" } };
+const domain = "agents.example.test";
+const sending = {
+  id: "sending",
+  tag: "sending",
+  name: domain,
+  enabled: true,
+  preview_enabled: true,
+};
+const rule = {
+  id: "rule",
+  tag: "rule",
+  name: "inbot-rule",
+  enabled: true,
+  matchers: [{ type: "literal", field: "to", value: `bot@${domain}` }],
+  actions: [{ type: "worker", value: ["worker"] }],
+};
+const subscription = {
+  id: "subscription",
+  name: "events",
+  enabled: true,
+  source: { type: "email.sending", zone_id: zone.id, domain },
+  destination: { type: "queues.queue", queue_id: "queue" },
+  events: sendingEvents,
+};
+function service(fetch: typeof globalThis.fetch) {
+  return Effect.runPromise(
+    CloudflareApi.pipe(
+      Effect.provide(
+        CloudflareApi.live({ fetch }).pipe(
+          Layer.provide(
+            Layer.succeed(TransportConfig, {
+              get: () =>
+                Effect.succeed({
+                  account_id: "account",
+                  api_token: Redacted.make("synthetic-token"),
+                }),
+              set: () => Effect.void,
+              clear: () => Effect.void,
+            }),
+          ),
+        ),
+      ),
+    ),
+  );
+}
+function response(result: unknown, result_info?: unknown) {
+  return Response.json({
+    success: true,
+    errors: [],
+    messages: [],
+    result,
+    ...(result_info === undefined ? {} : { result_info }),
+  });
+}
+
+test("uses captured sending/routing/subscription shapes and correct request fields", async () => {
+  const seen: { path: string; method: string; body: unknown }[] = [];
+  const api = await service(async (input, options) => {
+    const url = new URL(String(input));
+    expect(url.origin).toBe("https://api.cloudflare.com");
+    expect(new Headers(options?.headers).get("Authorization")).toBe("Bearer synthetic-token");
+    const method = options?.method ?? "GET";
+    const body: unknown = typeof options?.body === "string" ? JSON.parse(options.body) : undefined;
+    seen.push({ path: url.pathname, method, body });
+    if (url.pathname.endsWith("/tokens/verify")) return response({ id: "token", status: "active" });
+    if (url.pathname.endsWith("/subdomains") && method === "POST") return response(sending);
+    if (url.pathname.endsWith("/subdomains/sending"))
+      return response({ ...sending, preview_enabled: false });
+    if (url.pathname.endsWith("/rules") && method === "POST") return response(rule);
+    if (url.pathname.endsWith("/subscriptions") && method === "POST") return response(subscription);
+    if (url.pathname.endsWith("/consumers") && method === "POST")
+      return response({ consumer_id: "consumer", type: "http_pull" });
+    return response({});
+  });
+  await Effect.runPromise(api.verifyToken());
+  expect(await Effect.runPromise(api.createSending(zone, domain))).toMatchObject({
+    tag: "sending",
+    preview_enabled: true,
+  });
+  await Effect.runPromise(api.disablePreview(zone.id, "sending"));
+  expect((await Effect.runPromise(api.getSending(zone.id, "sending"))).preview_enabled).toBe(false);
+  await Effect.runPromise(api.enableRouting(zone, domain));
+  await Effect.runPromise(api.createRule(zone, `bot@${domain}`, "worker", "inbot-rule"));
+  await Effect.runPromise(api.createConsumer("queue"));
+  await Effect.runPromise(api.configureEventsQueue("queue", "events"));
+  await Effect.runPromise(api.createSubscription(zone.id, domain, "queue", "events"));
+  expect(seen).toContainEqual({
+    path: "/client/v4/zones/zone/email/routing/dns",
+    method: "POST",
+    body: { name: domain },
+  });
+  expect(seen).toContainEqual({
+    path: "/client/v4/zones/zone/email/sending/subdomains/sending",
+    method: "PATCH",
+    body: { preview_enabled: false },
+  });
+  expect(seen.find((request) => request.path.endsWith("/rules"))?.body).toMatchObject({
+    matchers: [{ type: "literal", field: "to", value: `bot@${domain}` }],
+    actions: [{ type: "worker", value: ["worker"] }],
+  });
+  expect(seen.find((request) => request.path.endsWith("/consumers"))?.body).toEqual({
+    type: "http_pull",
+  });
+  expect(seen.find((request) => request.path.endsWith("/queues/queue"))?.body).toMatchObject({
+    settings: { message_retention_period: 300 },
+  });
+  expect(seen.find((request) => request.path.endsWith("/subscriptions"))?.body).toMatchObject({
+    source: { type: "email.sending", zone_id: "zone", domain },
+    destination: { type: "queues.queue", queue_id: "queue" },
+    events: sendingEvents,
+  });
+});
+
+test("uploads one multipart module with public recipient and disables workers.dev and preview URLs", async () => {
+  const requests: { path: string; body: RequestInit["body"] }[] = [];
+  const api = await service(async (input, options) => {
+    requests.push({ path: new URL(String(input)).pathname, body: options?.body });
+    return response({});
+  });
+  await Effect.runPromise(
+    api.uploadWorker({
+      name: "worker",
+      source: "export default { email() {} };",
+      bucket: "bucket",
+      queue: "inbound",
+      recipient: "age1synthetic",
+    }),
+  );
+  await Effect.runPromise(api.disableWorkerPublicUrls("worker"));
+  const body = requests[0]?.body;
+  expect(body).toBeInstanceOf(FormData);
+  if (!(body instanceof FormData)) throw new Error("Expected multipart form");
+  expect(Array.from(body.keys()).sort()).toEqual(["inbound.js", "metadata"]);
+  const metadata = body.get("metadata");
+  if (!(metadata instanceof Blob)) throw new Error("Expected JSON metadata part");
+  const parsed: unknown = JSON.parse(await metadata.text());
+  expect(parsed).toEqual({
+    main_module: "inbound.js",
+    compatibility_date: "2026-10-10",
+    bindings: [
+      { type: "r2_bucket", name: "INBOUND_BUCKET", bucket_name: "bucket" },
+      { type: "queue", name: "INBOUND_QUEUE", queue_name: "inbound" },
+      { type: "plain_text", name: "RECIPIENT", text: "age1synthetic" },
+    ],
+  });
+  expect(requests[1]).toEqual({
+    path: "/client/v4/accounts/account/workers/scripts/worker/subdomain",
+    body: JSON.stringify({ enabled: false, previews_enabled: false }),
+  });
+});
+
+test("refuses apex routing/sending before fetch and never calls the unscoped disable endpoint", async () => {
+  let calls = 0;
+  const api = await service(async () => {
+    calls++;
+    return response({});
+  });
+  await expect(Effect.runPromise(api.createSending(zone, zone.name))).rejects.toMatchObject({
+    code: "validation_error",
+  });
+  await expect(Effect.runPromise(api.enableRouting(zone, zone.name))).rejects.toMatchObject({
+    code: "validation_error",
+  });
+  await expect(Effect.runPromise(api.disableRouting(zone, domain))).rejects.toMatchObject({
+    code: "not_supported",
+  });
+  await expect(
+    Effect.runPromise(api.createRule(zone, "*@example.test", "worker", "rule")),
+  ).rejects.toMatchObject({ code: "validation_error" });
+  expect(calls).toBe(0);
+});
+
+test("names the denied permission without returning provider bodies or credentials", async () => {
+  const api = await service(async () =>
+    Response.json(
+      { success: false, errors: [{ message: "secret provider detail" }] },
+      { status: 403 },
+    ),
+  );
+  await expect(Effect.runPromise(api.createQueue("queue"))).rejects.toMatchObject({
+    code: "missing_permission",
+    message: "The Cloudflare token needs Queues Write.",
+  });
+});
+
+test("paginates zones, DNS, queues and subscriptions and follows R2 cursors", async () => {
+  const calls: URL[] = [];
+  const api = await service(async (input) => {
+    const url = new URL(String(input));
+    calls.push(url);
+    const second = url.searchParams.get("page") === "2";
+    const info = { total_pages: 2 };
+    if (url.pathname.endsWith("/zones")) return response(second ? [zone] : [], info);
+    if (url.pathname.endsWith("/dns_records"))
+      return response(
+        second ? [{ id: "dns", type: "TXT", name: domain, content: "v=spf1 -all" }] : [],
+        info,
+      );
+    if (url.pathname.endsWith("/queues"))
+      return response(second ? [{ queue_id: "queue", queue_name: "inbound" }] : [], info);
+    if (url.pathname.endsWith("/subscriptions"))
+      return response(second ? [subscription] : [], info);
+    if (url.pathname.endsWith("/buckets"))
+      return response(
+        { buckets: [{ name: url.searchParams.has("cursor") ? "second" : "first" }] },
+        url.searchParams.has("cursor") ? {} : { cursor: "next" },
+      );
+    throw new Error("Unexpected endpoint");
+  });
+  expect(await Effect.runPromise(api.zones(zone.name))).toEqual([zone]);
+  expect((await Effect.runPromise(api.dns(zone.id)))[0]?.id).toBe("dns");
+  expect((await Effect.runPromise(api.queues()))[0]?.queue_id).toBe("queue");
+  expect(await Effect.runPromise(api.subscriptions())).toEqual([subscription]);
+  expect(await Effect.runPromise(api.buckets())).toEqual(["first", "second"]);
+  expect(calls[0]?.searchParams.get("account.id")).toBe("account");
+});
+
+test("supports account token verification and treats already deleted recorded resources idempotently", async () => {
+  const paths: string[] = [];
+  const api = await service(async (input, options) => {
+    paths.push(new URL(String(input)).pathname);
+    return options?.method === "DELETE"
+      ? new Response(null, { status: 404 })
+      : response({ id: "token", status: "active" });
+  });
+  await Effect.runPromise(api.verifyToken());
+  await Effect.runPromise(api.deleteQueue("queue"));
+  expect(paths).toEqual([
+    "/client/v4/accounts/account/tokens/verify",
+    "/client/v4/accounts/account/queues/queue",
+  ]);
+});
+
+test.each([401, 403, 404])(
+  "falls back to user token verification when the account endpoint returns %s",
+  async (status) => {
+    const paths: string[] = [];
+    const api = await service(async (input) => {
+      const path = new URL(String(input)).pathname;
+      paths.push(path);
+      return path === "/client/v4/accounts/account/tokens/verify"
+        ? new Response(null, { status })
+        : response({ id: "token", status: "active" });
+    });
+    await Effect.runPromise(api.verifyToken());
+    expect(paths).toEqual([
+      "/client/v4/accounts/account/tokens/verify",
+      "/client/v4/user/tokens/verify",
+    ]);
+  },
+);
+
+test("rejects a token denied by both verification endpoints", async () => {
+  const paths: string[] = [];
+  const api = await service(async (input) => {
+    paths.push(new URL(String(input)).pathname);
+    return new Response(null, { status: 403 });
+  });
+  await expect(Effect.runPromise(api.verifyToken())).rejects.toMatchObject({
+    code: "missing_permission",
+  });
+  expect(paths).toHaveLength(2);
+});
+
+test.each(["disabled", "expired", "unavailable"])(
+  "does not try another endpoint for a token reported as %s",
+  async (status) => {
+    const paths: string[] = [];
+    const api = await service(async (input) => {
+      paths.push(new URL(String(input)).pathname);
+      return status === "unavailable"
+        ? new Response(null, { status: 503 })
+        : response({ id: "token", status });
+    });
+    await expect(Effect.runPromise(api.verifyToken())).rejects.toMatchObject({
+      code: "service_unavailable",
+    });
+    expect(paths).toEqual(["/client/v4/accounts/account/tokens/verify"]);
+  },
+);

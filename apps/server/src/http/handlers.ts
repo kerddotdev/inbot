@@ -4,6 +4,7 @@ import { CurrentPrincipal } from "../../../../packages/contracts/src/security.js
 import { ApiKeys } from "../auth/api-keys.js";
 import { Mailbox } from "../mailbox/mailbox.js";
 import { notFound } from "../mailbox/errors.js";
+import { Provisioner } from "../provision/provisioner.js";
 import { AgentOperations } from "../agent/operations.js";
 import { ServerApi } from "./api.js";
 import { labelsAllowed, visible } from "../agent/authorization.js";
@@ -312,14 +313,23 @@ const WebhooksLive = HttpApiBuilder.group(ServerApi, "webhooks", (handlers) =>
 );
 
 const DomainsLive = HttpApiBuilder.group(ServerApi, "domains", (handlers) =>
-  handlers
-    .handle("domains_list", unsupported)
-    .handle("domains_create", unsupported)
-    .handle("domains_get", unsupported)
-    .handle("domains_update", unsupported)
-    .handle("domains_delete", unsupported)
-    .handle("domains_getZoneFile", unsupported)
-    .handle("domains_verify", unsupported),
+  Effect.gen(function* () {
+    const domains = yield* Provisioner;
+    return handlers
+      .handle("domains_list", ({ query }) => respond(domains.list(query)))
+      .handle("domains_create", ({ payload }) => respond(domains.create(payload)))
+      .handle("domains_get", ({ params }) => respond(domains.get(params.domain_id)))
+      .handle("domains_update", ({ params, payload }) =>
+        respond(domains.update(params.domain_id, payload)),
+      )
+      .handle("domains_delete", ({ params }) => respond(domains.delete(params.domain_id)))
+      .handle("domains_getZoneFile", ({ params }) => respond(domains.zoneFile(params.domain_id)))
+      .handle("domains_verify", ({ params }) =>
+        respond(domains.verify(params.domain_id).pipe(Effect.asVoid)),
+      )
+      .handle("domains_apply", ({ params }) => respond(domains.apply(params.domain_id)))
+      .handle("domains_teardown", ({ params }) => respond(domains.teardown(params.domain_id)));
+  }),
 );
 
 export const HandlersLive = Layer.mergeAll(

@@ -45,6 +45,8 @@ override are 4.0.2, matching the installed Effect version.
   attachment, send, reply, reply-all, forward.
 - Drafts: inbox CRUD, send, attachment; organization list, get, attachment;
   owner-only approve and reject.
+- Domains: owner-only register, list, get, update, delete, verify, BIND zone-file,
+  apply, and teardown. See [provisioning](../provision/README.md) for safety and states.
 - API keys: owner-only organization CRUD and inbox-scoped create, list, update,
   delete. The contract has no inbox-scoped key-get route.
 
@@ -55,9 +57,9 @@ changes the label to `sent`; it does not prove delivery. No configured transport
 returns 503 `service_unavailable` with fix `Configure the Cloudflare mail transport`
 and does not enqueue. Transport settings have only an internal service for now.
 
-Lists, webhooks, and domains return HTTP 501 `not_supported` after
-authentication and authorization. Validated input is still required. Provisioning,
-tunnels, owner UI API wiring, OAuth, and event streams remain planned. The same server
+Lists and webhooks return HTTP 501 `not_supported` after
+authentication and authorization. Validated input is still required. Tunnels,
+owner UI API wiring, OAuth, and event streams remain planned. The same server
 exposes authenticated streamable HTTP MCP at `/mcp`; see
 [the MCP reference](../mcp/README.md).
 
