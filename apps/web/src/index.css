@@ -1,0 +1,142 @@
+@import "tailwindcss";
+
+:root {
+  color-scheme: light;
+  --page: #dedcd6;
+  --win: #faf9f6;
+  --side: #ecebe4;
+  --list: #f6f5f1;
+  --raise: #f1efea;
+  --text: #1f2024;
+  --text2: #5a5d65;
+  --line: rgba(31, 32, 36, 0.13);
+  --accent: #0b6f78;
+  --accent-ink: #f3f8f8;
+  --sel: color-mix(in srgb, var(--accent) 13%, transparent);
+  --hover: rgba(31, 32, 36, 0.055);
+  --ok: #1e7a3c;
+  --warn: #8a5a00;
+  --bad: #b3261e;
+  --shadow: 0 0 0 0.5px rgba(31, 32, 36, 0.25), 0 18px 50px rgba(31, 32, 36, 0.18);
+  --scrim: rgba(31, 32, 36, 0.28);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --page: #141517;
+    --win: #232427;
+    --side: #2a2c30;
+    --list: #1f2023;
+    --raise: #2c2e32;
+    --text: #e9e9eb;
+    --text2: #a2a5ad;
+    --line: rgba(233, 233, 235, 0.13);
+    --accent: #5cc8d0;
+    --accent-ink: #0f2a2d;
+    --hover: rgba(233, 233, 235, 0.07);
+    --ok: #62d08b;
+    --warn: #ebb955;
+    --bad: #ff8f86;
+    --shadow: 0 0 0 0.5px rgba(233, 233, 235, 0.18), 0 18px 50px rgba(10, 10, 12, 0.5);
+    --scrim: rgba(20, 21, 23, 0.55);
+  }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --page: #141517;
+  --win: #232427;
+  --side: #2a2c30;
+  --list: #1f2023;
+  --raise: #2c2e32;
+  --text: #e9e9eb;
+  --text2: #a2a5ad;
+  --line: rgba(233, 233, 235, 0.13);
+  --accent: #5cc8d0;
+  --accent-ink: #0f2a2d;
+  --hover: rgba(233, 233, 235, 0.07);
+  --ok: #62d08b;
+  --warn: #ebb955;
+  --bad: #ff8f86;
+  --shadow: 0 0 0 0.5px rgba(233, 233, 235, 0.18), 0 18px 50px rgba(10, 10, 12, 0.5);
+  --scrim: rgba(20, 21, 23, 0.55);
+}
+
+@theme inline {
+  --color-page: var(--page);
+  --color-win: var(--win);
+  --color-side: var(--side);
+  --color-list: var(--list);
+  --color-raise: var(--raise);
+  --color-ink: var(--text);
+  --color-ink2: var(--text2);
+  --color-line: var(--line);
+  --color-accent: var(--accent);
+  --color-accent-ink: var(--accent-ink);
+  --color-sel: var(--sel);
+  --color-hover: var(--hover);
+  --color-ok: var(--ok);
+  --color-warn: var(--warn);
+  --color-bad: var(--bad);
+  --color-scrim: var(--scrim);
+  --shadow-sheet: var(--shadow);
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+  --font-serif: "Newsreader", "Iowan Old Style", Georgia, serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, monospace;
+  --animate-rise: rise 0.3s ease-out both;
+  --animate-fade: fade 0.25s ease-out both;
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+
+@keyframes fade {
+  from {
+    opacity: 0;
+  }
+}
+
+@layer base {
+  html {
+    background: var(--page);
+  }
+  body {
+    background: var(--win);
+    color: var(--text);
+    font-size: 13px;
+    line-height: 1.45;
+    -webkit-font-smoothing: antialiased;
+  }
+  button,
+  input {
+    font: inherit;
+    color: inherit;
+  }
+  button:not(:disabled),
+  summary {
+    cursor: pointer;
+  }
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+    border-radius: 6px;
+  }
+  input[type="checkbox"],
+  input[type="radio"] {
+    accent-color: var(--accent);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}
