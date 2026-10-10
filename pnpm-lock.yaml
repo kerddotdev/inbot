@@ -36,6 +36,8 @@ importers:
 
   apps/server: {}
 
+  packages/contracts: {}
+
 packages:
 
   '@jridgewell/resolve-uri@3.1.2':
