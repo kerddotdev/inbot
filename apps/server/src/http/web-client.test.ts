@@ -75,6 +75,35 @@ test("browser client uses real owner sessions for mail, keys, approvals, transpo
     expect(
       (await reloaded.thread(thread.inbox_id, thread.thread_id, null, signal())).labels,
     ).toContain("reviewed");
+    const unknown = await api.run(
+      api.outbox.enqueue("agent@example.test", {
+        kind: "send",
+        request: { to: "recipient@example.test", text: "Synthetic uncertainty" },
+      }),
+    );
+    await api.run(
+      api.store.use((db) =>
+        db
+          .prepare(
+            "UPDATE outbox SET state = 'sending', updated_at = updated_at - ? WHERE message_id = ?",
+          )
+          .run(5 * 60_000, unknown.message_id),
+      ),
+    );
+    await api.run(api.outbox.processDue());
+    const uncertain = await reloaded.thread(
+      "agent@example.test",
+      unknown.thread_id,
+      null,
+      signal(),
+    );
+    expect(uncertain.messages[0]?.send_status).toBe("send_unknown");
+    expect(
+      await reloaded.resolveMessage("agent@example.test", unknown.message_id, {
+        decision: "failed",
+      }),
+    ).toMatchObject({ send_status: "failed", send_reason: "owner_confirmed_not_sent" });
+    expect(api.sent).toHaveLength(0);
     const created = await reloaded.createKey({
       name: "Synthetic web key",
       inbox_ids: ["agent@example.test"],

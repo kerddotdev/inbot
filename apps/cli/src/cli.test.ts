@@ -697,3 +697,27 @@ test("remote commands use owner REST, validate hostname and preserve agent rejec
   expect(disabled.code).toBe(0);
   expect(JSON.parse(disabled.stdout)).toMatchObject({ state: "disabled", hostname: null });
 });
+
+test("shows historical unknown sends and resolves only with owner credentials", async ({ api }) => {
+  const sent = await api.run(api.outbox.enqueue(inboxId, { kind: "send", request: payload }));
+  await api.run(
+    api.store.use((db) => {
+      db.prepare("UPDATE outbox SET state = 'sending' WHERE message_id = ?").run(sent.message_id);
+    }),
+  );
+  api.advance(5 * 60_000);
+  await api.run(api.outbox.processDue());
+  const visible = await invoke(api, ["messages", "get", inboxId, sent.message_id]);
+  expect(visible.stdout).toContain("send_unknown");
+  expect(visible.stdout).toContain("unknown_outcome");
+  const key = await agent(api);
+  const command = ["messages", "resolve", inboxId, sent.message_id, "--decision", "failed"];
+  expect((await invoke(api, command, { env: agentEnv(api, key.api_key) })).code).toBe(4);
+  const resolved = await invoke(api, [...command, "--json"]);
+  expect(resolved.code).toBe(0);
+  expect(Schema.decodeUnknownSync(Message)(JSON.parse(resolved.stdout))).toMatchObject({
+    send_status: "failed",
+    send_reason: "owner_confirmed_not_sent",
+  });
+  expect(api.sent).toHaveLength(0);
+});

@@ -26,7 +26,7 @@ Reply, reply-all, and forward also need `message_read` and a parent message you 
 - Threading follows `Message-ID`, `In-Reply-To`, and `References`. Never change subjects to try to join threads. Replies thread automatically. Replies to your own outgoing message require that message to have been accepted by the provider (state `sent`); until then the reply is rejected.
 - Attachments: `content` is canonical base64, with `filename`, `content_type`, `content_disposition` (`inline` or `attachment`), and `content_id` (required for `inline`). `url` attachments fail with `not_supported`.
 - Custom `headers`: only `X-*`, `In-Reply-To`, `References`, and `Auto-Submitted`. Header names are case-insensitive and cannot repeat, names are at most 100 bytes, values at most 2048 bytes, total at most 16 KiB, and at most 20 non-`X-` fields. Replies set their own threading headers. Send and forward refuse threading headers. Line breaks in subject, addresses, or headers are refused.
-- Do not set system labels yourself. `queued`, `sent`, `failed`, and delivery labels are managed by the service and caller-supplied ones are dropped. Other custom labels in `labels` are kept through state changes.
+- Do not set system labels yourself. `queued`, `sent`, `send_unknown`, `failed`, and delivery labels are managed by the service and caller-supplied ones are dropped. Other custom labels in `labels` are kept through state changes.
 
 ## Limits
 
@@ -44,26 +44,29 @@ Exceeding them fails before anything is saved: `validation_error` (recipients, a
 
 A sent message carries labels that record real, observed state. Do not report more than you have seen.
 
-| Label        | Meaning                                                                                 |
-| ------------ | --------------------------------------------------------------------------------------- |
-| `queued`     | Stored locally, waiting for the outbox. Nothing has left the machine yet.               |
-| `sent`       | The mail provider accepted it. Not proof of delivery.                                   |
-| `failed`     | Final failure: rejected permanently, retries exhausted, or outcome unknown (see below). |
-| `delivered`  | The provider reported delivery for at least one recipient.                              |
-| `bounced`    | The provider reported a bounce.                                                         |
-| `complained` | A recipient reported spam.                                                              |
-| `rejected`   | The provider reported a rejection event for the message.                                |
-| `deferred`   | Delivery is delayed and still being retried.                                            |
+| Label          | Meaning                                                                                |
+| -------------- | -------------------------------------------------------------------------------------- |
+| `queued`       | Stored locally, waiting for the outbox. Nothing has left the machine yet.              |
+| `sent`         | The mail provider accepted it. Not proof of delivery.                                  |
+| `failed`       | Send permanently failed without acceptance, or a later delivery failure beside `sent`. |
+| `send_unknown` | Acceptance is unknown. The provider may have sent it. Do not resend; inform the human. |
+| `delivered`    | The provider reported delivery for at least one recipient.                             |
+| `bounced`      | The provider reported a bounce.                                                        |
+| `complained`   | A recipient reported spam.                                                             |
+| `rejected`     | The provider reported a rejection event for the message.                               |
+| `deferred`     | Delivery is delayed and still being retried.                                           |
 
 Delivery labels are observations, not exclusive states. With several recipients a message can be both `delivered` and `bounced`, and `deferred` can sit beside a later final label. A bounce does not remove `sent`.
 
-Read the state with `get_message` (labels) or `GET .../messages/{message_id}`. Inbound mail has `received` and `unread` labels. Outbound mail has direction `sent` internally and the labels above.
+Read the state with `get_message` (`send_status`, optional `send_reason`, and labels) or `GET .../messages/{message_id}`. Inbound mail has `received` and `unread` labels. Outbound mail has direction `sent` internally and the labels above.
 
 ### Outbox behavior
 
 - The outbox sends in the background. Idle checks run every 30 seconds, and every 2 seconds after work. If the service is down, mail stays `queued` and goes out later.
 - Retryable provider failures (429, quota, 5xx) back off from 1 second up to 1 hour, at most 8 attempts, then become `failed`. Permanent failures (invalid message, unverified sender, authentication) become `failed` immediately.
-- A timeout or network error after the request left is not retried automatically, because the provider may already have sent the mail. A send interrupted by a crash that is still `sending` after 5 minutes becomes `failed` with internal error code `unknown_outcome` and is not resent.
+- A timeout, lost response, or crash with an expired 5-minute sending lease becomes `send_unknown`, with `send_reason: "unknown_outcome"`. It is never retried automatically. Do not resend; inform the human.
+- `send_status: "failed"` means the send permanently failed without provider acceptance. A `failed` delivery label beside `send_status: "sent"` records a later delivery failure.
+- Only the local owner can resolve `send_unknown`: `POST .../messages/{id}/resolve` with `{ "decision": "sent" }` after confirming it was sent, or `{ "decision": "failed" }` after confirming it was not sent. Resolution records a durable event and never sends mail. A deliberate retry creates a new message with a new idempotency key. Resolution is unavailable through MCP and the tunnel.
 - A paused inbox keeps messages queued until it is resumed, and refuses new sends.
 
 ## Idempotency and safe retries
@@ -72,7 +75,7 @@ Read the state with `get_message` (labels) or `GET .../messages/{message_id}`. I
 2. If the call returns ids, you are done. The message is `queued`.
 3. If you get a network error, timeout, or `service_unavailable`, retry with the same key and the same payload. If a message was already created you get the original ids back and nothing is sent twice.
 4. Never retry with a new key until you have checked the thread or `list_messages` and confirmed no message exists.
-5. If a message is `failed`, do not resend automatically. In particular `unknown_outcome` means the provider may have delivered it. Report this to your human and let them decide. If they ask you to resend, use a new key.
+5. On `send_unknown`, do not resend. Inform your human; it may already have been delivered. On `failed`, inspect `send_reason` and ask before a new send. Only an explicitly requested resend uses a new key.
 6. `idempotency_conflict` means the key was used for a different request. Do not alter the payload to fit. Use a new key only if the new request is intentional.
 
 A different payload includes a changed recipient order. Array order matters; object key order does not.

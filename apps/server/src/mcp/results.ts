@@ -53,7 +53,16 @@ export function toolResult(input: unknown, isError = false) {
   }
   const identity: Record<string, Schema.Json> = { truncated: true, fix: guidance(json) };
   if (Schema.is(Schema.JsonObject)(json)) {
-    for (const key of ["inbox_id", "message_id", "thread_id", "draft_id", "count", "limit"])
+    for (const key of [
+      "inbox_id",
+      "message_id",
+      "thread_id",
+      "draft_id",
+      "count",
+      "limit",
+      "send_status",
+      "send_reason",
+    ])
       if (
         (typeof json[key] === "string" && json[key].length <= 2048) ||
         typeof json[key] === "number"

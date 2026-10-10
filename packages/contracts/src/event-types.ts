@@ -6,6 +6,7 @@ export const EventType = Schema.Literals([
   "message.received.blocked",
   "message.received.unauthenticated",
   "message.sent",
+  "message.send_unknown",
   "message.delivered",
   "message.bounced",
   "message.complained",

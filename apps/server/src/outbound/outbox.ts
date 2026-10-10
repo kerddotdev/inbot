@@ -3,6 +3,8 @@ import { createHash, randomUUID } from "node:crypto";
 import type Database from "better-sqlite3-multiple-ciphers";
 import { Clock, Context, Effect, Layer, Result, Schema } from "effect";
 import { SendMessageResponse } from "../../../../packages/contracts/src/messages.js";
+import { CurrentPrincipal } from "../../../../packages/contracts/src/security.js";
+import { ResolveMessageRequest } from "../../../../packages/contracts/src/messages.js";
 import { IdempotencyKey } from "../../../../packages/contracts/src/common.js";
 import {
   DeliveryEvent,
@@ -10,9 +12,9 @@ import {
   type OutboundRequest,
 } from "../../../../packages/contracts/src/outbound.js";
 import { Store, type StoreService } from "../store.js";
-import { MailboxError, notFound } from "../mailbox/errors.js";
+import { MailboxError, notFound, validate } from "../mailbox/errors.js";
 import { insertMessage, updateMessage } from "../mailbox/messages.js";
-import { getInbox } from "../mailbox/rows.js";
+import { getInbox, getMessage } from "../mailbox/rows.js";
 import { compose, decodeRequest } from "./compose.js";
 import { OutboundProvider, ProviderMessage, type OutboundProviderService } from "./cloudflare.js";
 import { invalid, OutboundError } from "./errors.js";
@@ -28,6 +30,7 @@ export const MAX_ATTEMPTS = 8;
 export const MAX_BACKOFF_MS = 60 * 60 * 1000;
 const managedLabels = new Set([
   "queued",
+  "send_unknown",
   "sent",
   "failed",
   "delivered",
@@ -93,10 +96,11 @@ function makeOutbox(store: StoreService, provider: OutboundProviderService) {
         db,
         row.inbox_id,
         row.message_id,
-        { add_labels: "failed", remove_labels: "queued" },
+        { add_labels: "send_unknown", remove_labels: ["queued", "failed"] },
         new Date(now).toISOString(),
+        true,
       );
-      outboundEvent(db, row.inbox_id, row.message_id, "failed", now, "unknown_outcome");
+      outboundEvent(db, row.inbox_id, row.message_id, "send_unknown", now, "unknown_outcome");
     }
   };
 
@@ -149,6 +153,7 @@ function makeOutbox(store: StoreService, provider: OutboundProviderService) {
               pending.message_id,
               { add_labels: ["failed", "rejected"], remove_labels: "queued" },
               new Date(now).toISOString(),
+              true,
             );
             outboundEvent(
               db,
@@ -201,10 +206,18 @@ function makeOutbox(store: StoreService, provider: OutboundProviderService) {
                 db,
                 row.inbox_id,
                 row.message_id,
-                { add_labels: "failed", remove_labels: "queued" },
+                { add_labels: "send_unknown", remove_labels: ["queued", "failed"] },
                 timestamp,
+                true,
               );
-              outboundEvent(db, row.inbox_id, row.message_id, "failed", now, "unknown_outcome");
+              outboundEvent(
+                db,
+                row.inbox_id,
+                row.message_id,
+                "send_unknown",
+                now,
+                "unknown_outcome",
+              );
               return;
             }
             db.prepare(
@@ -220,10 +233,12 @@ function makeOutbox(store: StoreService, provider: OutboundProviderService) {
               row.message_id,
               { add_labels: "sent", remove_labels: ["queued", "failed"] },
               timestamp,
+              true,
             );
             outboundEvent(db, row.inbox_id, row.message_id, "sent", now);
           } else {
             const error = result.failure;
+            const status = error.outcome_unknown ? "send_unknown" : "failed";
             const retry = error.retryable && !error.outcome_unknown && row.attempts < MAX_ATTEMPTS;
             const delay = Math.max(
               Math.min(1000 * 2 ** (row.attempts - 1), MAX_BACKOFF_MS),
@@ -244,14 +259,18 @@ function makeOutbox(store: StoreService, provider: OutboundProviderService) {
                 db,
                 row.inbox_id,
                 row.message_id,
-                { add_labels: "failed", remove_labels: "queued" },
+                {
+                  add_labels: status,
+                  remove_labels: ["queued", status === "send_unknown" ? "failed" : "send_unknown"],
+                },
                 timestamp,
+                true,
               );
               outboundEvent(
                 db,
                 row.inbox_id,
                 row.message_id,
-                "failed",
+                status,
                 now,
                 error.outcome_unknown ? "unknown_outcome" : error.code,
               );
@@ -484,6 +503,52 @@ function makeOutbox(store: StoreService, provider: OutboundProviderService) {
         if (row === undefined) throw notFound();
         return Schema.decodeUnknownSync(OutboxEntry)(row);
       }, false),
+    resolve: (inboxId: string, messageId: string, input: ResolveMessageRequest) =>
+      Effect.gen(function* () {
+        if ((yield* CurrentPrincipal).kind !== "owner")
+          return yield* Effect.fail(
+            new OutboundError({
+              code: "missing_permission",
+              message: "This operation requires owner authentication.",
+              fix: "Use local owner authentication.",
+              retryable: false,
+            }),
+          );
+        return yield* run((db, now) => {
+          const { decision } = validate(ResolveMessageRequest, input);
+          getMessage(db, inboxId, messageId);
+          const value = db
+            .prepare("SELECT * FROM outbox WHERE inbox_id = ? AND message_id = ?")
+            .get(inboxId, messageId);
+          if (value === undefined) throw notFound();
+          const row = Schema.decodeUnknownSync(OutboxEntry)(value);
+          const reason = decision === "sent" ? "owner_confirmed_sent" : "owner_confirmed_not_sent";
+          if (row.state === decision && row.last_error_code === reason)
+            return getMessage(db, inboxId, messageId);
+          if (row.state !== "failed" || row.last_error_code !== "unknown_outcome")
+            throw invalid(
+              "Only a send_unknown message can be resolved. Confirm whether it was sent before resolving.",
+            );
+          db.prepare(
+            "UPDATE outbox SET state = ?, last_error_code = ?, updated_at = ? WHERE id = ?",
+          ).run(decision, reason, now, row.id);
+          updateMessage(
+            db,
+            inboxId,
+            messageId,
+            {
+              add_labels: decision,
+              remove_labels: ["queued", "send_unknown", "failed"].filter(
+                (label) => label !== decision,
+              ),
+            },
+            new Date(now).toISOString(),
+            true,
+          );
+          outboundEvent(db, inboxId, messageId, decision, now, reason);
+          return getMessage(db, inboxId, messageId);
+        });
+      }),
     processDue,
     applyDeliveryEvent: (input: DeliveryEvent) =>
       run((db, now) => {
@@ -518,6 +583,7 @@ function makeOutbox(store: StoreService, provider: OutboundProviderService) {
               row.message_id,
               { add_labels: event.status },
               new Date(now).toISOString(),
+              true,
             );
             deliveryEvent(db, row.inbox_id, row.message_id, event, now);
           }

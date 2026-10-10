@@ -23,11 +23,21 @@ export const Addresses = Schema.Union([Schema.String, Schema.Array(Schema.String
 });
 export type Addresses = typeof Addresses.Type;
 
+export const SendStatus = Schema.Literals(["queued", "sending", "sent", "failed", "send_unknown"]);
+export type SendStatus = typeof SendStatus.Type;
+
+export const ResolveMessageRequest = Schema.Struct({
+  decision: Schema.Literals(["sent", "failed"]),
+});
+export type ResolveMessageRequest = typeof ResolveMessageRequest.Type;
+
 export const MessageItem = Schema.Struct({
   inbox_id: InboxId,
   thread_id: ThreadId,
   message_id: MessageId,
   labels: Schema.Array(Schema.String),
+  send_status: Schema.optionalKey(SendStatus),
+  send_reason: Schema.optionalKey(Schema.String),
   timestamp: Timestamp,
   from: Schema.String,
   to: Schema.Array(Schema.String),

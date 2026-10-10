@@ -12,6 +12,7 @@ export const Recipient = Schema.Struct({
 export type Recipient = typeof Recipient.Type;
 
 export const Send = Schema.Struct({
+  reason: Schema.optionalKey(Schema.String),
   inbox_id: InboxId,
   thread_id: ThreadId,
   message_id: MessageId,
@@ -117,6 +118,14 @@ export const MessageFailedEvent = Schema.Struct({
 }).annotate({ identifier: "MessageFailedEvent" });
 export type MessageFailedEvent = typeof MessageFailedEvent.Type;
 
+export const MessageSendUnknownEvent = Schema.Struct({
+  type: Schema.Literal("event"),
+  event_type: Schema.Literal("message.send_unknown"),
+  event_id: Schema.String,
+  outcome: Reject,
+}).annotate({ identifier: "MessageSendUnknownEvent" });
+export type MessageSendUnknownEvent = typeof MessageSendUnknownEvent.Type;
+
 export const DraftEvent = Schema.Struct({
   type: Schema.Literal("event"),
   event_type: Schema.Literals([
@@ -160,6 +169,7 @@ export const Event = Schema.Union([
   MessageComplainedEvent,
   MessageRejectedEvent,
   MessageFailedEvent,
+  MessageSendUnknownEvent,
   DraftEvent,
   DomainVerifiedEvent,
 ]).annotate({ identifier: "Event" });

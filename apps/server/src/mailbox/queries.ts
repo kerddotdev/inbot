@@ -93,7 +93,17 @@ export function labelWhere(where: Where, query: MailQuery, alias: "m" | "t") {
       ? "l.inbox_id = m.inbox_id AND l.message_id = m.message_id"
       : "lm.inbox_id = t.inbox_id AND lm.thread_id = t.thread_id";
   for (const label of query.labels ?? []) {
-    where.add(`EXISTS (SELECT 1 FROM ${source} WHERE ${match} AND l.label = ?)`, label);
+    const unknown = `EXISTS (SELECT 1 FROM outbox o WHERE o.inbox_id = l.inbox_id AND o.message_id = l.message_id AND o.state = 'failed' AND o.last_error_code = 'unknown_outcome')`;
+    const condition =
+      label === "send_unknown"
+        ? unknown
+        : label === "failed"
+          ? `l.label = ? AND NOT ${unknown}`
+          : "l.label = ?";
+    where.add(
+      `EXISTS (SELECT 1 FROM ${source} WHERE ${match} AND ${condition})`,
+      ...(label === "send_unknown" ? [] : [label]),
+    );
   }
   for (const label of hiddenLabels) {
     if (!query[`include_${label}`]) {

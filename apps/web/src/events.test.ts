@@ -23,6 +23,21 @@ const cases: readonly { event: Event; changed: readonly string[] }[] = [
   {
     event: {
       type: "event",
+      event_type: "message.send_unknown",
+      event_id: "unknown",
+      outcome: {
+        inbox_id: "agent@example.test",
+        message_id: "<unknown@example.test>",
+        thread_id: "thread",
+        timestamp,
+        reason: "unknown_outcome",
+      },
+    },
+    changed: ["inboxes", "threads", "thread"],
+  },
+  {
+    event: {
+      type: "event",
       event_type: "draft.approval_required",
       event_id: "approval",
       draft: { inbox_id: "agent@example.test", draft_id: "draft", timestamp },

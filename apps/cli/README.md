@@ -47,6 +47,12 @@ send policy on every request. Out-of-scope resources return `not_found`. Agent
 keys cannot administer API keys, approve/reject drafts, or create owner login
 links; the CLI displays the server's 403 without using owner credentials instead.
 
+Message output includes `send_status` and optional `send_reason`. On
+`send_unknown`, do not resend; inform the human. After confirming sent or not sent,
+the local owner can record the outcome with `inbot messages resolve INBOX ID
+--decision sent` or `--decision failed`. This never resends the message; an
+intentional retry is a new send with a new idempotency key.
+
 ## Commands
 
 Every command accepts `--help`; `inbot --help` lists all commands. Global options
@@ -65,6 +71,7 @@ positional; quote IDs containing shell metacharacters.
 | `threads list`     | Optional `--inbox`, filters                                     | GET `/v0/threads` or inbox threads           |
 | `threads get`      | `<thread_id>`, optional `--inbox`                               | GET organization or inbox thread             |
 | `messages get`     | `<inbox_id> <message_id>`                                       | GET inbox message                            |
+| `messages resolve` | `<inbox_id> <message_id> --decision sent or failed`             | POST inbox message/resolve (local owner)     |
 | `messages send`    | `<inbox_id>`, body                                              | POST inbox messages/send                     |
 | `messages reply`   | `<inbox_id> <message_id>`, body                                 | POST inbox message/reply                     |
 | `messages forward` | `<inbox_id> <message_id>`, body                                 | POST inbox message/forward                   |

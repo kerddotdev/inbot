@@ -254,6 +254,12 @@ export class ApiClient {
   updateThread = (inboxId: string, id: string, body: Threads.UpdateThreadRequest) =>
     this.request(threadPath(inboxId, id), Threads.UpdateThreadResponse, { method: "PATCH", body });
 
+  resolveMessage = (inboxId: string, id: string, body: Messages.ResolveMessageRequest) =>
+    this.request(`${inboxPath(inboxId)}/messages/${segment(id)}/resolve`, Messages.Message, {
+      method: "POST",
+      body,
+    });
+
   send = (inboxId: string, body: Messages.SendMessageRequest, idempotencyKey: string) =>
     this.request(`${inboxPath(inboxId)}/messages/send`, Messages.SendMessageResponse, {
       method: "POST",

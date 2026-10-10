@@ -218,9 +218,18 @@ export const commands: readonly Command[] = [
   },
   {
     name: "messages get",
-    description: "Read a message.",
+    description:
+      "Read a message, including send_status and send_reason. On send_unknown, do not resend; inform the human.",
     endpoint: MessagesApi.endpoints.inboxes_messages_get,
     params: message,
+  },
+  {
+    name: "messages resolve",
+    description:
+      "Resolve send_unknown as owner with --decision sent|failed. Confirm sent or not sent first; this never resends.",
+    endpoint: MessagesApi.endpoints.inboxes_messages_resolve,
+    params: message,
+    body: { decision: "string" },
   },
   {
     name: "messages send",

@@ -896,8 +896,8 @@ test("outbox acceptance and event commit are atomic and an interrupted commit re
     "unknown_outcome",
   );
   expect((await events(api)).at(-1)?.payload).toMatchObject({
-    event_type: "message.failed",
-    failure: { message_id: queued.message_id, reason: "unknown_outcome" },
+    event_type: "message.send_unknown",
+    outcome: { message_id: queued.message_id, reason: "unknown_outcome" },
   });
 });
 
@@ -1432,4 +1432,72 @@ test("retention bounds each prune and expired replay cursors fail explicitly", a
     code: "validation_error",
   });
   expect(await api.run(api.store.use((db) => pruneEvents(db, now)))).toBe(1);
+});
+
+test("unknown outcomes and owner decisions reach scoped WebSockets and signed webhooks", async ({
+  api,
+}) => {
+  const key = await api.run(
+    api.keys.create({
+      inbox_id: inboxId,
+      permissions: { message_read: true, webhook_create: true },
+      send_policy: "read_only",
+    }),
+  );
+  await hook(
+    api,
+    {
+      url: "https://receiver.example.test/events",
+      event_types: ["message.send_unknown", "message.failed"],
+    },
+    key.api_key,
+  );
+  const ws = await client(api, { headers: { authorization: `Bearer ${key.api_key}` } });
+  try {
+    ws.subscribe({ event_types: ["message.send_unknown", "message.failed"] });
+    expect(await ws.next()).toMatchObject({ type: "subscribed" });
+    const queued = await api.run(
+      api.outbox.enqueue(inboxId, {
+        kind: "send",
+        request: { to: "recipient@example.test", text: "Synthetic uncertainty" },
+      }),
+    );
+    await api.run(
+      api.store.use((db) =>
+        db
+          .prepare(
+            "UPDATE outbox SET state = 'sending', updated_at = updated_at - ? WHERE message_id = ?",
+          )
+          .run(SENDING_LEASE_MS, queued.message_id),
+      ),
+    );
+    await api.run(api.outbox.processDue());
+    const unknown = await ws.next();
+    expect(unknown).toMatchObject({
+      event_type: "message.send_unknown",
+      outcome: { inbox_id: inboxId, message_id: queued.message_id, reason: "unknown_outcome" },
+    });
+    const response = await api.request(
+      `/v0/inboxes/${inboxId}/messages/${encodeURIComponent(queued.message_id)}/resolve`,
+      { method: "POST", body: { decision: "failed" } },
+    );
+    expect(response.status).toBe(200);
+    const resolved = await ws.next();
+    expect(resolved).toMatchObject({
+      event_type: "message.failed",
+      failure: { reason: "owner_confirmed_not_sent" },
+    });
+    const deliveries: Event[] = [];
+    const receive = async (input: WebhookRequest) => {
+      expect(input.headers["webhook-signature"]).toBeDefined();
+      deliveries.push(Schema.decodeUnknownSync(Event)(JSON.parse(input.body)));
+      return 204;
+    };
+    await dispatch(api, receive);
+    await dispatch(api, receive);
+    expect(deliveries).toEqual([unknown, resolved]);
+    expect(api.sent).toHaveLength(0);
+  } finally {
+    await ws.close();
+  }
 });
