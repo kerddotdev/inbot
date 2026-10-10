@@ -6,7 +6,9 @@
   "scripts": {
     "build": "tsc -p tsconfig.build.json && tsc -p apps/worker/tsconfig.build.json",
     "start:server": "node dist/apps/server/src/main.js serve",
-    "typecheck": "tsc --noEmit && tsc -p apps/worker/tsconfig.json && tsc -p apps/worker/tsconfig.test.json",
+    "typecheck": "tsc --noEmit && tsc -p apps/worker/tsconfig.json && tsc -p apps/worker/tsconfig.test.json && pnpm --filter @inbot/web typecheck",
+    "web:dev": "pnpm --filter @inbot/web dev",
+    "web:build": "pnpm --filter @inbot/web build",
     "test": "vitest run",
     "lint": "oxlint --deny-warnings apps packages",
     "format": "oxfmt .",

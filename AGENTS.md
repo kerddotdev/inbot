@@ -110,7 +110,7 @@ The local `inbot serve` service owns the encrypted SQLite database and serves RE
 
 - `apps/server` - implemented home, key management, encrypted store, mailbox service, inbound MIME parsing and ingestion, outbound composition and durable outbox, Cloudflare REST adapter, delivery event application, API keys, owner bearer authentication, HTTP mailbox and send APIs, streamable HTTP MCP, encrypted transport and inbound settings, inbound decryption/pulling/reconciliation and quarantine, delivery Queue pulling, and scoped mail runners; planned owner transport setup, owner web sessions, OAuth, provisioning, and tunnel supervision.
 - `apps/cli` - the `inbot` entry point: service commands and resource commands.
-- `apps/web` - React, Vite, and Tailwind owner UI.
+- `apps/web` - React, Vite, and Tailwind owner UI: presentational screens with mock data in the approved design; API wiring and owner sign-in remain planned.
 - `apps/worker` - implemented streaming inbound encryption to R2 and Queue pointers; bundling, provisioning, and deployment remain planned.
 - `packages/contracts` - implemented Effect schemas and HTTP API declarations shared by every surface. No handlers or service runtime.
 - `packages/envelope` - implemented X25519 age streaming encryption, the inbound frame carrying the SMTP envelope, buffered decryption, and the Queue pointer schema shared by the Worker and the service consumer.
