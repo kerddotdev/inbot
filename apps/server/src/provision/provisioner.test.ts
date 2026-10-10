@@ -436,7 +436,7 @@ test("observed encrypted arrival verifies a probe even when the send response wa
   expect(f.cloud.calls.filter((call) => call === "sendSelfTest")).toHaveLength(1);
 });
 
-test("teardown deletes only owned resources in reverse order and preserves unrelated infrastructure", async () => {
+test("teardown unlocks routing and deletes sending before its DNS while preserving unrelated infrastructure", async () => {
   const f = await fixture();
   const domain = await f.run(f.provisioner.create({ domain: f.domain }));
   await f.run(f.provisioner.apply(domain.domain_id));
@@ -453,7 +453,10 @@ test("teardown deletes only owned resources in reverse order and preserves unrel
   const start = f.cloud.mutations.length;
   const result = await f.run(f.provisioner.teardown(domain.domain_id));
   expect(result.status).toBe("NOT_STARTED");
-  expect(f.cloud.mutations.slice(start)).toEqual(
+  const mutations = f.cloud.mutations.slice(start);
+  expect(
+    mutations.filter((operation) => !operation.startsWith("unlockRoutingDns:")).sort(),
+  ).toEqual(
     resources
       .toReversed()
       .filter((resource) => resource.kind !== "routing")
@@ -473,8 +476,23 @@ test("teardown deletes only owned resources in reverse order and preserves unrel
                       ? "deleteQueue"
                       : "deleteBucket";
         return `${action}:${resource.cloudflare_id}`;
-      }),
+      })
+      .sort(),
   );
+  const sending = resources.find((resource) => resource.kind === "sending");
+  const deleteSending = mutations.indexOf(`deleteSending:${sending?.cloudflare_id}`);
+  expect(deleteSending).toBeGreaterThan(-1);
+  for (const resource of resources.filter((resource) => resource.kind === "dns")) {
+    const deletion = mutations.indexOf(`deleteDns:${resource.cloudflare_id}`);
+    if (resource.parent_id === "sending") expect(deletion).toBeGreaterThan(deleteSending);
+    if (resource.parent_id === "routing") {
+      expect(deletion).toBeGreaterThan(mutations.indexOf(`unlockRoutingDns:${f.domain}`));
+      expect(deletion).toBeLessThan(deleteSending);
+    }
+  }
+  expect(mutations.filter((operation) => operation.startsWith("unlockRoutingDns:"))).toEqual([
+    `unlockRoutingDns:${f.domain}`,
+  ]);
   expect(f.cloud.buckets).toEqual(new Set(["unrelated-bucket"]));
   expect(f.cloud.queues.size).toBe(1);
   expect(f.cloud.dns).toContainEqual(unrelatedRecord);
@@ -684,6 +702,7 @@ test("reconcile repairs a disabled recorded rule without leaking it or deleting 
 });
 
 test.each([
+  "unlockRoutingDns",
   "deleteDns",
   "deleteSending",
   "deleteBucket",
@@ -766,6 +785,7 @@ test("existing sending and routing DNS are adopted without deleting their record
   await f.run(f.provisioner.teardown(domain.domain_id));
   expect(f.cloud.sending.size).toBe(1);
   expect(f.cloud.dns.map((record) => record.id)).toEqual(ids);
+  expect(f.cloud.calls.some((operation) => operation.startsWith("unlockRoutingDns:"))).toBe(false);
 });
 
 test.each(["identity", "bundle", "settings"])(
@@ -799,3 +819,169 @@ test.each(["identity", "bundle", "settings"])(
     expect(await f.run(f.inbound.get())).toBeDefined();
   },
 );
+
+test("routing unlock is scoped by name and leaves the apex and another routed subdomain locked", async () => {
+  const f = await fixture();
+  const zone = f.cloud.zones[0];
+  if (zone === undefined) throw new Error("Expected fake zone");
+  const other = "other.example.test";
+  await f.run(f.cloud.service.enableRouting(zone, other));
+  for (const [index, record] of f.cloud.dns.entries())
+    if (record.name === zone.name && record.type === "MX")
+      f.cloud.dns[index] = { ...record, meta: { email_routing: true, read_only: true } };
+  const protectedRecords = f.cloud.dns.filter(
+    (record) =>
+      record.name === zone.name || record.name === `_dmarc.${zone.name}` || record.name === other,
+  );
+  const domain = await f.run(f.provisioner.create({ domain: f.domain }));
+  await f.run(f.provisioner.apply(domain.domain_id));
+  const ownMx = f.cloud.dns.find((record) => record.name === f.domain && record.type === "MX");
+  if (ownMx?.id === undefined) throw new Error("Expected routing MX");
+  expect(ownMx.meta).toEqual({ email_routing: true, read_only: true });
+  await expect(f.run(f.cloud.service.deleteDns(zone.id, ownMx.id))).rejects.toMatchObject({
+    code: "service_unavailable",
+    message: expect.stringContaining("HTTP 400"),
+  });
+  for (const name of ["", zone.name])
+    await expect(f.run(f.cloud.service.unlockRoutingDns(zone, name))).rejects.toMatchObject({
+      code: "validation_error",
+    });
+  const start = f.cloud.calls.length;
+  await f.run(f.provisioner.teardown(domain.domain_id));
+  expect(
+    f.cloud.calls.slice(start).filter((operation) => operation.startsWith("unlockRoutingDns:")),
+  ).toEqual([`unlockRoutingDns:${f.domain}`]);
+  expect(
+    f.cloud.dns.filter(
+      (record) =>
+        record.name === zone.name || record.name === `_dmarc.${zone.name}` || record.name === other,
+    ),
+  ).toEqual(protectedRecords);
+  for (const record of protectedRecords.filter((record) => record.meta?.read_only)) {
+    if (record.id === undefined) throw new Error("Expected protected record ID");
+    await expect(f.run(f.cloud.service.deleteDns(zone.id, record.id))).rejects.toMatchObject({
+      code: "service_unavailable",
+    });
+  }
+});
+
+test.each(["unlockRoutingDns", "deleteSending"])(
+  "apex drift during %s stops teardown and resumes only after restoration",
+  async (operation) => {
+    const f = await fixture();
+    const domain = await f.run(f.provisioner.create({ domain: f.domain }));
+    await f.run(f.provisioner.apply(domain.domain_id));
+    const apex = f.cloud.dns.find(
+      (record) => record.name === "example.test" && record.type === "MX",
+    );
+    if (apex === undefined) throw new Error("Expected apex MX");
+    const mutateApex = Effect.sync(() => {
+      const index = f.cloud.dns.findIndex((record) => record.id === apex.id);
+      f.cloud.dns[index] = { ...apex, content: "changed.invalid" };
+    });
+    const api = {
+      ...f.cloud.service,
+      unlockRoutingDns: (
+        zone: Parameters<typeof f.cloud.service.unlockRoutingDns>[0],
+        name: string,
+      ) =>
+        f.cloud.service
+          .unlockRoutingDns(zone, name)
+          .pipe(Effect.tap(() => (operation === "unlockRoutingDns" ? mutateApex : Effect.void))),
+      deleteSending: (zone: string, id: string) =>
+        f.cloud.service
+          .deleteSending(zone, id)
+          .pipe(Effect.tap(() => (operation === "deleteSending" ? mutateApex : Effect.void))),
+    };
+    await expect(f.run(f.make({ api }).teardown(domain.domain_id))).rejects.toMatchObject({
+      code: "action_required",
+    });
+    const mutations = f.cloud.mutations.length;
+    await expect(f.run(f.make().teardown(domain.domain_id))).rejects.toMatchObject({
+      code: "action_required",
+    });
+    expect(f.cloud.mutations).toHaveLength(mutations);
+    const index = f.cloud.dns.findIndex((record) => record.id === apex.id);
+    f.cloud.dns[index] = apex;
+    await f.run(f.make().teardown(domain.domain_id));
+    expect(await f.run(f.repo.resources(domain.domain_id))).toEqual([]);
+    expect(f.cloud.dns).toHaveLength(3);
+  },
+);
+
+test("resumes partial teardown when sending deletion removed DNS but its response was lost", async () => {
+  const f = await fixture();
+  const domain = await f.run(f.provisioner.create({ domain: f.domain }));
+  await f.run(f.provisioner.apply(domain.domain_id));
+  const resources = await f.run(f.repo.resources(domain.domain_id));
+  const sendingDns = resources.filter(
+    (resource) => resource.kind === "dns" && resource.parent_id === "sending",
+  );
+  expect(sendingDns).toHaveLength(6);
+  for (const record of sendingDns) {
+    if (record.cloudflare_id === null) throw new Error("Expected sending DNS ID");
+    await expect(
+      f.run(f.cloud.service.deleteDns("fake-zone", record.cloudflare_id)),
+    ).rejects.toMatchObject({
+      code: "service_unavailable",
+      message: expect.stringContaining("HTTP 400"),
+    });
+  }
+  f.cloud.failNext("deleteSending", true);
+  await expect(f.run(f.provisioner.teardown(domain.domain_id))).rejects.toMatchObject({
+    code: "service_unavailable",
+    message: expect.stringContaining("deleteSending"),
+  });
+  expect(f.cloud.sending.size).toBe(0);
+  expect(
+    f.cloud.dns.some((record) =>
+      sendingDns.some((resource) => resource.cloudflare_id === record.id),
+    ),
+  ).toBe(false);
+  expect(
+    (await f.run(f.repo.resources(domain.domain_id))).filter((resource) => resource.kind === "dns"),
+  ).toEqual(sendingDns);
+  const first = sendingDns[0];
+  if (first === undefined) throw new Error("Expected sending DNS ledger entry");
+  f.cloud.failNext(`deleteDns:${first.cloudflare_id}`, true);
+  await expect(f.run(f.make().teardown(domain.domain_id))).rejects.toMatchObject({
+    code: "service_unavailable",
+    message: expect.stringContaining("deleteDns"),
+  });
+  expect(f.cloud.dns).toHaveLength(3);
+  expect((await f.run(f.repo.resources(domain.domain_id))).length).toBeGreaterThan(0);
+  await f.run(f.make().teardown(domain.domain_id));
+  expect(await f.run(f.repo.resources(domain.domain_id))).toEqual([]);
+  const mutations = f.cloud.mutations.length;
+  await f.run(f.make().teardown(domain.domain_id));
+  expect(f.cloud.mutations).toHaveLength(mutations);
+});
+
+test("deletes a surviving recorded sending DNS ID after sending subdomain deletion", async () => {
+  const f = await fixture();
+  const domain = await f.run(f.provisioner.create({ domain: f.domain }));
+  await f.run(f.provisioner.apply(domain.domain_id));
+  const record = f.cloud.dns.find(
+    (record) => record.name === `cf-bounce.${f.domain}` && record.type === "TXT",
+  );
+  if (record?.id === undefined) throw new Error("Expected sending DNS record");
+  const api = {
+    ...f.cloud.service,
+    deleteSending: (zone: string, id: string) =>
+      f.cloud.service.deleteSending(zone, id).pipe(
+        Effect.tap(() =>
+          Effect.sync(() => {
+            f.cloud.dns.push({ ...record, meta: { read_only: false } });
+          }),
+        ),
+      ),
+  };
+  const start = f.cloud.mutations.length;
+  await f.run(f.make({ api }).teardown(domain.domain_id));
+  const mutations = f.cloud.mutations.slice(start);
+  expect(mutations.indexOf(`deleteDns:${record.id}`)).toBeGreaterThan(
+    mutations.findIndex((operation) => operation.startsWith("deleteSending:")),
+  );
+  expect(f.cloud.dns).toHaveLength(3);
+  expect(await f.run(f.repo.resources(domain.domain_id))).toEqual([]);
+});

@@ -99,6 +99,7 @@ export interface CloudflareApiService {
   readonly sendingDns: (zoneId: string, id: string) => ApiEffect<readonly DnsRecord[]>;
   readonly routingDns: (zone: Zone, domain: string) => ApiEffect<readonly DnsRecord[]>;
   readonly enableRouting: (zone: Zone, domain: string) => ApiEffect<void>;
+  readonly unlockRoutingDns: (zone: Zone, domain: string) => ApiEffect<void>;
   readonly disableRouting: (zone: Zone, domain: string) => ApiEffect<void>;
   readonly rules: (zoneId: string) => ApiEffect<readonly Rule[]>;
   readonly createRule: (
@@ -154,6 +155,25 @@ const ApiEnvelope = Schema.Struct({
     }),
   ),
 });
+function operationName(path: string, method = "GET") {
+  const resources: ReadonlyArray<readonly [string, string]> = [
+    ["/tokens/verify", "token verification"],
+    ["/dns_records/export", "DNS export"],
+    ["/dns_records", "DNS records"],
+    ["/email/sending/subdomains", "sending subdomain"],
+    ["/email/routing/dns", "routing DNS"],
+    ["/email/routing/rules", "routing rule"],
+    ["/r2/buckets", "R2 bucket"],
+    ["/consumers", "queue consumer"],
+    ["/queues", "queue"],
+    ["/workers/scripts", "Worker"],
+    ["/event_subscriptions/subscriptions", "event subscription"],
+    ["/email/sending/send", "self-test send"],
+    ["/zones", "zone"],
+  ];
+  const kind = resources.find(([part]) => path.includes(part))?.[1];
+  return `${method} ${kind ?? "Cloudflare resource"}`;
+}
 const Token = Schema.Struct({ status: Schema.Literal("active") });
 const Id = Schema.Struct({ id: Schema.String });
 const Name = Schema.Struct({ name: Schema.String });
@@ -179,6 +199,7 @@ export class CloudflareApi extends Context.Service<CloudflareApi, CloudflareApiS
         const account = (suffix: string) =>
           Effect.map(accountId(), (id) => `/accounts/${encodeURIComponent(id)}${suffix}`);
         function request(path: string, permission: string, method = "GET", body?: unknown) {
+          const operation = operationName(path, method);
           return Effect.gen(function* () {
             const value = yield* settings();
             return yield* Effect.tryPromise({
@@ -202,19 +223,19 @@ export class CloudflareApi extends Context.Service<CloudflareApi, CloudflareApiS
                   response.status === 403 ||
                   (response.status === 404 && path.endsWith("/tokens/verify"))
                 )
-                  throw missingPermission(permission);
+                  throw missingPermission(permission, operation);
                 if (response.status === 404 && method === "DELETE") return { success: true };
-                if (!response.ok) throw unavailable();
+                if (!response.ok) throw unavailable(operation);
                 return Schema.decodeUnknownSync(ApiEnvelope)(await response.json());
               },
-              catch: (error) => (error instanceof ProvisionError ? error : unavailable()),
+              catch: (error) => (error instanceof ProvisionError ? error : unavailable(operation)),
             }).pipe(
               Effect.timeoutOrElse({
                 duration: "30 seconds",
-                orElse: () => Effect.fail(unavailable()),
+                orElse: () => Effect.fail(unavailable(operation)),
               }),
               Effect.flatMap((value) =>
-                value.success ? Effect.succeed(value) : Effect.fail(unavailable()),
+                value.success ? Effect.succeed(value) : Effect.fail(unavailable(operation)),
               ),
             );
           });
@@ -222,16 +243,20 @@ export class CloudflareApi extends Context.Service<CloudflareApi, CloudflareApiS
         function decode<S extends Schema.Top & { readonly DecodingServices: never }>(
           schema: S,
           value: unknown,
+          operation: string,
         ) {
           return Schema.decodeUnknownEffect(schema)(value).pipe(
-            Effect.mapError(() => unavailable()),
+            Effect.mapError(() => unavailable(operation)),
           );
         }
         const get = <S extends Schema.Top & { readonly DecodingServices: never }>(
           path: string,
           permission: string,
           schema: S,
-        ) => Effect.flatMap(request(path, permission), (value) => decode(schema, value.result));
+        ) =>
+          Effect.flatMap(request(path, permission), (value) =>
+            decode(schema, value.result, operationName(path)),
+          );
         const mutate = (path: string, permission: string, method: string, body?: unknown) =>
           Effect.asVoid(request(path, permission, method, body));
         function list<S extends Schema.Top & { readonly DecodingServices: never }>(
@@ -247,7 +272,9 @@ export class CloudflareApi extends Context.Service<CloudflareApi, CloudflareApiS
                 `${path}${path.includes("?") ? "&" : "?"}page=${page}&per_page=100`,
                 permission,
               );
-              items.push(...(yield* decode(Schema.Array(schema), response.result)));
+              items.push(
+                ...(yield* decode(Schema.Array(schema), response.result, operationName(path))),
+              );
               if (page >= (response.result_info?.total_pages ?? 1)) return items;
               page++;
             }
@@ -268,7 +295,9 @@ export class CloudflareApi extends Context.Service<CloudflareApi, CloudflareApiS
           body: unknown,
         ) =>
           Effect.flatMap(account(path), (p) =>
-            Effect.flatMap(request(p, permission, "POST", body), (r) => decode(schema, r.result)),
+            Effect.flatMap(request(p, permission, "POST", body), (r) =>
+              decode(schema, r.result, operationName(p, "POST")),
+            ),
           );
         return {
           accountId,
@@ -306,15 +335,16 @@ export class CloudflareApi extends Context.Service<CloudflareApi, CloudflareApiS
                     },
                   );
                   if (response.status === 401 || response.status === 403)
-                    throw missingPermission("DNS Write");
-                  if (!response.ok) throw unavailable();
+                    throw missingPermission("DNS Write", "GET DNS export");
+                  if (!response.ok) throw unavailable("GET DNS export");
                   return response.text();
                 },
-                catch: (error) => (error instanceof ProvisionError ? error : unavailable()),
+                catch: (error) =>
+                  error instanceof ProvisionError ? error : unavailable("GET DNS export"),
               }).pipe(
                 Effect.timeoutOrElse({
                   duration: "30 seconds",
-                  orElse: () => Effect.fail(unavailable()),
+                  orElse: () => Effect.fail(unavailable("GET DNS export")),
                 }),
               );
             }),
@@ -341,7 +371,7 @@ export class CloudflareApi extends Context.Service<CloudflareApi, CloudflareApiS
                 "POST",
                 { name: domain },
               );
-              return yield* decode(SendingDomain, response.result);
+              return yield* decode(SendingDomain, response.result, "POST sending subdomain");
             }),
           disablePreview: (zone, id) =>
             mutate(
@@ -385,6 +415,17 @@ export class CloudflareApi extends Context.Service<CloudflareApi, CloudflareApiS
                 name: domain,
               });
             }),
+          unlockRoutingDns: (zone, domain) =>
+            Effect.gen(function* () {
+              yield* Effect.try({
+                try: () => assertSubdomain(zone, domain),
+                catch: (error) =>
+                  error instanceof ProvisionError ? error : invalid("Invalid subdomain."),
+              });
+              yield* mutate(z(zone.id, "/email/routing/dns"), "Zone Settings Write", "PATCH", {
+                name: domain,
+              });
+            }),
           disableRouting: (_zone, _domain) =>
             Effect.fail(
               new ProvisionError({
@@ -413,7 +454,7 @@ export class CloudflareApi extends Context.Service<CloudflareApi, CloudflareApiS
                   actions: [{ type: "worker", value: [worker] }],
                 },
               );
-              return yield* decode(Rule, response.result);
+              return yield* decode(Rule, response.result, "POST routing rule");
             }),
           deleteRule: (zone, id) =>
             mutate(
@@ -432,12 +473,13 @@ export class CloudflareApi extends Context.Service<CloudflareApi, CloudflareApiS
                 );
                 const response = yield* request(path, "Workers R2 Storage Write");
                 names.push(
-                  ...((yield* decode(BucketList, response.result)).buckets ?? []).map(
-                    (bucket) => bucket.name,
-                  ),
+                  ...(
+                    (yield* decode(BucketList, response.result, "GET R2 bucket")).buckets ?? []
+                  ).map((bucket) => bucket.name),
                 );
                 cursor = response.result_info?.cursor || undefined;
-                if (cursor !== undefined && seen.has(cursor)) return yield* unavailable();
+                if (cursor !== undefined && seen.has(cursor))
+                  return yield* unavailable("GET R2 bucket");
                 if (cursor !== undefined) seen.add(cursor);
               } while (cursor !== undefined);
               return names;

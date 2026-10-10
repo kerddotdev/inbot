@@ -86,6 +86,7 @@ test("uses captured sending/routing/subscription shapes and correct request fiel
   await Effect.runPromise(api.disablePreview(zone.id, "sending"));
   expect((await Effect.runPromise(api.getSending(zone.id, "sending"))).preview_enabled).toBe(false);
   await Effect.runPromise(api.enableRouting(zone, domain));
+  await Effect.runPromise(api.unlockRoutingDns(zone, domain));
   await Effect.runPromise(api.createRule(zone, `bot@${domain}`, "worker", "inbot-rule"));
   await Effect.runPromise(api.createConsumer("queue"));
   await Effect.runPromise(api.configureEventsQueue("queue", "events"));
@@ -95,6 +96,10 @@ test("uses captured sending/routing/subscription shapes and correct request fiel
     method: "POST",
     body: { name: domain },
   });
+  expect(seen.filter((request) => request.path.endsWith("/email/routing/dns"))).toEqual([
+    { path: "/client/v4/zones/zone/email/routing/dns", method: "POST", body: { name: domain } },
+    { path: "/client/v4/zones/zone/email/routing/dns", method: "PATCH", body: { name: domain } },
+  ]);
   expect(seen).toContainEqual({
     path: "/client/v4/zones/zone/email/sending/subdomains/sending",
     method: "PATCH",
@@ -167,6 +172,10 @@ test("refuses apex routing/sending before fetch and never calls the unscoped dis
   await expect(Effect.runPromise(api.enableRouting(zone, zone.name))).rejects.toMatchObject({
     code: "validation_error",
   });
+  for (const name of ["", zone.name, "*.example.test", "other.invalid"])
+    await expect(Effect.runPromise(api.unlockRoutingDns(zone, name))).rejects.toMatchObject({
+      code: "validation_error",
+    });
   await expect(Effect.runPromise(api.disableRouting(zone, domain))).rejects.toMatchObject({
     code: "not_supported",
   });
@@ -185,7 +194,7 @@ test("names the denied permission without returning provider bodies or credentia
   );
   await expect(Effect.runPromise(api.createQueue("queue"))).rejects.toMatchObject({
     code: "missing_permission",
-    message: "The Cloudflare token needs Queues Write.",
+    message: "The Cloudflare token needs Queues Write (POST queue).",
   });
 });
 
@@ -221,21 +230,103 @@ test("paginates zones, DNS, queues and subscriptions and follows R2 cursors", as
   expect(calls[0]?.searchParams.get("account.id")).toBe("account");
 });
 
-test("supports account token verification and treats already deleted recorded resources idempotently", async () => {
+test("supports account token verification", async () => {
   const paths: string[] = [];
-  const api = await service(async (input, options) => {
+  const api = await service(async (input) => {
     paths.push(new URL(String(input)).pathname);
-    return options?.method === "DELETE"
-      ? new Response(null, { status: 404 })
-      : response({ id: "token", status: "active" });
+    return response({ id: "token", status: "active" });
   });
   await Effect.runPromise(api.verifyToken());
-  await Effect.runPromise(api.deleteQueue("queue"));
-  expect(paths).toEqual([
-    "/client/v4/accounts/account/tokens/verify",
-    "/client/v4/accounts/account/queues/queue",
-  ]);
+  expect(paths).toEqual(["/client/v4/accounts/account/tokens/verify"]);
 });
+
+const recordedDeletes = [
+  {
+    kind: "DNS records",
+    path: "/zones/zone/dns_records/dns",
+    run: (api: CloudflareApi["Service"]) => api.deleteDns(zone.id, "dns"),
+  },
+  {
+    kind: "sending subdomain",
+    path: "/zones/zone/email/sending/subdomains/sending",
+    run: (api: CloudflareApi["Service"]) => api.deleteSending(zone.id, "sending"),
+  },
+  {
+    kind: "routing rule",
+    path: "/zones/zone/email/routing/rules/rule",
+    run: (api: CloudflareApi["Service"]) => api.deleteRule(zone.id, "rule"),
+  },
+  {
+    kind: "R2 bucket",
+    path: "/accounts/account/r2/buckets/bucket",
+    run: (api: CloudflareApi["Service"]) => api.deleteBucket("bucket"),
+  },
+  {
+    kind: "queue",
+    path: "/accounts/account/queues/queue",
+    run: (api: CloudflareApi["Service"]) => api.deleteQueue("queue"),
+  },
+  {
+    kind: "queue consumer",
+    path: "/accounts/account/queues/queue/consumers/consumer",
+    run: (api: CloudflareApi["Service"]) => api.deleteConsumer("queue", "consumer"),
+  },
+  {
+    kind: "Worker",
+    path: "/accounts/account/workers/scripts/worker",
+    run: (api: CloudflareApi["Service"]) => api.deleteWorker("worker"),
+  },
+  {
+    kind: "event subscription",
+    path: "/accounts/account/event_subscriptions/subscriptions/subscription",
+    run: (api: CloudflareApi["Service"]) => api.deleteSubscription("subscription"),
+  },
+];
+
+test.each(recordedDeletes)(
+  "treats a recorded $kind DELETE 404 as already deleted",
+  async ({ path, run }) => {
+    const api = await service(async (input, options) => {
+      expect(new URL(String(input)).pathname).toBe(`/client/v4${path}`);
+      expect(options?.method).toBe("DELETE");
+      return new Response(null, { status: 404 });
+    });
+    await Effect.runPromise(run(api));
+  },
+);
+
+test.each(recordedDeletes)(
+  "names the failing $kind delete without disclosing provider details",
+  async ({ kind, run }) => {
+    const api = await service(async () =>
+      Response.json(
+        { success: false, errors: [{ message: "secret provider detail" }] },
+        { status: 400 },
+      ),
+    );
+    await expect(Effect.runPromise(run(api))).rejects.toMatchObject({
+      code: "service_unavailable",
+      message: `Cloudflare did not confirm the provisioning operation (DELETE ${kind}).`,
+      fix: "Retry to reconcile durable progress. Check the account, token, and provider availability.",
+    });
+  },
+);
+
+test.each(["http", "envelope", "network", "decode"])(
+  "names a routing DNS unlock failure from %s",
+  async (failure) => {
+    const api = await service(async () => {
+      if (failure === "network") throw new Error("secret provider detail");
+      if (failure === "http") return new Response(null, { status: 400 });
+      if (failure === "decode") return Response.json({ unexpected: "secret provider detail" });
+      return Response.json({ success: false, errors: [{ message: "secret provider detail" }] });
+    });
+    await expect(Effect.runPromise(api.unlockRoutingDns(zone, domain))).rejects.toMatchObject({
+      code: "service_unavailable",
+      message: "Cloudflare did not confirm the provisioning operation (PATCH routing DNS).",
+    });
+  },
+);
 
 test.each([401, 403, 404])(
   "falls back to user token verification when the account endpoint returns %s",
@@ -284,3 +375,12 @@ test.each(["disabled", "expired", "unavailable"])(
     expect(paths).toEqual(["/client/v4/accounts/account/tokens/verify"]);
   },
 );
+
+test("names routing unlock permission failures while preserving the permission fix", async () => {
+  const api = await service(async () => new Response(null, { status: 403 }));
+  await expect(Effect.runPromise(api.unlockRoutingDns(zone, domain))).rejects.toMatchObject({
+    code: "missing_permission",
+    message: "The Cloudflare token needs Zone Settings Write (PATCH routing DNS).",
+    fix: "Grant Zone Settings Write on the configured account or zone, then retry.",
+  });
+});

@@ -21,7 +21,10 @@ export function fakeCloudflare() {
   const account = { id: "fake-account" };
   const zone: Zone = { id: "fake-zone", name: "example.test", account };
   const zones: Zone[] = [zone];
-  const dns: DnsRecord[] = [
+  type FakeDnsRecord = DnsRecord & {
+    readonly meta?: { readonly email_routing?: boolean; readonly read_only: boolean };
+  };
+  const dns: FakeDnsRecord[] = [
     { id: id(), type: "MX", name: zone.name, content: "mx.other.invalid", priority: 10, ttl: 3600 },
     {
       id: id(),
@@ -65,7 +68,7 @@ export function fakeCloudflare() {
       !failure.after
     ) {
       delete state.failure;
-      throw unavailable();
+      throw unavailable(operation.split(":")[0]);
     }
     if (mutate) mutations.push(operation);
   }
@@ -77,7 +80,7 @@ export function fakeCloudflare() {
       failure.after
     ) {
       delete state.failure;
-      throw unavailable();
+      throw unavailable(operation.split(":")[0]);
     }
   }
   function perform<A>(operation: string, fn: () => A, mutate = false) {
@@ -88,10 +91,11 @@ export function fakeCloudflare() {
         after(operation);
         return result;
       },
-      catch: (error) => (error instanceof ProvisionError ? error : unavailable()),
+      catch: (error) =>
+        error instanceof ProvisionError ? error : unavailable(operation.split(":")[0]),
     });
   }
-  const sendingDns = (domain: string): DnsRecord[] => [
+  const sendingDns = (domain: string): FakeDnsRecord[] => [
     ...[1, 2, 3].map((index) => ({
       type: "MX",
       name: `cf-bounce.${domain}`,
@@ -118,10 +122,11 @@ export function fakeCloudflare() {
       ttl: 1,
     },
   ];
-  const routingDns = (domain: string): DnsRecord[] => [
+  const routingDns = (domain: string): FakeDnsRecord[] => [
     ...[1, 2, 3].map((index) => ({
       type: "MX",
       name: domain,
+      meta: { email_routing: true, read_only: true },
       content: `route${index}.mx.cloudflare.net`,
       priority: index * 10,
       ttl: 1,
@@ -134,7 +139,7 @@ export function fakeCloudflare() {
       ttl: 1,
     },
   ];
-  function addDns(records: readonly DnsRecord[]) {
+  function addDns(records: readonly FakeDnsRecord[]) {
     for (const record of records)
       if (
         !dns.some(
@@ -167,6 +172,8 @@ export function fakeCloudflare() {
         `deleteDns:${recordId}`,
         () => {
           const index = dns.findIndex((record) => record.id === recordId);
+          if (dns[index]?.meta?.read_only)
+            throw unavailable("deleteDns: read_only record (HTTP 400)");
           if (index >= 0) dns.splice(index, 1);
         },
         true,
@@ -187,7 +194,7 @@ export function fakeCloudflare() {
           if (existing !== undefined) return existing;
           const value = { tag: id(), name: domain, enabled: true, preview_enabled: true };
           sending.set(value.tag, value);
-          addDns(sendingDns(domain));
+          addDns(sendingDns(domain).map((record) => ({ ...record, meta: { read_only: true } })));
           return value;
         },
         true,
@@ -206,6 +213,23 @@ export function fakeCloudflare() {
       perform(
         `deleteSending:${domainId}`,
         () => {
+          const value = sending.get(domainId);
+          if (value !== undefined) {
+            const records = sendingDns(value.name);
+            for (let index = dns.length - 1; index >= 0; index--) {
+              const record = dns[index];
+              if (
+                record !== undefined &&
+                records.some(
+                  (expected) =>
+                    expected.name === record.name &&
+                    expected.type === record.type &&
+                    expected.content === record.content,
+                )
+              )
+                dns.splice(index, 1);
+            }
+          }
           sending.delete(domainId);
         },
         true,
@@ -235,6 +259,17 @@ export function fakeCloudflare() {
             const record = dns[index];
             if (record !== undefined) dns[index] = { ...record, content: "changed.invalid" };
           }
+        },
+        true,
+      ),
+    unlockRoutingDns: (zone, domain) =>
+      perform(
+        `unlockRoutingDns:${domain}`,
+        () => {
+          assertSubdomain(zone, domain);
+          for (const [index, record] of dns.entries())
+            if (record.name === domain && record.meta?.email_routing)
+              dns[index] = { ...record, meta: { ...record.meta, read_only: false } };
         },
         true,
       ),
