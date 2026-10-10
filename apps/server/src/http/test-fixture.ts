@@ -10,7 +10,11 @@ import { KeychainStore } from "../keychain.js";
 import { KeyManager } from "../keys.js";
 import { Mailbox } from "../mailbox/mailbox.js";
 import { Outbox, type OutboxService } from "../outbound/outbox.js";
-import { OutboundProvider, type ProviderMessage } from "../outbound/cloudflare.js";
+import {
+  OutboundProvider,
+  type OutboundProviderService,
+  type ProviderMessage,
+} from "../outbound/cloudflare.js";
 import { TransportConfig } from "../outbound/transport-config.js";
 import { Store } from "../store.js";
 import { InboundConfig } from "../inbound/config.js";
@@ -24,7 +28,11 @@ const inboxId = "agent@example.test";
 
 export async function fixture(
   home: string,
-  options: { readonly webRoot?: string; readonly transportFetch?: typeof globalThis.fetch } = {},
+  options: {
+    readonly webRoot?: string;
+    readonly transportFetch?: typeof globalThis.fetch;
+    readonly outboundSend?: OutboundProviderService["send"];
+  } = {},
 ) {
   const scope = Scope.makeUnsafe();
   const transportFetch: typeof globalThis.fetch =
@@ -70,11 +78,13 @@ export async function fixture(
     );
     const outbound = Outbox.Live.pipe(
       Layer.provide(
-        OutboundProvider.fake((message) =>
-          Effect.sync(() => {
-            sent.push(message);
-            return { provider_message_id: `<fake-${sent.length}@example.test>` };
-          }),
+        OutboundProvider.fake(
+          options.outboundSend ??
+            ((message) =>
+              Effect.sync(() => {
+                sent.push(message);
+                return { provider_message_id: `<fake-${sent.length}@example.test>` };
+              })),
         ),
       ),
     );

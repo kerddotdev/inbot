@@ -86,7 +86,7 @@ Gotchas:
 - `reply_to_message` takes no `subject`. The subject is derived from the parent.
 - The tool result for a send is `{ message_id, thread_id }` with the message `queued`. Delivery is not confirmed. See [sending.md](sending.md).
 - Sends behave according to your send policy. With `approval` the result is an error (`approval_required`) that names the draft id. With `read_only` it is `missing_permission`.
-- Labels set by the system (`queued`, `sent`, `failed`, and the delivery labels) cannot be supplied by callers on send.
+- Labels set by the system (`queued`, `sent`, `send_unknown`, `failed`, and the delivery labels) cannot be supplied by callers on send.
 - There is no MCP tool for batch operations, raw download, domains, API keys, settings, or approval. Use REST for batches and raw.
 
 ## Draft tools
@@ -124,3 +124,7 @@ Webhook tools: `list_webhooks`, `get_webhook`, `create_webhook`, `update_webhook
 for writes. Creation exposes a one-time signing secret; reads never return it.
 Grants enforce the matching `webhook_*` permission, creator and inbox scope.
 There is no event subscription tool; use [WebSocket or CLI](events.md).
+
+On `send_unknown`, do not resend; inform the human. Message reads expose
+`send_status` and optional `send_reason`. Outcome resolution is local owner-only
+and has no MCP tool.

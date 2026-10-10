@@ -124,6 +124,7 @@ test("owner sessions cannot bypass route boundaries with separators or mixed sta
     ["PUT", "/v0/owner/transport"],
     ["POST", "/v0/owner/remote/enable"],
     ["POST", "/v0/inboxes/agent@example.test/drafts/synthetic/approve"],
+    ["POST", "/v0/inboxes/agent@example.test/messages/synthetic/resolve"],
     ["POST", "/v0/inboxes/agent@example.test/drafts/synthetic/reject"],
   ] as const) {
     for (const separator of [";", "#", "%3b", "%3B", "%23", "%253b", "%2523"]) {

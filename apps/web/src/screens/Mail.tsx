@@ -20,6 +20,7 @@ import {
 } from "../components/ui";
 
 const deliveryDisplay: { label: string; value: string; tone: Tone; icon: IconName }[] = [
+  { value: "send_unknown", tone: "warn", icon: "alert", label: "Send outcome unknown" },
   { value: "bounced", tone: "bad", icon: "alert", label: "Bounced" },
   { value: "complained", tone: "warn", icon: "alert", label: "Complaint received" },
   { value: "rejected", tone: "bad", icon: "x-circle", label: "Rejected" },
@@ -36,13 +37,15 @@ function delivery(labels: readonly string[]) {
 
 function ThreadRow({ thread, selected }: { thread: ThreadItem; selected: boolean }) {
   const unread = thread.labels.includes("unread");
-  const tag = thread.labels.includes("unauthenticated")
-    ? ({ tone: "warn", icon: "shield-alert", label: "Unauthenticated" } satisfies {
-        tone: Tone;
-        icon: IconName;
-        label: string;
-      })
-    : delivery(thread.labels);
+  const tag = thread.labels.includes("send_unknown")
+    ? delivery(thread.labels)
+    : thread.labels.includes("unauthenticated")
+      ? ({ tone: "warn", icon: "shield-alert", label: "Unauthenticated" } satisfies {
+          tone: Tone;
+          icon: IconName;
+          label: string;
+        })
+      : delivery(thread.labels);
   return (
     <a
       data-row
@@ -85,7 +88,24 @@ function ThreadRow({ thread, selected }: { thread: ThreadItem; selected: boolean
 }
 
 function MessageView({ message }: { message: Message }) {
-  const status = delivery(message.labels);
+  const observed = delivery(message.labels);
+  const status =
+    message.send_status === "sending"
+      ? { tone: "mute" as const, icon: "send" as const, label: "Sending" }
+      : message.send_status === "sent" && observed?.value === "failed"
+        ? { ...observed, label: "Delivery failed" }
+        : observed;
+  const client = useQueryClient();
+  const [resolving, setResolving] = useState(false);
+  const resolve = useMutation({
+    mutationFn: (decision: "sent" | "failed") =>
+      api.resolveMessage(message.inbox_id, message.message_id, { decision }),
+    onSuccess: () => {
+      setResolving(false);
+      for (const key of ["threads", "thread", "inboxes"])
+        void client.invalidateQueries({ queryKey: [key] });
+    },
+  });
   const body = message.extracted_text ?? message.text;
   return (
     <article className="border-t border-line py-5 first:border-t-0 first:pt-0">
@@ -130,6 +150,48 @@ function MessageView({ message }: { message: Message }) {
             {status.label}
           </Status>
         </div>
+      ) : null}
+      {message.send_status === "send_unknown" ? (
+        <div className="mt-3 space-y-3">
+          <p className="text-sm text-ink2">
+            The provider may have sent this message. Check delivery before deciding. Do not resend
+            while the outcome is unknown.
+          </p>
+          {resolving ? (
+            <div className="space-y-3">
+              <p className="text-sm">
+                Confirm the outcome. This only records your decision; it does not send mail. After
+                confirming it was not sent, you can compose a new message deliberately.
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <Button disabled={resolve.isPending} onClick={() => resolve.mutate("sent")}>
+                  I confirmed it was sent
+                </Button>
+                <Button disabled={resolve.isPending} onClick={() => resolve.mutate("failed")}>
+                  I confirmed it was not sent
+                </Button>
+                <Button
+                  variant="quiet"
+                  disabled={resolve.isPending}
+                  onClick={() => {
+                    setResolving(false);
+                    resolve.reset();
+                  }}
+                >
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <Button onClick={() => setResolving(true)}>Resolve outcome</Button>
+          )}
+          {resolve.error ? <ErrorNotice error={resolve.error} /> : null}
+        </div>
+      ) : message.send_status === "failed" ? (
+        <p className="mt-3 text-sm text-ink2">
+          Not sent.{" "}
+          {message.send_reason ? `Reason: ${message.send_reason}.` : "The send permanently failed."}
+        </p>
       ) : null}
       {message.extracted_text !== undefined &&
       message.text &&

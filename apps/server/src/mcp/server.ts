@@ -421,7 +421,7 @@ export const McpTools = (origin: string) =>
       );
       yield* register(
         "send_draft",
-        "Queue a draft now; approval policies request owner review.",
+        "Queue a draft now; approval policies request owner review. On send_unknown, do not resend; inform the human.",
         Schema.Struct({
           ...draft,
           ...labels,
@@ -591,14 +591,14 @@ export const McpTools = (origin: string) =>
       );
       yield* register(
         "get_message",
-        "Read a message; large bodies are explicitly truncated.",
+        "Read a message including send_status and send_reason; large bodies are explicitly truncated. On send_unknown, do not resend; inform the human.",
         Schema.Struct(message),
         read,
         (input) => operations.getMessage(input.inboxId, input.messageId),
       );
       yield* register(
         "send_message",
-        "Queue mail. Supply idempotencyKey for safe replay.",
+        "Queue mail. Supply idempotencyKey for safe replay. On send_unknown, do not resend; inform the human.",
         Schema.Struct({ ...inbox, ...send }),
         create,
         ({ inboxId, ...input }) =>
@@ -610,7 +610,7 @@ export const McpTools = (origin: string) =>
       );
       yield* register(
         "reply_to_message",
-        "Queue a reply, optionally to all original recipients.",
+        "Queue a reply, optionally to all original recipients. On send_unknown, do not resend; inform the human.",
         Schema.Struct({
           ...message,
           ...reply,
@@ -633,7 +633,7 @@ export const McpTools = (origin: string) =>
       );
       yield* register(
         "forward_message",
-        "Queue a forward with original content and attachments.",
+        "Queue a forward with original content and attachments. On send_unknown, do not resend; inform the human.",
         Schema.Struct({ ...message, ...send }),
         create,
         ({ inboxId, messageId, ...input }) =>

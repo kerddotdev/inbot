@@ -42,6 +42,7 @@ export function eventInbox(event: Event): string | undefined {
   if ("complaint" in event) return event.complaint.inbox_id;
   if ("reject" in event) return event.reject.inbox_id;
   if ("failure" in event) return event.failure.inbox_id;
+  if ("outcome" in event) return event.outcome.inbox_id;
   if ("draft" in event) return event.draft.inbox_id;
   return undefined;
 }
@@ -127,9 +128,9 @@ export function outboundEvent(
   db: Database.Database,
   inboxId: string,
   messageId: string,
-  status: "sent" | "failed",
+  status: "sent" | "failed" | "send_unknown",
   now: number,
-  reason = "send_failed",
+  reason?: string,
 ) {
   const message = getMessage(db, inboxId, messageId);
   const identity = {
@@ -147,15 +148,23 @@ export function outboundEvent(
           event_id: randomUUID(),
           send: {
             ...identity,
+            ...(reason === undefined ? {} : { reason }),
             recipients: [...message.to, ...(message.cc ?? []), ...(message.bcc ?? [])],
           },
         }
-      : {
-          type: "event",
-          event_type: "message.failed",
-          event_id: randomUUID(),
-          failure: { ...identity, reason },
-        },
+      : status === "send_unknown"
+        ? {
+            type: "event",
+            event_type: "message.send_unknown",
+            event_id: randomUUID(),
+            outcome: { ...identity, reason: reason ?? "unknown_outcome" },
+          }
+        : {
+            type: "event",
+            event_type: "message.failed",
+            event_id: randomUUID(),
+            failure: { ...identity, reason: reason ?? "send_failed" },
+          },
     now,
     message.labels,
   );
@@ -295,7 +304,9 @@ export function eventReadable(
                 ? event.reject
                 : "failure" in event
                   ? event.failure
-                  : undefined;
+                  : "outcome" in event
+                    ? event.outcome
+                    : undefined;
   if (message === undefined) return true;
   const current = Schema.decodeUnknownSync(
     Schema.optional(Schema.Struct({ thread_id: Schema.String })),

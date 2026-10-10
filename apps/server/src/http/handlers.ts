@@ -3,6 +3,7 @@ import { Effect, Layer } from "effect";
 import { HttpApiBuilder } from "effect/http-api";
 import { CurrentPrincipal } from "../../../../packages/contracts/src/security.js";
 import { ApiKeys } from "../auth/api-keys.js";
+import { Outbox } from "../outbound/outbox.js";
 import { Mailbox } from "../mailbox/mailbox.js";
 import { notFound } from "../mailbox/errors.js";
 import { Provisioner } from "../provision/provisioner.js";
@@ -30,6 +31,7 @@ const InboxesLive = HttpApiBuilder.group(ServerApi, "inboxes", (handlers) =>
 const MessagesLive = HttpApiBuilder.group(ServerApi, "messages", (handlers) =>
   Effect.gen(function* () {
     const mailbox = yield* Mailbox;
+    const outbox = yield* Outbox;
     const operations = yield* AgentOperations;
     const downloads = yield* Downloads;
     const message = (inboxId: string, messageId: string) =>
@@ -105,6 +107,9 @@ const MessagesLive = HttpApiBuilder.group(ServerApi, "messages", (handlers) =>
             return { ...attachment, ...(yield* downloads.link(params)) };
           }),
         ),
+      )
+      .handle("inboxes_messages_resolve", ({ params, payload }) =>
+        respond(outbox.resolve(params.inbox_id, params.message_id, payload)),
       )
       .handle("inboxes_messages_send", ({ params, payload, headers }) =>
         respond(

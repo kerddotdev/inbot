@@ -150,6 +150,25 @@ reply-all, forward, and draft send. Replaying a proposed message with the same
 a changed payload returns `idempotency_conflict`. A proposal replay retains its
 original draft identity even after approval or deletion.
 
+## Unknown send outcomes
+
+Message reads, lists, search, and thread messages expose `send_status` and optional
+`send_reason`. `send_unknown` means the provider may have sent the message; never
+resend automatically. Its label is also `send_unknown`, and its durable event is
+`message.send_unknown`. `send_status: "failed"` means no provider acceptance.
+Delivery failure labels can coexist with `send_status: "sent"`.
+
+`POST /v0/inboxes/{inbox_id}/messages/{message_id}/resolve` accepts
+`{ "decision": "sent" | "failed" }` and returns the message. Only the local owner
+can call it after confirming sent or not sent. Non-unknown messages fail with
+`validation_error`; repeating the same recorded decision returns the message
+without another event. Resolution commits the state and `message.sent` or
+`message.failed` event together, using `owner_confirmed_sent` or
+`owner_confirmed_not_sent` as reason. It never invokes the provider. A deliberate
+retry uses the normal send route with a new key and a new message.
+Agents receive 403 `missing_permission`; no MCP tool exposes resolution, and the
+tunnel blocks its route. Public label updates cannot change outbox send labels.
+
 ## Drafts and owner decisions
 
 Migration 7 stores draft content, base64 attachments, creator identity, approval
