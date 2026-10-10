@@ -1,7 +1,7 @@
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { Clock, Context, Effect, Layer, Schema } from "effect";
 import { HttpApiBuilder, HttpApiSecurity } from "effect/http-api";
-import { HttpRouter, HttpServerResponse } from "effect/http";
+import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
 import { CurrentPrincipal } from "../../../../packages/contracts/src/security.js";
 import { ApiKeys } from "../auth/api-keys.js";
 import { OwnerAuth } from "../auth/owner.js";
@@ -10,6 +10,7 @@ import { Drafts } from "../drafts/drafts.js";
 import { Mailbox } from "../mailbox/mailbox.js";
 import { inScope, permits, visible } from "../agent/authorization.js";
 import { errorResponse, respond, wireError } from "./errors.js";
+import { CurrentOwnerSession } from "./owner-session.js";
 import { authenticate } from "./middleware.js";
 
 const Resource = Schema.Struct({
@@ -83,7 +84,12 @@ export const DownloadRoutes = HttpRouter.use((router) =>
       respond(
         Effect.gen(function* () {
           const credential = yield* HttpApiBuilder.securityDecode(HttpApiSecurity.bearer);
-          const principal = yield* authenticate(credential, owner, keys);
+          const request = yield* HttpServerRequest.HttpServerRequest;
+          const session = yield* CurrentOwnerSession;
+          const principal =
+            request.headers.authorization === undefined && session !== undefined
+              ? { kind: "owner" as const }
+              : yield* authenticate(credential, owner, keys);
           if (HttpServerResponse.isHttpServerResponse(principal)) return principal;
           const params = yield* HttpRouter.params;
           const ticket = yield* downloads.read(params.token ?? "");

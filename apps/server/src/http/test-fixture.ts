@@ -17,7 +17,7 @@ import { startHttpServer } from "./server.js";
 
 const inboxId = "agent@example.test";
 
-export async function fixture(home: string) {
+export async function fixture(home: string, options: { readonly webRoot?: string } = {}) {
   const scope = Scope.makeUnsafe();
   let now = Date.parse("2026-10-10T12:00:00Z");
   const sent: ProviderMessage[] = [];
@@ -84,7 +84,17 @@ export async function fixture(home: string) {
       Context.empty(),
     );
     dek.fill(0);
-    const server = await run(startHttpServer({ runOutbox: false }), services);
+    let setupCode: string | undefined;
+    const server = await run(
+      startHttpServer({
+        runOutbox: false,
+        ...options,
+        setupRequired: (code) => {
+          setupCode = code;
+        },
+      }),
+      services,
+    );
     const connection = Schema.decodeUnknownSync(Schema.fromJsonString(Connection))(
       await readFile(join(home, "connection.json"), "utf8"),
     );
@@ -123,6 +133,7 @@ export async function fixture(home: string) {
     if (stored?.status !== "stored") throw new Error("Expected a stored synthetic message");
     return {
       home,
+      setupCode,
       url: server.url,
       token: connection.token,
       raw,
@@ -147,6 +158,29 @@ export async function fixture(home: string) {
           );
           return {
             ...started,
+            close: () => Effect.runPromise(Scope.close(serverScope, Exit.void)),
+          };
+        } catch (error) {
+          await Effect.runPromise(Scope.close(serverScope, Exit.void));
+          throw error;
+        }
+      },
+      restart: async () => {
+        const serverScope = Scope.makeUnsafe();
+        let code: string | undefined;
+        try {
+          const started = await run(
+            startHttpServer({
+              runOutbox: false,
+              setupRequired: (value) => {
+                code = value;
+              },
+            }).pipe(Effect.provideService(Scope.Scope, serverScope)),
+            services,
+          );
+          return {
+            ...started,
+            setupCode: code,
             close: () => Effect.runPromise(Scope.close(serverScope, Exit.void)),
           };
         } catch (error) {

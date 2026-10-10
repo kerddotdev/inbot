@@ -2,7 +2,7 @@
 
 Inbot is self-hosted, privacy-first email for AI agents. It gives each agent its own inbox on the owner's custom domain and runs on the owner's machine, with mail stored in an encrypted local database. Agents use it through MCP, a CLI, and a REST API. The owner manages it through a local web UI. An optional Cloudflare Tunnel lets cloud-hosted agents reach the local instance with scoped credentials.
 
-The workspace, home, key management, encrypted SQLite storage, mailbox service, inbound MIME ingestion, durable outbound sending runtime, authenticated loopback HTTP API, and streamable HTTP MCP server in `apps/server/src`, the shared contracts in `packages/contracts`, the shared age envelope in `packages/envelope`, and the inbound Email Worker handler in `apps/worker` are implemented. Encrypted Cloudflare buffer configuration, inbound pulling and reconciliation, and delivery Queue pulling are implemented as internal services with scoped runtime loops. Owner setup and the owner web UI remain planned. Update descriptions as the code lands, and never present a planned capability as implemented.
+The workspace, home, key management, encrypted SQLite storage, mailbox service, inbound MIME ingestion, durable outbound sending runtime, authenticated loopback HTTP API, owner password/session authentication, explicit static web bundle serving, and streamable HTTP MCP server in `apps/server/src`, the shared contracts in `packages/contracts`, the shared age envelope in `packages/envelope`, and the inbound Email Worker handler in `apps/worker` are implemented. Encrypted Cloudflare buffer configuration, inbound pulling and reconciliation, and delivery Queue pulling are implemented as internal services with scoped runtime loops. Owner transport setup and owner UI API wiring remain planned. Update descriptions as the code lands, and never present a planned capability as implemented.
 
 ## What we never compromise on
 
@@ -70,7 +70,7 @@ Before calling a change done, walk this list and say which entries applied:
 ## Development
 
 - Node 24 and pnpm, with one committed workspace lockfile. Read the root `package.json` for the commands that actually exist. Do not assume a script exists before it lands.
-- Build with `pnpm build`, then run `pnpm start:server --home <explicit-directory> --port 0 --init`. Initialization uses the OS keychain; subsequent starts unlock with it. `connection.json` holds the loopback URL and owner bearer token. See `apps/server/src/http/README.md` for implemented routes and test-only startup.
+- Build with `pnpm build`, then run `pnpm start:server --home <explicit-directory> --port 0 --init`. Initialization uses the OS keychain; subsequent starts unlock with it. `connection.json` holds the loopback URL and owner bearer token. Before owner password setup, `serve` prints a one-time setup code to stdout. Browser sessions use the same owner principal and require CSRF on unsafe requests; owner auth endpoints never become MCP tools. UI serving requires explicit `--web-root`. See `apps/server/src/http/README.md` for implemented routes and test-only startup.
 - Do not add another package manager, lockfile, automatic Git hook, or install-time script that rewrites repository files.
 - Never deploy, publish packages, push tags, or create releases unless asked.
 - Keep setup and checks independent of private files and machine-specific paths.
@@ -94,7 +94,7 @@ Before calling a change done, walk this list and say which entries applied:
 
 ## How it works
 
-The local `inbot serve` service owns the encrypted SQLite database and serves REST under `/v0` and MCP at `/mcp` on the same loopback port. Its scoped outbox runner sends configured Cloudflare mail. WebSocket events, OAuth routes, and the owner web UI remain planned.
+The local `inbot serve` service owns the encrypted SQLite database and serves REST under `/v0` and MCP at `/mcp` on the same loopback port. Its scoped outbox runner sends configured Cloudflare mail. Owner browser authentication and static bundle serving are implemented with `serve --web-root <directory>`. The React owner UI has presentational screens with mock data; API wiring, WebSocket events, and OAuth routes remain planned.
 
 **Inbound.** Cloudflare Email Routing delivers each inbox address to an Email Worker. The Worker streams the raw message through age encryption into R2 and queues a pointer. The service pulls the Queue, decrypts, parses, threads, and stores each message, then records the store commit, deletes the object, and acks the pointer. Permanent failures retain ciphertext with durable quarantine metadata. It also reconciles by listing R2, so long outages lose nothing.
 
@@ -108,7 +108,7 @@ The local `inbot serve` service owns the encrypted SQLite database and serves RE
 
 `apps/server/src` contains the storage foundation, mailbox service, inbound MIME ingestion and encrypted buffer pulling/reconciliation, delivery Queue pulling, outbound composition and durable outbox, drafts with owner approval and scheduling, authentication, loopback HTTP server, and `serve` entry point. `packages/contracts` contains the shared schemas and HTTP API declarations. `packages/envelope` and `apps/worker` implement inbound encryption and the Email Worker handler. The remaining layout is planned. Create a package only when it has a real implementation.
 
-- `apps/server` - implemented home, key management, encrypted store, mailbox service, inbound MIME parsing and ingestion, outbound composition and durable outbox, Cloudflare REST adapter, delivery event application, API keys, owner bearer authentication, HTTP mailbox, draft and send APIs, owner-only draft approval and rejection, scheduled draft sending, streamable HTTP MCP, encrypted transport and inbound settings, inbound decryption/pulling/reconciliation and quarantine, delivery Queue pulling, and scoped mail runners; planned owner transport setup, owner web sessions, OAuth, provisioning, and tunnel supervision.
+- `apps/server` - implemented home, key management, encrypted store, mailbox service, inbound MIME parsing and ingestion, outbound composition and durable outbox, Cloudflare REST adapter, delivery event application, API keys, owner bearer and password/session authentication, CSRF protection, single-use login links, explicit static UI serving, HTTP mailbox, draft and send APIs, owner-only draft approval and rejection, scheduled draft sending, streamable HTTP MCP, encrypted transport and inbound settings, inbound decryption/pulling/reconciliation and quarantine, delivery Queue pulling, and scoped mail runners; planned owner transport setup, owner UI API wiring, OAuth, provisioning, and tunnel supervision.
 - `apps/cli` - the `inbot` entry point: service commands and resource commands.
 - `apps/web` - React, Vite, and Tailwind owner UI: presentational screens with mock data in the approved design; API wiring and owner sign-in remain planned.
 - `apps/worker` - implemented streaming inbound encryption to R2 and Queue pointers; bundling, provisioning, and deployment remain planned.

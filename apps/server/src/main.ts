@@ -22,12 +22,14 @@ function options():
       readonly port: number;
       readonly init: boolean;
       readonly memoryKeychain: boolean;
+      readonly webRoot?: string;
     })
   | undefined {
   const { values, positionals } = parseArgs({
     allowPositionals: true,
     options: {
       home: { type: "string" },
+      "web-root": { type: "string" },
       port: { type: "string", default: "0" },
       init: { type: "boolean", default: false },
       flavor: { type: "string", default: "development" },
@@ -53,6 +55,7 @@ function options():
     port,
     init: values.init,
     memoryKeychain,
+    ...(values["web-root"] === undefined ? {} : { webRoot: resolve(values["web-root"]) }),
   };
 }
 
@@ -60,7 +63,7 @@ async function serve() {
   const input = options();
   if (input === undefined) {
     process.stdout.write(
-      "Usage: inbot serve --home <directory> [--port 0] [--init] [--flavor development|production]\n",
+      "Usage: inbot serve --home <directory> [--port 0] [--init] [--web-root <directory>] [--flavor development|production]\n",
     );
     return;
   }
@@ -114,6 +117,9 @@ async function serve() {
       yield* Effect.gen(function* () {
         const server = yield* startHttpServer({
           port: input.port,
+          ...(input.webRoot === undefined ? {} : { webRoot: input.webRoot }),
+          setupRequired: (code) =>
+            process.stdout.write(`${JSON.stringify({ event: "owner.setup_required", code })}\n`),
           ready: (url) =>
             process.stdout.write(`${JSON.stringify({ event: "server.ready", url })}\n`),
         });

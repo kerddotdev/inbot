@@ -4,6 +4,11 @@ import { Cause, Context, Effect, Layer, Redacted, Result, Schema } from "effect"
 import { HttpRouter, HttpServerError, HttpServerRequest, HttpServerResponse } from "effect/http";
 import { HttpApiBuilder, HttpApiError } from "effect/http-api";
 import { ApiKeys } from "../auth/api-keys.js";
+import { OwnerSessions } from "../auth/sessions.js";
+import { Store } from "../store.js";
+import { ownerHandlers } from "./owner.js";
+import { CurrentOwnerSession, cookieName, matchesCsrf, sessionCookie } from "./owner-session.js";
+import { staticWeb, webSecurityHeaders } from "./static.js";
 import { OwnerAuth } from "../auth/owner.js";
 import { Home } from "../home.js";
 import { Mailbox } from "../mailbox/mailbox.js";
@@ -27,6 +32,8 @@ export function startHttpServer(
     readonly ready?: (url: string) => void;
     readonly runOutbox?: boolean;
     readonly runScheduler?: boolean;
+    readonly webRoot?: string;
+    readonly setupRequired?: (code: string) => void;
   } = {},
 ) {
   return Effect.gen(function* () {
@@ -34,6 +41,8 @@ export function startHttpServer(
       Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 65535 })),
     )(options.port ?? 0);
     const home = yield* Home;
+    const store = yield* Store;
+    const web = yield* staticWeb(options.webRoot);
     const mailbox = yield* Mailbox;
     const keys = yield* ApiKeys;
     const outbox = yield* Outbox;
@@ -51,6 +60,7 @@ export function startHttpServer(
     const url = `http://127.0.0.1:${address.port}`;
     const services = Layer.mergeAll(
       Layer.succeed(Home, home),
+      OwnerSessions.layer(options.setupRequired).pipe(Layer.provide(Layer.succeed(Store, store))),
       Layer.succeed(Mailbox, mailbox),
       Layer.succeed(ApiKeys, keys),
       Layer.succeed(Outbox, outbox),
@@ -61,8 +71,9 @@ export function startHttpServer(
     );
     const context = yield* Layer.build(services);
     const owner = Context.get(context, OwnerAuth);
+    const sessions = Context.get(context, OwnerSessions);
     const shared = AgentOperations.Live.pipe(Layer.provideMerge(Layer.succeedContext(context)));
-    const handlers = HandlersLive.pipe(
+    const handlers = Layer.mergeAll(HandlersLive, ownerHandlers(url)).pipe(
       Layer.provide(Layer.mergeAll(AuthLive, OwnerOnlyLive, WireErrorsLive)),
     );
     const routes = Layer.mergeAll(
@@ -75,7 +86,23 @@ export function startHttpServer(
     );
     const guarded = Effect.gen(function* () {
       const request = yield* HttpServerRequest.HttpServerRequest;
+      let routePath: string;
+      try {
+        routePath = decodeURIComponent(request.url.split("?")[0] ?? "");
+      } catch {
+        return errorResponse(
+          wireError("validation_error", "The request path is invalid.", "Use a valid URL path."),
+        );
+      }
       const origin = request.headers.origin;
+      if (request.headers.host !== new URL(url).host)
+        return errorResponse(
+          wireError(
+            "missing_permission",
+            "The request host is not allowed.",
+            "Use the local server URL.",
+          ),
+        );
       if (origin !== undefined && origin !== url)
         return errorResponse(
           wireError(
@@ -84,12 +111,45 @@ export function startHttpServer(
             "Use the server's own origin for browser requests.",
           ),
         );
-      if (request.url.split("?")[0] === "/mcp") {
+      const session =
+        request.headers.authorization === undefined
+          ? yield* sessions.authenticate(request.cookies[cookieName(url)] ?? "")
+          : undefined;
+      if (
+        session !== undefined &&
+        !["GET", "HEAD", "OPTIONS"].includes(request.method) &&
+        !matchesCsrf(session.csrf_token, request.headers["x-inbot-csrf"])
+      )
+        return errorResponse(
+          wireError(
+            "missing_permission",
+            "A matching CSRF header is required.",
+            "Send the session CSRF token in X-Inbot-CSRF.",
+          ),
+        );
+      if (routePath.startsWith("/v0/owner/") && request.headers.authorization !== undefined) {
+        const bearer = request.headers.authorization.match(/^Bearer\s+(.+)$/i)?.[1] ?? "";
+        const principal = yield* authenticate(Redacted.make(bearer), owner, keys);
+        if (HttpServerResponse.isHttpServerResponse(principal)) return principal;
+        if (principal.kind !== "owner")
+          return errorResponse(
+            wireError(
+              "missing_permission",
+              "Owner endpoints require owner credentials.",
+              "Sign in as the owner.",
+            ),
+          );
+      }
+      const staticResponse =
+        web === undefined ? undefined : yield* web(request.url, request.method);
+      if (staticResponse !== undefined) return staticResponse;
+      if (routePath === "/mcp" && session === undefined) {
         const bearer = request.headers.authorization?.match(/^Bearer\s+(.+)$/i)?.[1] ?? "";
         const principal = yield* authenticate(Redacted.make(bearer), owner, keys);
         if (HttpServerResponse.isHttpServerResponse(principal)) return principal;
       }
-      return yield* app.pipe(
+      const response = yield* app.pipe(
+        Effect.provideService(CurrentOwnerSession, session),
         Effect.catchCause((cause) => {
           const error =
             Result.getOrUndefined(Cause.findError(cause)) ??
@@ -137,19 +197,25 @@ export function startHttpServer(
           return Effect.succeed(unavailable());
         }),
       );
+      return session === undefined || response.cookies.cookies[cookieName(url)] !== undefined
+        ? response
+        : sessionCookie(response, url, session);
     }).pipe(
-      Effect.map((response) => {
-        if (response.status === 415)
-          return errorResponse(
-            wireError(
-              "validation_error",
-              "The request content type is not supported.",
-              "Send a JSON body with Content-Type: application/json.",
-            ),
-          );
+      Effect.catch(() => Effect.succeed(unavailable())),
+      Effect.map((original) => {
+        const response =
+          original.status === 415
+            ? errorResponse(
+                wireError(
+                  "validation_error",
+                  "The request content type is not supported.",
+                  "Send a JSON body with Content-Type: application/json.",
+                ),
+              )
+            : original;
         return HttpServerResponse.setHeaders(response, {
-          "cache-control": "no-store",
-          "x-content-type-options": "nosniff",
+          ...webSecurityHeaders,
+          "cache-control": response.headers["cache-control"] ?? "no-store",
         });
       }),
     );

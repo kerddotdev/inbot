@@ -10,6 +10,8 @@ import {
 import { authenticatePrincipal } from "../auth/bearer.js";
 import { ApiKeys, type ApiKeysService } from "../auth/api-keys.js";
 import { OwnerAuth } from "../auth/owner.js";
+import { CurrentOwnerSession } from "./owner-session.js";
+import { HttpServerRequest } from "effect/http";
 import { WireErrors } from "./api.js";
 import { authorize } from "../agent/authorization.js";
 import { errorResponse, unavailable, wireError, wireFailure } from "./errors.js";
@@ -32,7 +34,12 @@ export const AuthLive = Layer.effect(
     return BearerAuth.of({
       Bearer: (httpEffect, { credential, endpoint }) =>
         Effect.gen(function* () {
-          const principal = yield* authenticate(credential, owner, keys);
+          const request = yield* HttpServerRequest.HttpServerRequest;
+          const session = yield* CurrentOwnerSession;
+          const principal =
+            request.headers.authorization === undefined && session !== undefined
+              ? { kind: "owner" as const }
+              : yield* authenticate(credential, owner, keys);
           if (HttpServerResponse.isHttpServerResponse(principal)) return principal;
           const params = yield* HttpRouter.params;
           const permission = Context.get(endpoint.annotations, RequiredPermission);
