@@ -41,6 +41,9 @@ export const DraftItem = Schema.Struct({
   send_at: Schema.optionalKey(Timestamp),
   updated_at: Timestamp,
   pending_approval: Schema.optionalKey(Schema.Boolean),
+  created_by: Schema.optionalKey(Schema.String),
+  approval_state: Schema.optionalKey(Schema.Literals(["pending", "approved", "rejected"])),
+  rejection_reason: Schema.optionalKey(Schema.String),
 }).annotate({ identifier: "DraftItem" });
 export type DraftItem = typeof DraftItem.Type;
 
@@ -57,6 +60,7 @@ export const Draft = Schema.Struct({
   text: Schema.optionalKey(Schema.String),
   html: Schema.optionalKey(Schema.String),
   references: Schema.optionalKey(Schema.Array(Schema.String)),
+  reply_all: Schema.optionalKey(Schema.Boolean),
   created_at: Timestamp,
 }).annotate({ identifier: "Draft" });
 export type Draft = typeof Draft.Type;
@@ -76,6 +80,7 @@ export const CreateDraftRequest = Schema.Struct({
   reply_all: Schema.optionalKey(Schema.Boolean),
   send_at: Schema.optionalKey(Timestamp),
   client_id: Schema.optionalKey(Schema.String),
+  references: Schema.optionalKey(Schema.Array(Schema.String)),
 }).annotate({ identifier: "CreateDraftRequest" });
 export type CreateDraftRequest = typeof CreateDraftRequest.Type;
 
@@ -94,3 +99,8 @@ export const UpdateDraftRequest = Schema.Struct({
   send_at: Schema.optionalKey(Schema.Union([Timestamp, Schema.Null])),
 }).annotate({ identifier: "UpdateDraftRequest" });
 export type UpdateDraftRequest = typeof UpdateDraftRequest.Type;
+
+export const RejectDraftRequest = Schema.Struct({
+  reason: Schema.optionalKey(Schema.String),
+}).annotate({ identifier: "RejectDraftRequest" });
+export type RejectDraftRequest = typeof RejectDraftRequest.Type;

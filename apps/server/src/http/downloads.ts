@@ -6,6 +6,7 @@ import { CurrentPrincipal } from "../../../../packages/contracts/src/security.js
 import { ApiKeys } from "../auth/api-keys.js";
 import { OwnerAuth } from "../auth/owner.js";
 import { notFound } from "../mailbox/errors.js";
+import { Drafts } from "../drafts/drafts.js";
 import { Mailbox } from "../mailbox/mailbox.js";
 import { inScope, permits, visible } from "../agent/authorization.js";
 import { errorResponse, respond, wireError } from "./errors.js";
@@ -14,6 +15,7 @@ import { authenticate } from "./middleware.js";
 const Resource = Schema.Struct({
   inbox_id: Schema.String,
   message_id: Schema.optionalKey(Schema.String),
+  draft_id: Schema.optionalKey(Schema.String),
   thread_id: Schema.optionalKey(Schema.String),
   attachment_id: Schema.optionalKey(Schema.String),
 });
@@ -74,6 +76,7 @@ export const DownloadRoutes = HttpRouter.use((router) =>
     const owner = yield* OwnerAuth;
     const keys = yield* ApiKeys;
     const mailbox = yield* Mailbox;
+    const drafts = yield* Drafts;
     yield* router.add(
       "GET",
       "/v0/downloads/:token",
@@ -85,7 +88,7 @@ export const DownloadRoutes = HttpRouter.use((router) =>
           const params = yield* HttpRouter.params;
           const ticket = yield* downloads.read(params.token ?? "");
           if (!inScope(principal, ticket.inbox_id)) return yield* notFound();
-          if (!permits(principal, "message_read"))
+          if (!permits(principal, ticket.draft_id === undefined ? "message_read" : "draft_read"))
             return errorResponse(
               wireError(
                 "missing_permission",
@@ -94,6 +97,18 @@ export const DownloadRoutes = HttpRouter.use((router) =>
               ),
             );
           const content = yield* Effect.gen(function* () {
+            if (ticket.draft_id !== undefined && ticket.attachment_id !== undefined) {
+              yield* visible(drafts.get(ticket.inbox_id, ticket.draft_id));
+              const attachment = yield* drafts.attachment(
+                ticket.inbox_id,
+                ticket.draft_id,
+                ticket.attachment_id,
+              );
+              return {
+                bytes: attachment.content,
+                type: attachment.attachment.content_type ?? "application/octet-stream",
+              };
+            }
             if (ticket.message_id !== undefined) {
               yield* visible(mailbox.getMessage(ticket.inbox_id, ticket.message_id));
               if (ticket.attachment_id === undefined)

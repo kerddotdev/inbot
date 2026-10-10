@@ -128,8 +128,7 @@ for (const policy of ["read_only", "approval"] satisfies SendPolicy[]) {
         403,
         policy === "approval" ? "approval_required" : "missing_permission",
       );
-      if (policy === "approval")
-        expect(failure.fix).toBe("Drafts and owner approval arrive in a later release");
+      if (policy === "approval") expect(failure.fix).toMatch(/Ask the owner to approve draft /);
     }
     expect(await api.run(api.outbox.processDue())).toBe(0);
     expect(api.sent).toHaveLength(0);

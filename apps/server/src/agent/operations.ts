@@ -19,9 +19,19 @@ import type {
   UpdateThreadRequest,
 } from "../../../../packages/contracts/src/threads.js";
 import type { OutboundRequest } from "../../../../packages/contracts/src/outbound.js";
+import { CurrentPrincipal } from "../../../../packages/contracts/src/security.js";
+import type {
+  CreateDraftRequest,
+  UpdateDraftRequest,
+  SendDraftRequest,
+  ListDraftsQuery,
+} from "../../../../packages/contracts/src/drafts.js";
+import { Drafts, type DraftsService } from "../drafts/drafts.js";
+import { hiddenLabels } from "../mailbox/queries.js";
+import { notFound } from "../mailbox/errors.js";
 import { Mailbox, type MailboxService } from "../mailbox/mailbox.js";
 import { validationError } from "../mailbox/errors.js";
-import { inboxAllowlist, visible, visibleQuery } from "../agent/authorization.js";
+import { inboxAllowlist, inScope, permits, visible, visibleQuery } from "../agent/authorization.js";
 import { Downloads } from "../http/downloads.js";
 import { wireError } from "../http/errors.js";
 import { Outbox, type OutboxService } from "../outbound/outbox.js";
@@ -33,6 +43,7 @@ function makeOperations(
   outbox: OutboxService,
   config: TransportConfig["Service"],
   downloads: Downloads["Service"],
+  drafts: DraftsService,
 ) {
   function checked<A, E, R>(
     permission: Permission,
@@ -52,7 +63,163 @@ function makeOperations(
     Effect.flatMap(scope, (allowed) => mailbox.resolveThreadInbox(threadId, allowed));
   const threadInbox = (inboxId: string | undefined, threadId: string) =>
     inboxId === undefined ? resolve(threadId) : Effect.succeed(inboxId);
+  const creator = Effect.map(CurrentPrincipal, (principal) =>
+    principal.kind === "owner" ? "owner" : principal.api_key_id,
+  );
+  const approval = Effect.map(
+    CurrentPrincipal,
+    (principal) => principal.kind === "agent" && principal.grant.send_policy === "approval",
+  );
+  const draft = (inboxId: string | undefined, draftId: string) =>
+    Effect.gen(function* () {
+      const resource = yield* visible(drafts.get(inboxId, draftId, yield* inboxAllowlist));
+      if (!inScope(yield* CurrentPrincipal, resource.inbox_id)) return yield* notFound();
+      return resource;
+    });
+  const approvalRequired = (draftId: string) =>
+    Effect.fail(
+      wireError(
+        "approval_required",
+        `Draft ${draftId} requires owner approval before sending.`,
+        `Ask the owner to approve draft ${draftId} in its inbox.`,
+      ),
+    );
+  const draftParents = (inboxId: string, input: CreateDraftRequest) =>
+    Effect.gen(function* () {
+      const parent = input.in_reply_to ?? input.forward_of;
+      if (parent !== undefined) {
+        yield* authorize("message_read", inboxId);
+        yield* message(inboxId, parent);
+      }
+    });
+  const schedulePermission = (inboxId: string, sendAt: string | null | undefined) =>
+    sendAt == null
+      ? Effect.void
+      : Effect.andThen(authorize("draft_send", inboxId), authorizeSendPolicy);
   return {
+    createDraft: (inboxId: string, input: CreateDraftRequest) =>
+      checked(
+        "draft_create",
+        inboxId,
+        Effect.gen(function* () {
+          yield* schedulePermission(inboxId, input.send_at);
+          yield* draftParents(inboxId, input);
+          const result = yield* drafts.create(inboxId, input, yield* creator, yield* approval);
+          yield* visible(Effect.succeed(result));
+          return result;
+        }),
+      ),
+    listDrafts: (inboxId: string | undefined, query: typeof ListDraftsQuery.Type) =>
+      checked(
+        "draft_read",
+        inboxId,
+        Effect.gen(function* () {
+          if (inboxId !== undefined) yield* mailbox.getInbox(inboxId);
+          const principal = yield* CurrentPrincipal;
+          return yield* drafts.list(
+            inboxId,
+            query,
+            yield* inboxAllowlist,
+            hiddenLabels.filter((label) => !permits(principal, `label_${label}_read`)),
+          );
+        }),
+      ),
+    getDraft: (inboxId: string | undefined, draftId: string) =>
+      checked("draft_read", inboxId, draft(inboxId, draftId)),
+    updateDraft: (inboxId: string, draftId: string, input: UpdateDraftRequest) =>
+      checked(
+        "draft_update",
+        inboxId,
+        Effect.gen(function* () {
+          const current = yield* draft(inboxId, draftId);
+          yield* schedulePermission(
+            inboxId,
+            input.send_at === null ? null : (input.send_at ?? current.send_at),
+          );
+          return yield* drafts.update(inboxId, draftId, input, yield* approval);
+        }),
+      ),
+    deleteDraft: (inboxId: string, draftId: string) =>
+      checked(
+        "draft_delete",
+        inboxId,
+        Effect.andThen(draft(inboxId, draftId), drafts.delete(inboxId, draftId)),
+      ),
+    sendDraft: (
+      inboxId: string,
+      draftId: string,
+      input: SendDraftRequest,
+      idempotencyKey?: string,
+    ) =>
+      checked(
+        "draft_send",
+        inboxId,
+        Effect.gen(function* () {
+          yield* authorizeSendPolicy;
+          if (yield* approval) {
+            const id = yield* drafts.requestApproval(
+              inboxId,
+              draftId,
+              input,
+              idempotencyKey,
+              yield* Effect.map(CurrentPrincipal, (principal) =>
+                hiddenLabels.filter((label) => !permits(principal, `label_${label}_read`)),
+              ),
+            );
+            return yield* approvalRequired(id);
+          }
+          return yield* drafts.send(
+            inboxId,
+            draftId,
+            input,
+            idempotencyKey,
+            yield* Effect.map(CurrentPrincipal, (principal) =>
+              hiddenLabels.filter((label) => !permits(principal, `label_${label}_read`)),
+            ),
+          );
+        }),
+      ),
+    getDraftAttachment: (inboxId: string | undefined, draftId: string, attachmentId: string) =>
+      checked(
+        "draft_read",
+        inboxId,
+        Effect.gen(function* () {
+          const resource = yield* draft(inboxId, draftId);
+          const { attachment } = yield* drafts.attachment(resource.inbox_id, draftId, attachmentId);
+          return {
+            ...attachment,
+            ...(yield* downloads.link({
+              inbox_id: resource.inbox_id,
+              draft_id: draftId,
+              attachment_id: attachmentId,
+            })),
+          };
+        }),
+      ),
+    approveDraft: (inboxId: string, draftId: string, idempotencyKey?: string) =>
+      Effect.gen(function* () {
+        if ((yield* CurrentPrincipal).kind !== "owner")
+          return yield* Effect.fail(
+            wireError(
+              "missing_permission",
+              "This operation requires owner authentication.",
+              "Use the local owner token from connection.json.",
+            ),
+          );
+        return yield* drafts.approve(inboxId, draftId, idempotencyKey);
+      }),
+    rejectDraft: (inboxId: string, draftId: string, reason?: string) =>
+      Effect.gen(function* () {
+        if ((yield* CurrentPrincipal).kind !== "owner")
+          return yield* Effect.fail(
+            wireError(
+              "missing_permission",
+              "This operation requires owner authentication.",
+              "Use the local owner token from connection.json.",
+            ),
+          );
+        return yield* drafts.reject(inboxId, draftId, reason);
+      }),
     listInboxes: (query: typeof PaginationQuery.Type) =>
       checked(
         "inbox_read",
@@ -181,6 +348,10 @@ function makeOperations(
             yield* authorize("message_read", inboxId);
             yield* message(inboxId, input.message_id);
           }
+          if (yield* approval) {
+            const draftId = yield* drafts.propose(inboxId, input, yield* creator, idempotencyKey);
+            return yield* approvalRequired(draftId);
+          }
           if ((yield* config.get()) === undefined)
             return yield* Effect.fail(
               wireError(
@@ -207,6 +378,7 @@ export class AgentOperations extends Context.Service<
         yield* Outbox,
         yield* TransportConfig,
         yield* Downloads,
+        yield* Drafts,
       );
     }),
   );

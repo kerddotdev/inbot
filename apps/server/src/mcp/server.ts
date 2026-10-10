@@ -4,6 +4,7 @@ import { HttpServerRequest } from "effect/http";
 import * as Common from "../../../../packages/contracts/src/common.js";
 import * as Inboxes from "../../../../packages/contracts/src/inboxes.js";
 import * as Messages from "../../../../packages/contracts/src/messages.js";
+import * as Drafts from "../../../../packages/contracts/src/drafts.js";
 import * as Threads from "../../../../packages/contracts/src/threads.js";
 import { CurrentPrincipal } from "../../../../packages/contracts/src/security.js";
 import { ApiKeys } from "../auth/api-keys.js";
@@ -187,6 +188,127 @@ export const McpTools = Layer.effectDiscard(
     const update = { readOnlyHint: false, destructiveHint: false, idempotentHint: true };
     const remove = { readOnlyHint: false, destructiveHint: true, idempotentHint: true };
     const create = { readOnlyHint: false, destructiveHint: false, idempotentHint: false };
+    const draft = { ...inbox, draftId: Common.DraftId };
+    const { reply_to, in_reply_to, forward_of, reply_all, send_at, client_id, ...draftCreate } =
+      Drafts.CreateDraftRequest.fields;
+    yield* register(
+      "create_draft",
+      "Create a draft. sendAt schedules it while the service runs.",
+      Schema.Struct({
+        ...inbox,
+        ...draftCreate,
+        replyTo: reply_to,
+        inReplyTo: in_reply_to,
+        forwardOf: forward_of,
+        replyAll: reply_all,
+        sendAt: send_at,
+        clientId: client_id,
+      }),
+      create,
+      ({ inboxId, replyTo, inReplyTo, forwardOf, replyAll, sendAt, clientId, ...input }) =>
+        operations.createDraft(inboxId, {
+          ...input,
+          ...(replyTo === undefined ? {} : { reply_to: replyTo }),
+          ...(inReplyTo === undefined ? {} : { in_reply_to: inReplyTo }),
+          ...(forwardOf === undefined ? {} : { forward_of: forwardOf }),
+          ...(replyAll === undefined ? {} : { reply_all: replyAll }),
+          ...(sendAt === undefined ? {} : { send_at: sendAt }),
+          ...(clientId === undefined ? {} : { client_id: clientId }),
+        }),
+    );
+    yield* register(
+      "list_drafts",
+      "List drafts across accessible inboxes or one inbox.",
+      Schema.Struct({
+        inboxId: thread.inboxId,
+        ...page,
+        before: mail.before,
+        after: mail.after,
+        labels: mail.labels,
+      }),
+      read,
+      ({ inboxId, before, after, labels, ...input }) =>
+        operations.listDrafts(inboxId, {
+          ...pageQuery(input),
+          ...(before === undefined ? {} : { before }),
+          ...(after === undefined ? {} : { after }),
+          ...(labels === undefined ? {} : { labels }),
+        }),
+    );
+    yield* register("get_draft", "Read a draft.", Schema.Struct(draft), read, (input) =>
+      operations.getDraft(input.inboxId, input.draftId),
+    );
+    const {
+      reply_to: updateReplyTo,
+      send_at: updateSendAt,
+      add_attachments,
+      remove_attachments,
+      add_labels,
+      remove_labels,
+      ...draftUpdate
+    } = Drafts.UpdateDraftRequest.fields;
+    yield* register(
+      "update_draft",
+      "Edit a draft. Clearing sendAt cancels its schedule.",
+      Schema.Struct({
+        ...draft,
+        ...draftUpdate,
+        replyTo: updateReplyTo,
+        sendAt: updateSendAt,
+        addAttachments: add_attachments,
+        removeAttachments: remove_attachments,
+        addLabels: add_labels,
+        removeLabels: remove_labels,
+      }),
+      update,
+      ({
+        inboxId,
+        draftId,
+        replyTo,
+        sendAt,
+        addAttachments,
+        removeAttachments,
+        addLabels,
+        removeLabels,
+        ...input
+      }) =>
+        operations.updateDraft(inboxId, draftId, {
+          ...input,
+          ...(replyTo === undefined ? {} : { reply_to: replyTo }),
+          ...(sendAt === undefined ? {} : { send_at: sendAt }),
+          ...(addAttachments === undefined ? {} : { add_attachments: addAttachments }),
+          ...(removeAttachments === undefined ? {} : { remove_attachments: removeAttachments }),
+          ...(addLabels === undefined ? {} : { add_labels: addLabels }),
+          ...(removeLabels === undefined ? {} : { remove_labels: removeLabels }),
+        }),
+    );
+    yield* register(
+      "send_draft",
+      "Queue a draft now; approval policies request owner review.",
+      Schema.Struct({
+        ...draft,
+        ...labels,
+        idempotencyKey: send.idempotencyKey,
+      }),
+      create,
+      ({ inboxId, draftId, addLabels, removeLabels, idempotencyKey }) =>
+        operations.sendDraft(
+          inboxId,
+          draftId,
+          {
+            ...(addLabels === undefined ? {} : { add_labels: addLabels }),
+            ...(removeLabels === undefined ? {} : { remove_labels: removeLabels }),
+          },
+          idempotencyKey,
+        ),
+    );
+    yield* register(
+      "delete_draft",
+      "Delete a draft and cancel its schedule.",
+      Schema.Struct(draft),
+      remove,
+      (input) => operations.deleteDraft(input.inboxId, input.draftId),
+    );
     yield* register(
       "list_inboxes",
       "List accessible inboxes.",

@@ -1,13 +1,30 @@
+import { Schema } from "effect";
 import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema } from "effect/http-api";
 import * as Common from "../common.js";
 import * as Errors from "../errors.js";
 import * as Messages from "../messages.js";
 import * as Drafts from "../drafts.js";
 import * as Attachments from "../attachments.js";
-import { BearerAuth, RequiredPermission } from "../security.js";
+import { BearerAuth, OwnerOnly, RequiredPermission } from "../security.js";
 
 export const DraftsApi = HttpApiGroup.make("drafts")
   .add(
+    HttpApiEndpoint.post(
+      "inboxes_drafts_approve",
+      "/v0/inboxes/:inbox_id/drafts/:draft_id/approve",
+      {
+        params: { inbox_id: Common.InboxId, draft_id: Common.DraftId },
+        headers: Common.SendHeaders,
+        success: Schema.Union([Messages.SendMessageResponse, Drafts.Draft]),
+        error: Errors.WriteErrors,
+      },
+    ).middleware(OwnerOnly),
+    HttpApiEndpoint.post("inboxes_drafts_reject", "/v0/inboxes/:inbox_id/drafts/:draft_id/reject", {
+      params: { inbox_id: Common.InboxId, draft_id: Common.DraftId },
+      payload: Drafts.RejectDraftRequest,
+      success: Drafts.Draft,
+      error: Errors.WriteErrors,
+    }).middleware(OwnerOnly),
     HttpApiEndpoint.get("inboxes_drafts_list", "/v0/inboxes/:inbox_id/drafts", {
       params: { inbox_id: Common.InboxId },
       query: Drafts.ListDraftsQuery,

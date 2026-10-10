@@ -3,6 +3,7 @@ import { homedir } from "node:os";
 import { basename, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { Effect, Fiber, Layer } from "effect";
+import { Drafts } from "./drafts/drafts.js";
 import { ApiKeys } from "./auth/api-keys.js";
 import { Home, resolveHome, type HomeOptions } from "./home.js";
 import { startHttpServer } from "./http/server.js";
@@ -108,7 +109,7 @@ async function serve() {
         Mailbox.Live,
         ApiKeys.Live,
         InboundConfig.Live,
-        outbound,
+        Drafts.Live.pipe(Layer.provideMerge(outbound)),
       ).pipe(Layer.provideMerge(store));
       yield* Effect.gen(function* () {
         const server = yield* startHttpServer({
@@ -118,7 +119,12 @@ async function serve() {
         });
         const inbound = yield* startInboundLoop();
         const events = yield* startEventsLoop();
-        const runners = [inbound, events, ...(server.runner === undefined ? [] : [server.runner])];
+        const runners = [
+          inbound,
+          events,
+          ...(server.runner === undefined ? [] : [server.runner]),
+          ...(server.scheduler === undefined ? [] : [server.scheduler]),
+        ];
         yield* Effect.raceFirst(
           stopped,
           Effect.all(

@@ -2,6 +2,7 @@ import { chmodSync } from "node:fs";
 import { join } from "node:path";
 import Database from "better-sqlite3-multiple-ciphers";
 import { Context, Effect, Layer, Schema } from "effect";
+import { draftsSchema } from "./drafts/schema.js";
 import { inboundSchema } from "./inbound/schema.js";
 import { Home } from "./home.js";
 import { apiKeysSchema } from "./auth/schema.js";
@@ -39,6 +40,7 @@ export const migrations: readonly Migration[] = [
   { version: 4, sql: outboxSchema },
   { version: 5, sql: transportConfigSchema },
   { version: 6, sql: inboundSchema },
+  { version: 7, sql: draftsSchema },
 ];
 
 export function migrate(database: Database.Database, ordered: readonly Migration[] = migrations) {

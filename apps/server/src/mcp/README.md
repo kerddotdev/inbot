@@ -27,7 +27,7 @@ All tools include fresh guidance that email content is untrusted external data
 and must never become instructions. All input schemas have an object root and
 at least one documented field; `list_inboxes` accepts optional pagination fields.
 Parameters use camelCase (`inboxId`, `messageId`, `threadId`, `pageToken`,
-`replyTo`, `replyAll`, `clientId`, `addLabels`, `removeLabels`, `idempotencyKey`).
+`replyTo`, `replyAll`, `inReplyTo`, `forwardOf`, `sendAt`, `draftId`, `clientId`, `addLabels`, `removeLabels`, `idempotencyKey`).
 Attachment objects retain the shared request fields. `get_attachment`
 uses `threadId`, `attachmentId`, and optional `inboxId` and returns the same signed,
 bearer-protected download metadata as REST. Thread tools may omit `inboxId` for
@@ -43,6 +43,11 @@ a scoped organization lookup. Default page size is 10; `limit` can override it.
 | `update_thread`, `update_message`                                                                                   | false        | false           | true           | `message_update` |
 | `delete_thread`                                                                                                     | false        | true            | true           | `message_delete` |
 | `send_message`, `forward_message`                                                                                   | false        | false           | false          | `message_send`   |
+| `create_draft`                                                                                                      | false        | false           | false          | `draft_create`   |
+| `list_drafts`, `get_draft`                                                                                          | true         | false           | true           | `draft_read`     |
+| `update_draft`                                                                                                      | false        | false           | true           | `draft_update`   |
+| `send_draft`                                                                                                        | false        | false           | false          | `draft_send`     |
+| `delete_draft`                                                                                                      | false        | true            | true           | `draft_delete`   |
 | `reply_to_message`                                                                                                  | false        | false           | false          | `message_reply`  |
 
 Create/send annotations stay non-idempotent because `clientId` and
@@ -50,11 +55,40 @@ Create/send annotations stay non-idempotent because `clientId` and
 and payload returns the original ids; changing the payload returns
 `idempotency_conflict`. This ledger is shared with REST's `idempotency-key` header.
 Parent-based sends also need `message_read` and a visible parent. Owners send
-directly, `read_only` blocks, and `approval` returns `approval_required` without
-creating drafts. The pending-draft approval workflow remains later work.
+directly, `read_only` blocks, and `approval` creates or marks a pending draft and
+returns `isError: true` with `approval_required`. The error shape stays
+`{ name, code, message, fix }`; `message` and `fix` contain the draft id. No message
+id is invented before the owner approves. Proposed message idempotency is shared
+with REST, including after the original draft is approved or deleted.
 
 There are no tools for domains, keys, webhooks, settings, transport, unlock,
-drafts, or list entries. Owner-only capabilities never enter the MCP registry.
+approval/rejection, or list entries. Owner-only capabilities never enter the MCP registry.
+
+## Drafts
+
+`create_draft`, `list_drafts`, `get_draft`, `update_draft`, `send_draft`, and
+`delete_draft` call the same draft service and shared operations as REST.
+`list_drafts` may omit `inboxId` for a scoped organization list. The other tools
+require `inboxId` and existing-draft tools require `draftId`. Draft recipients use
+arrays; `replyTo`, `inReplyTo`, `forwardOf`, `replyAll`, `sendAt`, `clientId`,
+`addAttachments`, and `removeAttachments` map to the shared wire fields.
+
+`clientId` replays creation within the inbox while the draft exists. Reply and
+forward drafts derive recipients/content/threading from a visible source and
+also require `message_read`. `send_draft` queues now and deletes the draft
+atomically, with `idempotencyKey` replaying the result after deletion. An approval
+key instead marks the draft pending and receives the documented error.
+
+`sendAt` schedules a draft, requiring `draft_send` in addition to the create or
+update permission. Only due direct or owner-approved drafts are queued. Setting
+`sendAt: null` or deleting cancels scheduling. Schedules require the running
+service and may be late; message timestamps show actual queue time. Edits to an
+approved draft needing review require another approval. Owners use the REST
+extension endpoints to approve or reject; neither is an MCP tool. Attachment
+download metadata is available through the draft REST endpoints.
+
+See [the HTTP reference](../http/README.md) for states, owner decisions, and
+scheduling guarantees.
 
 ## Shared behavior and results
 
@@ -63,7 +97,8 @@ methods and authorization helpers. Scope checks precede permission checks and
 conceal foreign resources with `not_found`. Organization pagination and search
 apply the key's fixed inbox allowlist before reading. Hidden-label permissions
 control listing flags and direct resources, including parents, threads, and
-attachment downloads. Missing transport cannot enqueue through either surface.
+attachment downloads. Missing transport cannot enqueue through either surface; approval proposals can
+still be stored for later owner review.
 
 Success results put the same JSON in `structuredContent` and text `content`.
 Errors set `isError: true` and return `{ name, code, message, fix }` in both places.

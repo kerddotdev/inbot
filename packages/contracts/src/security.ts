@@ -5,7 +5,7 @@ import { ForbiddenError, UnauthorizedError } from "./errors.js";
 
 export const Principal = Schema.Union([
   Schema.Struct({ kind: Schema.Literal("owner") }),
-  Schema.Struct({ kind: Schema.Literal("agent"), grant: Grant }),
+  Schema.Struct({ kind: Schema.Literal("agent"), api_key_id: Schema.String, grant: Grant }),
 ]);
 export type Principal = typeof Principal.Type;
 

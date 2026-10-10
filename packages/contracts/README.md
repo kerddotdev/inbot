@@ -16,8 +16,8 @@ download metadata, while domain zone files use `text/plain`. Deletions and
 domain verification return empty HTTP 200 responses; webhook header updates
 return HTTP 204.
 
-`Draft` and `DraftItem` add an optional boolean `pending_approval`. They retain
-the `scheduled`, `sending`, and `failed` send statuses. Creating a draft
+`Draft` and `DraftItem` add optional `pending_approval`, `created_by`,
+`approval_state`, and `rejection_reason` fields. They retain the `scheduled`, `sending`, and `failed` send statuses. Creating a draft
 does not authorize sending it. Reply and forward context is set on creation;
 draft updates follow nullable content fields and attachment and
 label deltas. Setting `send_at` to null cancels scheduling.
@@ -30,12 +30,14 @@ permission. Threads use message permissions. `send_policy` is `direct`,
 the plaintext `api_key`. Expiry and inbox scope are immutable on update.
 
 `BearerAuth` declares `Authorization: Bearer <key>` and provides a
-`CurrentPrincipal`. Domains and API keys additionally declare `OwnerOnly`.
+`CurrentPrincipal`. Domains, API keys, and draft approve/reject endpoints additionally declare
+`OwnerOnly`.
 Other endpoints carry a typed `RequiredPermission` annotation. The server HTTP
 layer implements these middleware services, inbox scopes, and restricted-label
-checks for mailbox operations. Send operations currently return `not_supported`;
-send policies and scoped event subscriptions need enforcement when their
-services land. Owner-only resources must never become agent MCP tools.
+checks for mailbox and draft operations. Send policies are enforced by shared
+service operations. Approval creates pending drafts and returns the unchanged
+error shape with the draft id in `message` and `fix`. Scoped event
+subscriptions remain planned. Owner-only resources must never become agent MCP tools.
 
 Errors use the `{ name, code, message, fix?, docs? }` wire shape without an Effect
 `_tag`. Status-specific schemas constrain the code and carry `httpApiStatus`;

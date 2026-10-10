@@ -28,7 +28,7 @@ process exit, so that test home cannot be reopened through a real keychain.
 
 ## Implemented routes
 
-All 79 declared `InbotApi` endpoints are registered with Effect v4
+All declared `InbotApi` endpoints are registered with Effect v4
 `HttpApiBuilder.group` and `HttpApiBuilder.layer`. The server uses
 `HttpRouter.toHttpEffect`, `NodeHttpServer.make`, and
 `NodeHttpServer.layerHttpServices`; resources stay in Mailbox and ApiKeys service
@@ -39,6 +39,8 @@ override are 4.0.2, matching the installed Effect version.
 - Threads: inbox and organization list, search, get, update, delete, attachment.
 - Messages: list, search, get, update, delete, batch-get, batch-update, raw,
   attachment, send, reply, reply-all, forward.
+- Drafts: inbox CRUD, send, attachment; organization list, get, attachment;
+  owner-only approve and reject.
 - API keys: owner-only organization CRUD and inbox-scoped create, list, update,
   delete. The contract has no inbox-scoped key-get route.
 
@@ -49,7 +51,7 @@ changes the label to `sent`; it does not prove delivery. No configured transport
 returns 503 `service_unavailable` with fix `Configure the Cloudflare mail transport`
 and does not enqueue. Transport settings have only an internal service for now.
 
-Drafts, lists, webhooks, and domains return HTTP 501 `not_supported` after
+Lists, webhooks, and domains return HTTP 501 `not_supported` after
 authentication and authorization. Validated input is still required. Provisioning,
 tunnels, the web UI, OAuth, and event streams remain planned. The same server
 exposes authenticated streamable HTTP MCP at `/mcp`; see
@@ -95,9 +97,77 @@ Search retains Mailbox's existing behavior of excluding all hidden labels.
 Sending requires `message_send` for send/forward or `message_reply` for replies.
 Parent-based operations also require `message_read` and a visible parent. Owners
 always send directly. Agent `read_only` grants fail with 403 `missing_permission`;
-`approval` grants fail with 403 `approval_required` and fix `Drafts and owner approval
-arrive in a later release`. No draft or queued message is created. Approval will
-create pending drafts when the draft and owner approval workflow is implemented.
+`approval` grants create a pending draft and return 403 `approval_required`.
+The error keeps the `{ name, code, message, fix }` shape: both `message`
+and `fix` identify the created `draft_id`. There is no extra error field or 202
+success response because send clients expect real `{ message_id, thread_id }`
+identities, which do not exist before approval. This applies to send, reply,
+reply-all, forward, and draft send. Replaying a proposed message with the same
+`Idempotency-Key` returns the same draft error without creating another draft;
+a changed payload returns `idempotency_conflict`. A proposal replay retains its
+original draft identity even after approval or deletion.
+
+## Drafts and owner decisions
+
+Migration 7 stores draft content, base64 attachments, creator identity, approval
+state, schedules, and replay ledgers inside the encrypted Store. Version 6 is
+reserved for integration with concurrent work; migrations accept strictly
+increasing versions. No new dependency is needed. Drafts may be incomplete;
+composition limits are validated again when they are sent or approved.
+
+- `GET|POST /v0/inboxes/{inbox_id}/drafts`
+- `GET|PATCH|DELETE /v0/inboxes/{inbox_id}/drafts/{draft_id}`
+- `POST /v0/inboxes/{inbox_id}/drafts/{draft_id}/send`
+- `GET /v0/inboxes/{inbox_id}/drafts/{draft_id}/attachments/{attachment_id}`
+- `GET /v0/drafts`, `GET /v0/drafts/{draft_id}` and
+  `GET /v0/drafts/{draft_id}/attachments/{attachment_id}`
+- Owner extension: `POST /v0/inboxes/{inbox_id}/drafts/{draft_id}/approve`
+- Owner extension: `POST /v0/inboxes/{inbox_id}/drafts/{draft_id}/reject`
+  with `{ "reason": "Optional explanation" }` or `{}`.
+
+Draft operations require their respective `draft_read`, `draft_create`,
+`draft_update`, `draft_send`, or `draft_delete` permission and the inbox scope.
+Organization lookups and page tokens retain scope and hidden-label filtering.
+Reply/forward creation also requires `message_read` and a visible source.
+`client_id` is idempotent within an inbox while its draft exists. Null clears an
+editable field; recipient arrays also accept `[]`. Attachment metadata has
+stable ids until removed, and downloads recheck `draft_read` at access time.
+
+A direct `send_draft` explicitly sends now, overriding a future schedule. It
+returns `{ message_id, thread_id }` after atomically inserting the queued message
+and deleting the draft. The draft send's `Idempotency-Key` replays after deletion;
+changing draft identity or label updates conflicts. Provider acceptance and
+later delivery remain separate from queueing. The owner approval endpoint
+validates current transport and composition before making any durable decision.
+An immediate approval returns the queued message ids; a future approval returns
+the approved draft with `send_status: "scheduled"`. Failed approval keeps the
+draft pending and returns the actionable composition or transport error.
+
+Only owners can approve or reject. An agent cannot escape approval by editing a
+previously approved draft: edits require another review. Rejected drafts retain
+`approval_state: "rejected"` and cannot be sent or approved; create a new draft
+for reconsideration. Rejection cancels scheduling. Approve/reject are absent from
+MCP, and agents cannot supply approval fields in draft payloads.
+
+## Scheduled sending
+
+Creating or updating a draft with `send_at` schedules it and additionally
+requires `draft_send` and a non-read-only send policy. Approval-policy schedules
+remain pending until an owner approves them. The scheduler claims only due
+approved/direct drafts and transitions `scheduled -> sending`, then atomically
+converts the draft into a queued message and deletes it. Composition or transport
+failure leaves a `failed` draft for editing, explicit send, or owner retry.
+Deleting the draft or setting `send_at: null` cancels the schedule. Already
+`sending` drafts cannot be edited, deleted, or rejected.
+
+Schedules fire only while the service runs. The scheduler polls every 30 seconds
+when idle and every 2 seconds after work. After an outage it processes overdue
+drafts and recovers persisted `sending` drafts before retrying. Message timestamps
+reflect the actual queue time, including lateness; `send_at` is not a delivery
+promise. Outbox retries, provider acceptance, and delivery can introduce further
+delay. Both background fibers are scoped to the HTTP service and observed by
+`serve`; storage failures stop the service. Integration tests can disable the
+loops and drive the clock and fake provider explicitly.
 
 REST and MCP use `AgentOperations`, the shared authorization helpers, and the
 same Mailbox/Outbox methods. The middleware checks contract permission annotations

@@ -230,17 +230,55 @@ const ApiKeysLive = HttpApiBuilder.group(ServerApi, "api-keys", (handlers) =>
 );
 
 const DraftsLive = HttpApiBuilder.group(ServerApi, "drafts", (handlers) =>
-  handlers
-    .handle("inboxes_drafts_list", unsupported)
-    .handle("inboxes_drafts_create", unsupported)
-    .handle("inboxes_drafts_get", unsupported)
-    .handle("inboxes_drafts_update", unsupported)
-    .handle("inboxes_drafts_delete", unsupported)
-    .handle("inboxes_drafts_getAttachment", unsupported)
-    .handle("inboxes_drafts_send", unsupported)
-    .handle("drafts_list", unsupported)
-    .handle("drafts_get", unsupported)
-    .handle("drafts_getAttachment", unsupported),
+  Effect.gen(function* () {
+    const operations = yield* AgentOperations;
+    return handlers
+      .handle("inboxes_drafts_list", ({ params, query }) =>
+        respond(operations.listDrafts(params.inbox_id, query)),
+      )
+      .handle("inboxes_drafts_create", ({ params, payload }) =>
+        respond(operations.createDraft(params.inbox_id, payload)),
+      )
+      .handle("inboxes_drafts_get", ({ params }) =>
+        respond(operations.getDraft(params.inbox_id, params.draft_id)),
+      )
+      .handle("inboxes_drafts_update", ({ params, payload }) =>
+        respond(operations.updateDraft(params.inbox_id, params.draft_id, payload)),
+      )
+      .handle("inboxes_drafts_delete", ({ params }) =>
+        respond(operations.deleteDraft(params.inbox_id, params.draft_id)),
+      )
+      .handle("inboxes_drafts_getAttachment", ({ params }) =>
+        respond(
+          operations.getDraftAttachment(params.inbox_id, params.draft_id, params.attachment_id),
+        ),
+      )
+      .handle("inboxes_drafts_send", ({ params, payload, headers }) =>
+        respond(
+          operations.sendDraft(
+            params.inbox_id,
+            params.draft_id,
+            payload,
+            headers["idempotency-key"],
+          ),
+        ),
+      )
+      .handle("inboxes_drafts_approve", ({ params, headers }) =>
+        respond(
+          operations.approveDraft(params.inbox_id, params.draft_id, headers["idempotency-key"]),
+        ),
+      )
+      .handle("inboxes_drafts_reject", ({ params, payload }) =>
+        respond(operations.rejectDraft(params.inbox_id, params.draft_id, payload.reason)),
+      )
+      .handle("drafts_list", ({ query }) => respond(operations.listDrafts(undefined, query)))
+      .handle("drafts_get", ({ params }) =>
+        respond(operations.getDraft(undefined, params.draft_id)),
+      )
+      .handle("drafts_getAttachment", ({ params }) =>
+        respond(operations.getDraftAttachment(undefined, params.draft_id, params.attachment_id)),
+      );
+  }),
 );
 
 const ListsLive = HttpApiBuilder.group(ServerApi, "lists", (handlers) =>

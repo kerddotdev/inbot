@@ -76,18 +76,12 @@ export function authorize(permission: Permission, inboxId?: string) {
 
 export const authorizeSendPolicy = Effect.gen(function* () {
   const principal = yield* CurrentPrincipal;
-  if (principal.kind === "owner" || principal.grant.send_policy === "direct") return;
+  if (principal.kind === "owner" || principal.grant.send_policy !== "read_only") return;
   return yield* Effect.fail(
-    principal.grant.send_policy === "approval"
-      ? wireError(
-          "approval_required",
-          "This API key requires owner approval before sending.",
-          "Drafts and owner approval arrive in a later release",
-        )
-      : wireError(
-          "missing_permission",
-          "This API key has a read-only send policy.",
-          "Ask the owner for a direct send policy before sending mail.",
-        ),
+    wireError(
+      "missing_permission",
+      "This API key has a read-only send policy.",
+      "Ask the owner for a direct or approval send policy before sending mail.",
+    ),
   );
 });
