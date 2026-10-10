@@ -105,9 +105,9 @@ The planned runtime has one local `inbot` service. It serves REST under `/v0`, M
 
 ## Where code lives
 
-`apps/server/src` contains the storage foundation and mailbox service, and `packages/contracts` contains the shared schemas and HTTP API declarations. The remaining layout is planned. Create a package only when it has a real implementation.
+`apps/server/src` contains the storage foundation, mailbox service, and inbound MIME ingestion, and `packages/contracts` contains the shared schemas and HTTP API declarations. The remaining layout is planned. Create a package only when it has a real implementation.
 
-- `apps/server` - implemented home, key management, encrypted store, and mailbox service for inboxes, messages, threads, attachments, and search; planned HTTP API, MCP, OAuth, inbound and outbound pipelines, provisioning, and tunnel supervision.
+- `apps/server` - implemented home, key management, encrypted store, mailbox service, and inbound MIME parsing and ingestion; planned HTTP API, MCP, OAuth, inbound decryption and pulling, outbound pipeline, provisioning, and tunnel supervision.
 - `apps/cli` - the `inbot` entry point: service commands and resource commands.
 - `apps/web` - React, Vite, and Tailwind owner UI.
 - `apps/worker` - Cloudflare Email Worker that encrypts inbound mail into the buffer.
