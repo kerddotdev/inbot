@@ -18,7 +18,10 @@ export function prepare(db: Database.Database, inboxId: string, request: Outboun
       ? undefined
       : db
           .prepare(
-            "SELECT provider_message_id, state FROM outbox WHERE inbox_id = ? AND message_id = ?",
+            `SELECT CASE WHEN EXISTS (SELECT 1 FROM message_aliases a
+              WHERE a.inbox_id = o.inbox_id AND a.message_id = o.message_id AND a.alias = o.provider_message_id)
+              THEN provider_message_id ELSE NULL END AS provider_message_id, state
+              FROM outbox o WHERE inbox_id = ? AND message_id = ?`,
           )
           .get(inboxId, parent.message_id);
   const source =
@@ -30,7 +33,9 @@ export function prepare(db: Database.Database, inboxId: string, request: Outboun
     sourceId !== undefined &&
     parentRfcId === undefined
   )
-    throw invalid("Wait for the outgoing parent to be accepted before replying to it.");
+    throw invalid(
+      "The outgoing parent has no verified provider message ID. Check its send outcome before replying, or compose a new message.",
+    );
   return compose(inboxId, request, {
     ...(parent !== undefined ? { parent } : {}),
     ...(parentRfcId !== undefined ? { parent_rfc_id: parentRfcId } : {}),

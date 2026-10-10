@@ -46,3 +46,6 @@ close with 1013. Fetch large message content through REST instead.
 CLI: `inbot events --follow --json --last-event-id EVENT_ID` or `inbot webhooks ...`.
 Retain the last received ID to resume after a disconnect. Sending/approval events
 report actual states; draft approval and queueing do not mean provider acceptance.
+`message.send_unknown` carries `outcome` IDs and a machine-readable `reason`. Do
+not resend; inform the human. Owner resolution emits `message.sent` or
+`message.failed` with reason `owner_confirmed_sent` or `owner_confirmed_not_sent`.

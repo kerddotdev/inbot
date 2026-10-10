@@ -14,7 +14,9 @@ Implemented producers:
 - Inbound insertion, including spam, blocked and unauthenticated variants. Replay
   of an existing message does not append another event.
 - Outbox provider acceptance (`message.sent`) and terminal failure
-  (`message.failed`, including unknown outcomes and queued mail refused by lists).
+  (`message.failed`, including queued mail refused by lists), and uncertainty
+  (`message.send_unknown`, never a failure assertion). Owner resolution emits
+  `message.sent` or `message.failed` with an owner confirmation reason.
   Queueing does not imply sent.
 - Observed delivery, bounce, complaint, failure and rejection. Provider event IDs
   are deduplicated. Deferred delivery stays a message label, without a new wire event.

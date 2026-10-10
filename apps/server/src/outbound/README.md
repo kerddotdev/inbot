@@ -100,7 +100,10 @@ outgoing from received mail, but acceptance is represented by the outbox state
 and labels, not the direction timestamp. Initially only `queued` is added.
 Caller-supplied managed delivery labels are withheld. Acceptance atomically
 swaps `queued` for `sent`, stores the provider id, and inserts its alias. A final
-failure swaps `queued` for `failed`. Custom labels survive these transitions.
+failure swaps `queued` for `failed`; uncertainty swaps it for `send_unknown`.
+Message resources expose `send_status` and optional `send_reason` from the durable
+outbox, including old unknown rows. Custom labels survive these transitions.
+Public label updates cannot change an outbox message's send labels.
 `sent` means provider acceptance, not recipient delivery.
 
 Local ids are stable `<uuid@inbot.local>` RFC identifiers and remain the ids
@@ -122,9 +125,15 @@ happened. A success response without a valid RFC id is also uncertain.
 
 An interrupted/crashed send stays `sending`. Once its 5-minute lease expires,
 `processDue()` marks it `failed` with `last_error_code = "unknown_outcome"`, without
-resending. No provider reconciliation API is implemented here. The owner must
-reconcile externally before explicitly creating another send. A crash after
+resending. Its public status and label are `send_unknown`, with reason
+`unknown_outcome`; it never emits `message.failed` for uncertainty. A crash after
 acceptance but before the final database transaction follows this same rule.
+The local owner can resolve after verifying sent or not sent using
+`POST /v0/inboxes/{inbox_id}/messages/{message_id}/resolve` and decision
+`sent` or `failed`. The decision and event commit atomically; repeating the same
+decision is idempotent. This never requeues the old message. An intentional retry
+creates a new message with a new idempotency key. No database migration is needed.
+Without an unambiguous provider alias, marking sent does not enable RFC replies.
 
 Delivery event labels are historical observations, not exclusive per-recipient
 states: a multi-recipient message can have both `delivered` and `bounced`, and

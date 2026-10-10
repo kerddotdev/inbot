@@ -3,7 +3,7 @@ import * as Common from "../common.js";
 import * as Errors from "../errors.js";
 import * as Messages from "../messages.js";
 import * as Attachments from "../attachments.js";
-import { BearerAuth, RequiredPermission } from "../security.js";
+import { BearerAuth, OwnerOnly, RequiredPermission } from "../security.js";
 
 export const MessagesApi = HttpApiGroup.make("messages")
   .add(
@@ -77,6 +77,16 @@ export const MessagesApi = HttpApiGroup.make("messages")
         error: Errors.ReadErrors,
       },
     ).annotate(RequiredPermission, "message_read"),
+    HttpApiEndpoint.post(
+      "inboxes_messages_resolve",
+      "/v0/inboxes/:inbox_id/messages/:message_id/resolve",
+      {
+        params: { inbox_id: Common.InboxId, message_id: Common.MessageId },
+        payload: Messages.ResolveMessageRequest,
+        success: Messages.Message,
+        error: Errors.WriteErrors,
+      },
+    ).middleware(OwnerOnly),
     HttpApiEndpoint.post("inboxes_messages_send", "/v0/inboxes/:inbox_id/messages/send", {
       params: { inbox_id: Common.InboxId },
       payload: Messages.SendMessageRequest,

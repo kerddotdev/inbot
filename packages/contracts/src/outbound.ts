@@ -54,7 +54,12 @@ export const OutboxEntry = Schema.Struct({
   state: Schema.Literals(["queued", "sending", "sent", "failed"]),
   attempts: Schema.Int,
   next_attempt_at: Schema.Finite,
-  last_error_code: Schema.NullOr(Schema.Union([ErrorCode, Schema.Literal("unknown_outcome")])),
+  last_error_code: Schema.NullOr(
+    Schema.Union([
+      ErrorCode,
+      Schema.Literals(["unknown_outcome", "owner_confirmed_sent", "owner_confirmed_not_sent"]),
+    ]),
+  ),
   provider_message_id: Schema.NullOr(Schema.String),
   created_at: Schema.Finite,
   updated_at: Schema.Finite,

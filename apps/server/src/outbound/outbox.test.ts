@@ -8,6 +8,7 @@ import type {
   DeliveryEvent,
   OutboundRequest,
 } from "../../../../packages/contracts/src/outbound.js";
+import { CurrentPrincipal } from "../../../../packages/contracts/src/security.js";
 import { Home } from "../home.js";
 import { ingestInbound } from "../inbound/ingest.js";
 import { Mailbox, type MailboxService } from "../mailbox/mailbox.js";
@@ -427,7 +428,7 @@ test("an interrupted send survives restart as unknown_outcome and is never blind
         last_error_code: "unknown_outcome",
       });
       expect((yield* mailbox.getMessage(ids.inbox, ids.message.message_id)).labels).toEqual([
-        "failed",
+        "send_unknown",
       ]);
       expect(yield* outbox.enqueue(ids.inbox, sendRequest(), "crashed")).toEqual(ids.message);
       expect(provider.calls).toHaveLength(0);
@@ -676,8 +677,23 @@ test("an acceptance alias cannot shadow another message", async ({ home, key, ti
         "Original body",
       );
       expect((yield* mailbox.getMessage(inbox.inbox_id, outgoing.message_id)).labels).toEqual([
-        "failed",
+        "send_unknown",
       ]);
+      yield* outbox
+        .resolve(inbox.inbox_id, outgoing.message_id, { decision: "sent" })
+        .pipe(Effect.provideService(CurrentPrincipal, { kind: "owner" }));
+      expect(
+        (yield* Effect.flip(
+          outbox.enqueue(inbox.inbox_id, {
+            kind: "reply",
+            message_id: outgoing.message_id,
+            request: { text: "Synthetic reply" },
+          }),
+        )).code,
+      ).toBe("validation_error");
+      expect((yield* mailbox.getMessage(inbox.inbox_id, original.message_id)).text).toBe(
+        "Original body",
+      );
     }),
   );
 });

@@ -46,6 +46,7 @@ export function humanOutput(value: unknown): string {
     webhooks: ["webhook_id", "url", "enabled", "failure_count", "disabled_reason"],
     inboxes: ["inbox_id", "display_name", "status"],
     threads: ["thread_id", "inbox_id", "subject", "labels"],
+    messages: ["message_id", "inbox_id", "subject", "send_status", "send_reason", "labels"],
     drafts: ["draft_id", "inbox_id", "subject", "approval_state", "send_status"],
     api_keys: ["api_key_id", "name", "send_policy", "inbox_id", "inbox_ids"],
     entries: ["entry", "entry_type", "direction", "list_type", "inbox_id", "reason"],
