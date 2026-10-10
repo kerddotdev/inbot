@@ -1,5 +1,5 @@
 import { Effect, Layer, Redacted } from "effect";
-import { expect, test } from "vitest";
+import { expect, test, vi } from "vitest";
 import { TransportConfig } from "../outbound/transport-config.js";
 import { CloudflareApi, sendingEvents, type Zone } from "./cloudflare-api.js";
 
@@ -28,7 +28,7 @@ const subscription = {
   destination: { type: "queues.queue", queue_id: "queue" },
   events: sendingEvents,
 };
-function service(fetch: typeof globalThis.fetch) {
+function service(fetch: typeof globalThis.fetch, configured = true) {
   return Effect.runPromise(
     CloudflareApi.pipe(
       Effect.provide(
@@ -36,10 +36,14 @@ function service(fetch: typeof globalThis.fetch) {
           Layer.provide(
             Layer.succeed(TransportConfig, {
               get: () =>
-                Effect.succeed({
-                  account_id: "account",
-                  api_token: Redacted.make("synthetic-token"),
-                }),
+                Effect.succeed(
+                  configured
+                    ? {
+                        account_id: "account",
+                        api_token: Redacted.make("synthetic-token"),
+                      }
+                    : undefined,
+                ),
               set: () => Effect.void,
               clear: () => Effect.void,
             }),
@@ -58,6 +62,17 @@ function response(result: unknown, result_info?: unknown) {
     ...(result_info === undefined ? {} : { result_info }),
   });
 }
+
+test("missing transport gives a Settings fix before any provider request", async () => {
+  const fetch = vi.fn<typeof globalThis.fetch>();
+  const api = await service(fetch, false);
+  await expect(Effect.runPromise(api.verifyToken())).rejects.toMatchObject({
+    code: "validation_error",
+    message: "Configure a Cloudflare transport token first.",
+    fix: "Configure the Cloudflare mail transport in Settings, then register the domain again.",
+  });
+  expect(fetch).not.toHaveBeenCalled();
+});
 
 test("uses captured sending/routing/subscription shapes and correct request fields", async () => {
   const seen: { path: string; method: string; body: unknown }[] = [];
