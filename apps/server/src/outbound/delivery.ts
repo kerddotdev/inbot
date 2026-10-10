@@ -12,8 +12,10 @@ const eventStatuses = {
   "cf.email.sending.message.deferred": "deferred",
 } as const;
 
+export const supportedDeliveryEventTypes: readonly string[] = Object.keys(eventStatuses);
+
 const CloudflareEvent = Schema.Struct({
-  type: Schema.Literals(Object.keys(eventStatuses)),
+  type: Schema.Literals(supportedDeliveryEventTypes),
   source: Schema.Struct({ type: Schema.Literal("email.sending") }),
   payload: Schema.Struct({
     eventId: Schema.String.check(Schema.isMinLength(1)),

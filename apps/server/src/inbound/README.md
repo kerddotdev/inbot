@@ -2,8 +2,9 @@
 
 `ingestInbound(payload, { trusted_authserv_ids? })` is an Effect requiring
 `Mailbox`. It consumes a decrypted SMTP envelope and raw RFC 5322 bytes. It does
-not decrypt envelopes, pull Cloudflare buffers, acknowledge deliveries, send
-bounces, expose routes, or emit events. No Mailbox API changes are required.
+not itself decrypt envelopes, pull buffers, acknowledge deliveries, send
+bounces, expose routes, or emit events. `puller.ts` supplies the Cloudflare
+buffer consumer and calls this same ingestion service. No Mailbox API changes are required.
 
 ## Payload and results
 
@@ -97,3 +98,73 @@ strip sender-supplied headers claiming its own trusted ids and prepend its
 observed results. This module cannot distinguish a forged header with the same
 id after that trust boundary has been lost. Cloudflare SMTP DMARC rejection is
 outside this unit; ingestion only labels and never rejects based on these results.
+
+## Cloudflare buffer consumer
+
+Migration **6** adds encrypted inbound settings, an age identity, object receipts,
+and quarantine metadata. `InboundConfig.set({ account_id, bucket,
+inbound_queue_id, events_queue_id })` creates an identity if needed.
+`generateInboundIdentity()` can run before setup; `getRecipient()` derives the
+public recipient. Identity reads are `Redacted`; `clear()` disables pulling while
+preserving the identity and existing receipts. V1 reuses the `TransportConfig`
+API token and requires matching account ids. Owner setup routes and UI are planned.
+
+`InboundBuffer` provides `pull`, `ack`, `retry`, `getObject`, `deleteObject`, and
+`listObjects`, with a bounded, timeout-protected fetch adapter and a clock-driven
+`memoryBuffer()` fake. Both queues require `http_pull` consumers. JSON bodies
+support the plain JSON string seen in captured responses and documented base64.
+
+`processInbound()` decodes the shared pointer, checks ciphertext size, decrypts,
+parses the frame, and calls `ingestInbound` with trusted authserv ids
+`["mx.cloudflare.net"]`. Every active recipient insert commits before a durable
+`committed` receipt, R2 deletion, and Queue ack, in that order. Replay before the
+receipt re-ingests idempotently; replay after deletion uses the receipt without
+requiring the object. Receipts are scoped by account/bucket/key and are retained
+to handle duplicate pointers; pruning is not implemented.
+
+Transient failures retry leases with exponential backoff capped at one hour;
+failed retry requests leave leases to expire. Corrupt or wrong-key ciphertext,
+invalid frames/MIME, and size mismatches first record `key`, fixed `reason_code`,
+and `first_seen` in the encrypted DB, then ack while retaining R2 ciphertext.
+Malformed pointers also retain only queue/message ids and any valid referenced
+key. `bufferState(...).listQuarantine()` and `listMessageQuarantine()` supply owner
+metadata; `releaseQuarantine(key)` enables deliberate reconciliation without
+deleting ciphertext. Quarantine never stores payloads, credentials, or error text.
+
+`reconcileInbound()` paginates objects under `inbound/`, processing those at least
+ten minutes old while skipping quarantined keys and known unexpired pending
+leases. Queue APIs cannot enumerate all pending pointers; eventual unseen-pointer
+replays are safe through receipts. Orphans use R2 `last_modified` as receipt time.
+`serve` runs scoped inbound/events consumers beside the outbox: two-second polling
+after completed work, thirty seconds when idle, reconciliation at startup and
+every fifteen minutes. Inbound pulling runs first to observe pending leases.
+Missing unlocked services report `locked`; missing config/token reports
+`no_config`, with no provider calls. Unhandled DB failures stop the runtime.
+Dynamic HTTP locking is not implemented; serve interrupts consumers before Store
+closes. Tests use temporary encrypted stores, real age, fake fetch/buffers, and
+controlled clocks, without real provider calls.
+
+REST paths relative to `https://api.cloudflare.com/client/v4`:
+
+- `POST /accounts/{account_id}/queues/{queue_id}/messages/pull` with
+  `{batch_size: 5, visibility_timeout_ms: 300000}`.
+- `POST /accounts/{account_id}/queues/{queue_id}/messages/ack` with
+  `{acks: [{lease_id}], retries: []}`, or retries with `delay_seconds`.
+  Returned ack/retry counts must confirm the operation.
+- `GET /accounts/{account_id}/r2/buckets/{bucket}/objects/{key}`.
+- `GET /accounts/{account_id}/r2/buckets/{bucket}/objects?prefix=inbound%2F&per_page=1000&cursor=...`,
+  following `result_info.cursor` while `is_truncated` is true.
+- `DELETE /accounts/{account_id}/r2/buckets/{bucket}/objects/{key}` after commit.
+
+Object key slashes stay literal; other reserved characters are encoded. The
+REST object API is sufficient for this local consumer, with rate limits and no
+extra S3 credentials. Sources: [pull consumers](https://developers.cloudflare.com/queues/configuration/pull-consumers/),
+[pull](https://developers.cloudflare.com/api/resources/queues/subresources/messages/methods/pull/),
+[ack](https://developers.cloudflare.com/api/resources/queues/subresources/messages/methods/ack/),
+[R2 get](https://developers.cloudflare.com/api/resources/r2/subresources/buckets/subresources/objects/methods/get/),
+[R2 list](https://developers.cloudflare.com/api/resources/r2/subresources/buckets/subresources/objects/methods/list/),
+[R2 delete](https://developers.cloudflare.com/api/resources/r2/subresources/buckets/subresources/objects/methods/delete/).
+
+Service, delivery events, reverse states, and docs apply. Existing contracts and
+mailbox semantics are reused; REST, MCP, CLI, web, grants, and remote allowlists
+have no new public surface. `skills/inbot` does not exist in this checkout.

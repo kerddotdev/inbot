@@ -2,7 +2,7 @@
 
 Self-hosted, privacy-first email for AI agents. Each agent gets its own inbox on your custom domain, mail is stored encrypted on your own machine, and agents reach it through MCP, a CLI, or a REST API. An optional Cloudflare Tunnel lets cloud-hosted agents reach your local instance with scoped credentials. The mail provider still sees plaintext in transit: Inbot is zero-knowledge at rest, not end-to-end encrypted.
 
-Status: early development. The encrypted storage foundation, mailbox service, [inbound MIME ingestion](apps/server/src/inbound/README.md), [authenticated loopback HTTP API](apps/server/src/http/README.md), shared [age envelope package](packages/envelope/README.md), and [inbound Email Worker handler](apps/worker/README.md) exist. Live mail delivery, the owner web UI, and installers remain planned.
+Status: early development. The encrypted storage foundation, mailbox service, [inbound ingestion and encrypted buffer pulling](apps/server/src/inbound/README.md), [authenticated loopback HTTP API](apps/server/src/http/README.md), shared [age envelope package](packages/envelope/README.md), [inbound Email Worker handler](apps/worker/README.md), and [delivery Queue consumer](apps/server/src/outbound/README.md#delivery-queue-consumer) exist. Live mail delivery, the owner web UI, and installers remain planned.
 
 ## Development
 
@@ -21,3 +21,10 @@ prints its URL once and writes the owner token to the home directory's private
 `connection.json`. Sending requires a configured Cloudflare transport; drafts,
 lists, webhooks, and domains return `not_supported`. Passphrase startup and web
 sessions are not implemented yet.
+
+Inbound and delivery pulling require internal encrypted buffer configuration and
+the existing Cloudflare transport token. `serve` starts their scoped loops after
+unlock, including startup and periodic inbound reconciliation. Owner setup routes
+are not implemented. Inbound R2 stores ciphertext only; provider-generated delivery
+events can contain plaintext subjects in their Queue until acknowledged. See the
+linked consumer documentation for configuration, quarantine, and API boundaries.
