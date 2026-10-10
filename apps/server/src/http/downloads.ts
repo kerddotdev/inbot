@@ -10,7 +10,7 @@ import { Drafts } from "../drafts/drafts.js";
 import { Mailbox } from "../mailbox/mailbox.js";
 import { inScope, permits, visible } from "../agent/authorization.js";
 import { errorResponse, respond, wireError } from "./errors.js";
-import { CurrentOwnerSession } from "./owner-session.js";
+import { CurrentOwnerSession, CurrentRequestOrigin } from "./owner-session.js";
 import { authenticate } from "./middleware.js";
 
 const Resource = Schema.Struct({
@@ -31,7 +31,7 @@ function makeDownloads(url: string, secret: Buffer) {
         const expires = (yield* Clock.currentTimeMillis) + 5 * 60_000;
         const payload = Buffer.from(JSON.stringify({ ...resource, expires })).toString("base64url");
         return {
-          download_url: `${url}/v0/downloads/${payload}.${sign(payload).toString("base64url")}`,
+          download_url: `${(yield* CurrentRequestOrigin) ?? url}/v0/downloads/${payload}.${sign(payload).toString("base64url")}`,
           expires_at: new Date(expires).toISOString(),
         };
       }),

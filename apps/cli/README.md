@@ -160,7 +160,7 @@ without credentials or payload contents. Exit codes are stable:
 `pnpm exec vitest run apps/cli/src/cli.test.ts` runs against the real in-process
 HTTP server with a temporary encrypted home, memory keychain, fixed clock, and
 fake provider. No real mail, infrastructure, or owner home is used. Domains,
-transport setup, service installation, binary downloads, and additional REST
+transport setup, service installation, and additional REST
 operations are outside this CLI implementation. Resource commands add no
 service behavior, permission, event, MCP tool, or remote route.
 
@@ -209,3 +209,21 @@ new connections without a cursor follow future events. Ctrl-C closes cleanly.
 Connection loss, revoked credentials or invalid resume fail with exit 10; there
 is no automatic reconnect. Event read permissions and inbox scope are enforced
 by the server; read-only send policy does not prevent authorized event reads.
+
+## Remote access (local owner)
+
+```sh
+inbot remote status --json
+inbot remote enable --hostname inbot.example.com --json
+inbot remote disable --json
+```
+
+Use the local server connection and configure the Cloudflare transport first.
+Enable explicitly authorizes downloading the pinned verified connector and
+creating a named tunnel and a proxied CNAME for an unused non-apex subdomain.
+The commands call `GET /v0/owner/remote`, `POST /v0/owner/remote/enable`, and
+`POST /v0/owner/remote/disable`. Agent keys and tunneled management requests are
+rejected. Status distinguishes disabled, provisioning, connecting, connected and
+action_required; it never includes tunnel credentials. After a client timeout,
+inspect status and retry the same hostname to reconcile, or disable to clean up.
+See [remote access](../server/src/remote/README.md) for the exact tunnel policy.

@@ -397,3 +397,28 @@ test("list management encodes entries, decodes scoped responses, paginates and i
   for (const call of fetcher.mock.calls.slice(3))
     expect(new Headers(call[1]?.headers).get("X-Inbot-CSRF")).toBe("list-csrf");
 });
+
+test("remote actions decode shared status and send hostname with restored CSRF", async () => {
+  const remote = { state: "disabled", hostname: null, reason: null, connector_version: "2026.9.1" };
+  const fetcher = vi
+    .fn<typeof fetch>()
+    .mockResolvedValueOnce(
+      json(
+        { setup_required: false, authenticated: true, locked: false },
+        { headers: { "X-Inbot-CSRF": "synthetic-csrf" } },
+      ),
+    )
+    .mockResolvedValueOnce(json(remote))
+    .mockResolvedValueOnce(json({ ...remote, state: "connecting", hostname: "inbot.example.test" }))
+    .mockResolvedValueOnce(json(remote));
+  const client = new ApiClient(fetcher);
+  await client.status();
+  expect(await client.remote(signal())).toEqual(remote);
+  await client.enableRemote("inbot.example.test");
+  await client.disableRemote();
+  const enable = fetcher.mock.calls[2];
+  expect(enable?.[0]).toBe("/v0/owner/remote/enable");
+  expect(enable?.[1]?.body).toBe(JSON.stringify({ hostname: "inbot.example.test" }));
+  expect(new Headers(enable?.[1]?.headers).get("X-Inbot-CSRF")).toBe("synthetic-csrf");
+  expect(fetcher.mock.calls[3]?.[0]).toBe("/v0/owner/remote/disable");
+});

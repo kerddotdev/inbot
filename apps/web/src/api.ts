@@ -1,4 +1,5 @@
 import { Schema } from "effect";
+import * as Remote from "@inbot/contracts/src/remote.js";
 import * as Owner from "@inbot/contracts/src/owner.js";
 import * as Inboxes from "@inbot/contracts/src/inboxes.js";
 import * as Threads from "@inbot/contracts/src/threads.js";
@@ -170,6 +171,16 @@ export class ApiClient {
 
   status = (signal?: AbortSignal) =>
     this.request("/v0/owner/status", Owner.OwnerStatus, signal ? { signal } : {});
+
+  remote = (signal: AbortSignal) =>
+    this.request("/v0/owner/remote", Remote.RemoteStatus, { signal });
+  enableRemote = (hostname: string) =>
+    this.request("/v0/owner/remote/enable", Remote.RemoteStatus, {
+      method: "POST",
+      body: { hostname },
+    });
+  disableRemote = () =>
+    this.request("/v0/owner/remote/disable", Remote.RemoteStatus, { method: "POST" });
 
   transport = (signal: AbortSignal) =>
     this.request("/v0/owner/transport", Owner.OwnerTransportStatus, { signal });

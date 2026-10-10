@@ -668,3 +668,32 @@ test("events --follow replays typed JSON events through bearer WebSocket and sto
     message: { message_id: "<cli-event@example.test>" },
   });
 });
+
+test("remote commands use owner REST, validate hostname and preserve agent rejection", async ({
+  api,
+}) => {
+  const initial = await invoke(api, ["remote", "status", "--json"]);
+  expect(initial.code).toBe(0);
+  expect(JSON.parse(initial.stdout)).toMatchObject({ state: "disabled", hostname: null });
+  expect((await invoke(api, ["remote", "enable", "--json"])).code).toBe(2);
+  const enabled = await invoke(api, [
+    "remote",
+    "enable",
+    "--hostname",
+    "inbot.example.test",
+    "--json",
+  ]);
+  expect(enabled.code).toBe(0);
+  expect(JSON.parse(enabled.stdout)).toMatchObject({
+    state: "connecting",
+    hostname: "inbot.example.test",
+  });
+  expect(enabled.stdout).not.toContain("token");
+  const key = await agent(api);
+  const denied = await invoke(api, ["remote", "status"], { env: agentEnv(api, key.api_key) });
+  expect(denied.code).toBe(4);
+  expect(JSON.parse(denied.stderr)).toMatchObject({ code: "missing_permission" });
+  const disabled = await invoke(api, ["remote", "disable", "--json"]);
+  expect(disabled.code).toBe(0);
+  expect(JSON.parse(disabled.stdout)).toMatchObject({ state: "disabled", hostname: null });
+});
