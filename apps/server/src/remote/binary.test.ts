@@ -59,3 +59,25 @@ test("verification rejects a symlinked bin directory without changing its target
     await rm(home, { recursive: true, force: true });
   }
 });
+
+test("archives must match both the archive digest and the extracted binary digest", async () => {
+  const home = await mkdtemp(join(tmpdir(), "inbot-binary-archive-"));
+  const bytes = archive("cloudflared");
+  const binary = Buffer.from("synthetic executable");
+  const install = (binarySha256: string) => {
+    const artifact = { file: "cloudflared-darwin-arm64.tgz", sha256: sha256(bytes), binarySha256 };
+    return makeBinary(home, {
+      platform: "darwin-arm64",
+      artifact,
+      downloader: async () => bytes,
+    }).ensure(true);
+  };
+  try {
+    await expect(Effect.runPromise(install(sha256(Buffer.from("other"))))).rejects.toThrow(
+      "checksum mismatch",
+    );
+    expect(await readFile(await Effect.runPromise(install(sha256(binary))))).toEqual(binary);
+  } finally {
+    await rm(home, { recursive: true, force: true });
+  }
+});

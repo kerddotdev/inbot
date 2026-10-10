@@ -26,7 +26,7 @@ export const spawnConnector: ProcessSpawner = async (binary, token) => {
       [
         "tunnel",
         "--no-autoupdate",
-        "--logformat",
+        "--output",
         "json",
         "--metrics",
         "127.0.0.1:0",
