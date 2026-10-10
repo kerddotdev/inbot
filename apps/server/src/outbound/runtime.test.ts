@@ -118,10 +118,23 @@ test("never processes queued mail without configuration and notices later transp
     await time.adjust("30 seconds");
     expect(await time.sleep()).toBe(30_000);
     expect(cycles).toBe(0);
-    await api.run(api.transport.set({ account_id: "fake", api_token: "fake" }));
+    expect(
+      (
+        await api.request("/v0/owner/transport", {
+          method: "PUT",
+          body: { account_id: "a".repeat(32), api_token: "synthetic-token" },
+        })
+      ).status,
+    ).toBe(200);
     await time.adjust("30 seconds");
     expect(await time.sleep()).toBe(2000);
     expect((await api.run(api.outbox.get(inboxId, queued.message_id))).state).toBe("sent");
+    expect(api.sent).toHaveLength(1);
+    expect((await api.request("/v0/owner/transport", { method: "DELETE" })).status).toBe(200);
+    const later = await api.run(api.outbox.enqueue(inboxId, send));
+    await time.adjust("2 seconds");
+    expect(await time.sleep()).toBe(30_000);
+    expect((await api.run(api.outbox.get(inboxId, later.message_id))).state).toBe("queued");
     expect(api.sent).toHaveLength(1);
   } finally {
     await server.close();

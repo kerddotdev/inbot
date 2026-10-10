@@ -86,7 +86,7 @@ Shape: `{ "name": "InbotError", "code": "...", "message": "...", "fix": "..." }`
 
 The contract also declares `permission_escalation`, `limit_exceeded`, `domain_not_verified`, `message_rejected`, `resource_taken`, `locked` (423), and `rate_limit_exceeded` (429). Handle them generically if you see them.
 
-With no mail transport configured, sends return 503 `service_unavailable` and nothing is queued. Tell your human to configure the Cloudflare mail transport.
+With no mail transport configured, sends return 503 `service_unavailable` and nothing is queued. Tell your human to configure the mail transport in Inbot Settings.
 
 ## Downloads
 

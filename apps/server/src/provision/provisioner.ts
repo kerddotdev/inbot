@@ -792,6 +792,7 @@ export function makeProvisioner(options: {
       }).pipe(Effect.catchTag("ProvisionError", recordFailure(id))),
     );
   return {
+    withConfigurationLock: <A, E, R>(effect: Effect.Effect<A, E, R>) => gate.withPermit(effect),
     plan,
     apply,
     verify,

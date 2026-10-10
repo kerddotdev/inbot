@@ -16,3 +16,9 @@ export const keysQuery = queryOptions({
   queryKey: ["keys"],
   queryFn: ({ signal }) => api.keys(signal),
 });
+
+export const transportQuery = queryOptions({
+  queryKey: ["transport"],
+  queryFn: ({ signal }) => api.transport(signal),
+  staleTime: 0,
+});

@@ -131,6 +131,15 @@ export class ApiClient {
   status = (signal?: AbortSignal) =>
     this.request("/v0/owner/status", Owner.OwnerStatus, signal ? { signal } : {});
 
+  transport = (signal: AbortSignal) =>
+    this.request("/v0/owner/transport", Owner.OwnerTransportStatus, { signal });
+
+  configureTransport = (body: Owner.OwnerTransportRequest) =>
+    this.request("/v0/owner/transport", Owner.OwnerTransportStatus, { method: "PUT", body });
+
+  clearTransport = () =>
+    this.request("/v0/owner/transport", Schema.Undefined, { method: "DELETE" });
+
   async authenticate(
     request: typeof Owner.OwnerSetupRequest.Type | typeof Owner.OwnerLoginRequest.Type,
   ) {
