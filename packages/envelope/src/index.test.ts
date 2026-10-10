@@ -1,6 +1,12 @@
 import { Buffer } from "node:buffer";
 import { expect, test, vi } from "vitest";
-import { decrypt, encrypt, generateIdentity, maxMessageSize } from "./index.js";
+import {
+  decrypt,
+  encrypt,
+  generateIdentity,
+  maxInboundFrameOverhead,
+  maxMessageSize,
+} from "./index.js";
 
 function stream(bytes: Uint8Array, chunkSize = 8191): ReadableStream<Uint8Array> {
   let offset = 0;
@@ -107,10 +113,10 @@ test("rejects non-X25519 recipients before consuming plaintext", async () => {
   expect(pull).not.toHaveBeenCalled();
 });
 
-test("rejects decryption beyond the service's 25 MiB limit", async () => {
+test("rejects decryption beyond 25 MiB plus maximum frame overhead", async () => {
   const { identity, recipient } = await generateIdentity();
   const chunk = new Uint8Array(65536);
-  let remaining = maxMessageSize + 1;
+  let remaining = maxMessageSize + maxInboundFrameOverhead + 1;
   const source = new ReadableStream<Uint8Array>({
     pull(controller) {
       if (remaining === 0) {

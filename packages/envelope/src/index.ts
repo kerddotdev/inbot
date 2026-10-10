@@ -1,7 +1,16 @@
 import { Decrypter, Encrypter, generateX25519Identity, identityToRecipient } from "age-encryption";
 import type { ReadableStreamWithSize } from "age-encryption";
+import { maxInboundFrameOverhead, maxMessageSize } from "./inbound.js";
 
-export const maxMessageSize = 25 * 1024 * 1024;
+export {
+  frameInbound,
+  InboundEnvelope,
+  InboundFrameError,
+  maxInboundFrameOverhead,
+  maxInboundHeaderSize,
+  maxMessageSize,
+  parseInbound,
+} from "./inbound.js";
 const chunkSize = 64 * 1024;
 
 export async function generateIdentity() {
@@ -95,9 +104,9 @@ export async function decrypt(
       const next = await reader.read();
       if (next.done) break;
       length += next.value.byteLength;
-      if (length > maxMessageSize) {
+      if (length > maxMessageSize + maxInboundFrameOverhead) {
         await reader.cancel();
-        throw new Error("Decrypted message exceeds 25 MiB.");
+        throw new Error("Decrypted message exceeds 25 MiB plus inbound frame overhead.");
       }
       chunks.push(next.value);
     }

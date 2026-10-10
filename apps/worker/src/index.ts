@@ -1,4 +1,4 @@
-import { encrypt, maxMessageSize } from "../../../packages/envelope/src/index.js";
+import { encrypt, frameInbound, maxMessageSize } from "../../../packages/envelope/src/index.js";
 import { createInboundKey, type InboundPointer } from "../../../packages/envelope/src/pointer.js";
 
 export interface Env {
@@ -9,7 +9,7 @@ export interface Env {
 
 export default {
   async email(
-    message: Pick<ForwardableEmailMessage, "raw" | "rawSize" | "setReject">,
+    message: Pick<ForwardableEmailMessage, "from" | "to" | "raw" | "rawSize" | "setReject">,
     env: Env,
   ): Promise<void> {
     if (message.rawSize > maxMessageSize) {
@@ -18,8 +18,9 @@ export default {
     }
     const received_at = new Date().toISOString();
     const key = createInboundKey();
-    const ciphertext = await encrypt(env.RECIPIENT, message.raw);
-    const size = ciphertext.size(message.rawSize);
+    const framed = frameInbound({ mail_from: message.from, rcpt_to: [message.to] }, message.raw);
+    const ciphertext = await encrypt(env.RECIPIENT, framed.stream);
+    const size = ciphertext.size(framed.length(message.rawSize));
     const body = ciphertext.pipeThrough(new FixedLengthStream(size));
     try {
       await env.INBOUND_BUCKET.put(key, body);

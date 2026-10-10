@@ -1,4 +1,9 @@
-import { decrypt, generateIdentity, maxMessageSize } from "../../../packages/envelope/src/index.js";
+import {
+  decrypt,
+  generateIdentity,
+  maxMessageSize,
+  parseInbound,
+} from "../../../packages/envelope/src/index.js";
 import { InboundPointer } from "../../../packages/envelope/src/pointer.js";
 import { Schema } from "effect";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
@@ -94,40 +99,54 @@ async function fixture() {
 }
 
 const plaintext = new TextEncoder().encode(
-  "From: synthetic-sender@example.invalid\r\nSubject: synthetic private subject\r\n\r\nSynthetic private body.\r\n",
+  "From: header-sender@example.invalid\r\nTo: mailing-list@example.invalid\r\nSubject: synthetic private subject\r\n\r\nSynthetic private body.\r\n",
 );
 
-test("stores only ciphertext before sending a minimal JSON pointer", async () => {
-  const { identity, objects, events, put, send, env } = await fixture();
-  const log = vi.spyOn(console, "log");
-  const error = vi.spyOn(console, "error");
-  const input = message(plaintext);
-  await worker.email(input, env);
-  expect(input.setReject).not.toHaveBeenCalled();
-  expect(input.forward).not.toHaveBeenCalled();
-  expect(input.reply).not.toHaveBeenCalled();
-  expect(events).toEqual(["put", "stored", "queue"]);
-  expect(put).toHaveBeenCalledOnce();
-  expect(send).toHaveBeenCalledOnce();
-  const call = send.mock.calls[0];
-  if (!call) throw new Error("Missing pointer.");
-  const [pointer, options] = call;
-  expect(options).toEqual({ contentType: "json" });
-  expect(Object.keys(pointer).sort()).toEqual(["key", "received_at", "size", "version"]);
-  expect(Schema.decodeUnknownSync(InboundPointer)(pointer)).toEqual(pointer);
-  expect(pointer.received_at).toBe("2026-10-10T12:00:00.000Z");
-  const ciphertext = objects.get(pointer.key);
-  if (!ciphertext) throw new Error("Missing object.");
-  expect(pointer.size).toBe(ciphertext.byteLength);
-  expect(await decrypt(identity, ciphertext)).toEqual(plaintext);
-  expect(put.mock.calls[0]?.length).toBe(2);
-  const metadata = JSON.stringify({ key: pointer.key, options: put.mock.calls[0]?.[2], pointer });
-  expect(metadata).not.toContain(input.from);
-  expect(metadata).not.toContain(input.headers.get("subject"));
-  expect(new TextDecoder().decode(ciphertext)).not.toContain(input.from);
-  expect(log).not.toHaveBeenCalled();
-  expect(error).not.toHaveBeenCalled();
-});
+test.each([new Uint8Array(0), plaintext, new Uint8Array(200_003).fill(37)])(
+  "stores framed ciphertext before sending a minimal JSON pointer %#",
+  async (raw) => {
+    const { identity, objects, events, put, send, env } = await fixture();
+    const log = vi.spyOn(console, "log");
+    const error = vi.spyOn(console, "error");
+    const warn = vi.spyOn(console, "warn");
+    const info = vi.spyOn(console, "info");
+    const debug = vi.spyOn(console, "debug");
+    const input = message(raw);
+    await worker.email(input, env);
+    expect(input.setReject).not.toHaveBeenCalled();
+    expect(input.forward).not.toHaveBeenCalled();
+    expect(input.reply).not.toHaveBeenCalled();
+    expect(events).toEqual(["put", "stored", "queue"]);
+    expect(put).toHaveBeenCalledOnce();
+    expect(send).toHaveBeenCalledOnce();
+    const call = send.mock.calls[0];
+    if (!call) throw new Error("Missing pointer.");
+    const [pointer, options] = call;
+    expect(options).toEqual({ contentType: "json" });
+    expect(Object.keys(pointer).sort()).toEqual(["key", "received_at", "size", "version"]);
+    expect(Schema.decodeUnknownSync(InboundPointer)(pointer)).toEqual(pointer);
+    expect(pointer.received_at).toBe("2026-10-10T12:00:00.000Z");
+    const ciphertext = objects.get(pointer.key);
+    if (!ciphertext) throw new Error("Missing object.");
+    expect(pointer.size).toBe(ciphertext.byteLength);
+    expect(parseInbound(await decrypt(identity, ciphertext))).toEqual({
+      envelope: { mail_from: input.from, rcpt_to: [input.to] },
+      raw,
+    });
+    expect(put.mock.calls[0]?.length).toBe(2);
+    const metadata = JSON.stringify({ key: pointer.key, options: put.mock.calls[0]?.[2], pointer });
+    expect(metadata).not.toContain(input.from);
+    expect(metadata).not.toContain(input.to);
+    expect(metadata).not.toContain(input.headers.get("subject"));
+    expect(new TextDecoder().decode(ciphertext)).not.toContain(input.from);
+    expect(new TextDecoder().decode(ciphertext)).not.toContain(input.to);
+    expect(log).not.toHaveBeenCalled();
+    expect(error).not.toHaveBeenCalled();
+    expect(warn).not.toHaveBeenCalled();
+    expect(info).not.toHaveBeenCalled();
+    expect(debug).not.toHaveBeenCalled();
+  },
+);
 
 test("rejects oversized messages without reading, storing, or queueing", async () => {
   const { objects, put, send, env } = await fixture();
@@ -155,14 +174,18 @@ test("keeps a committed object and throws when the Queue fails", async () => {
   const { identity, objects, events, send, env } = await fixture();
   const failure = new Error("Synthetic Queue failure.");
   send.mockRejectedValueOnce(failure);
-  await expect(worker.email(message(plaintext), env)).rejects.toBe(failure);
+  const input = message(plaintext);
+  await expect(worker.email(input, env)).rejects.toBe(failure);
   expect(events).toEqual(["put", "stored"]);
   expect(send).toHaveBeenCalledOnce();
   const pointer = send.mock.calls[0]?.[0];
   if (!pointer) throw new Error("Missing attempted pointer.");
   const ciphertext = objects.get(pointer.key);
   if (!ciphertext) throw new Error("Missing reconciliable object.");
-  expect(await decrypt(identity, ciphertext)).toEqual(plaintext);
+  expect(parseInbound(await decrypt(identity, ciphertext))).toEqual({
+    envelope: { mail_from: input.from, rcpt_to: [input.to] },
+    raw: plaintext,
+  });
   expect(objects.size).toBe(1);
 });
 
@@ -225,7 +248,8 @@ test("accepts the exact 25 MiB limit with streaming input", async () => {
   if (!pointer) throw new Error("Missing pointer.");
   const ciphertext = objects.get(pointer.key);
   if (!ciphertext) throw new Error("Missing object.");
-  const decrypted = await decrypt(identity, ciphertext);
+  const { envelope, raw: decrypted } = parseInbound(await decrypt(identity, ciphertext));
+  expect(envelope).toEqual({ mail_from: input.from, rcpt_to: [input.to] });
   expect(decrypted.byteLength).toBe(maxMessageSize);
   expect(decrypted.every((byte) => byte === 37)).toBe(true);
   expect(pointer.size).toBe(ciphertext.byteLength);
