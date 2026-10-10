@@ -22,3 +22,15 @@ export const transportQuery = queryOptions({
   queryFn: ({ signal }) => api.transport(signal),
   staleTime: 0,
 });
+
+export const domainsQuery = queryOptions({
+  queryKey: ["domains"],
+  queryFn: ({ signal }) => api.domains(signal),
+});
+
+export const domainQuery = (id: string) =>
+  queryOptions({
+    queryKey: ["domains", id],
+    queryFn: ({ signal }) => api.domain(id, signal),
+    staleTime: 0,
+  });

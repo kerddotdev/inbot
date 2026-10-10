@@ -3,7 +3,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Schema } from "effect";
 import { expect, test } from "vitest";
-import { Domain, ListDomainsResponse } from "../../../../packages/contracts/src/domains.js";
+import {
+  Domain,
+  ListDomainsResponse,
+  ProvisionPlan,
+} from "../../../../packages/contracts/src/domains.js";
 import { ErrorResponse } from "../../../../packages/contracts/src/errors.js";
 import { fixture } from "./test-fixture.js";
 import { client } from "../mcp/test-client.js";
@@ -27,6 +31,7 @@ test("domain APIs are owner-only, expose plans and BIND text, apply and teardown
       ["/v0/domains/missing/teardown", "POST"],
       ["/v0/domains/missing/verify", "POST"],
       ["/v0/domains/missing/zone-file", "GET"],
+      ["/v0/domains/missing/plan", "GET"],
     ]) {
       if (path === undefined || method === undefined) throw new Error("Expected route and method");
       const response = await api.request(path, {
@@ -51,6 +56,12 @@ test("domain APIs are owner-only, expose plans and BIND text, apply and teardown
     expect(
       Schema.decodeUnknownSync(ListDomainsResponse)(await listed.json()).domains[0]?.domain_id,
     ).toBe(domain.domain_id);
+    const plan = await api.request(`/v0/domains/${domain.domain_id}/plan`);
+    expect(plan.status).toBe(200);
+    expect(Schema.decodeUnknownSync(ProvisionPlan)(await plan.json()).steps.length).toBeGreaterThan(
+      0,
+    );
+    expect(api.cloud.mutations).toEqual([]);
     const zone = await api.request(`/v0/domains/${domain.domain_id}/zone-file`);
     expect(zone.headers.get("content-type")).toContain("text/plain");
     expect(await zone.text()).toContain("agents.example.test. 300 IN MX");
