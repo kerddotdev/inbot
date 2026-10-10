@@ -2,6 +2,7 @@ import { chmodSync } from "node:fs";
 import { join } from "node:path";
 import Database from "better-sqlite3-multiple-ciphers";
 import { Context, Effect, Layer, Schema } from "effect";
+import { eventsSchema } from "./events/schema.js";
 import { draftsSchema } from "./drafts/schema.js";
 import { inboundSchema } from "./inbound/schema.js";
 import { Home } from "./home.js";
@@ -46,6 +47,7 @@ export const migrations: readonly Migration[] = [
   { version: 8, sql: ownerSessionsSchema },
   { version: 9, sql: provisionSchema },
   { version: 10, sql: listsSchema },
+  { version: 11, sql: eventsSchema },
 ];
 
 export function migrate(database: Database.Database, ordered: readonly Migration[] = migrations) {

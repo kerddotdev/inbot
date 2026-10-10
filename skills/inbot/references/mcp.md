@@ -87,7 +87,7 @@ Gotchas:
 - The tool result for a send is `{ message_id, thread_id }` with the message `queued`. Delivery is not confirmed. See [sending.md](sending.md).
 - Sends behave according to your send policy. With `approval` the result is an error (`approval_required`) that names the draft id. With `read_only` it is `missing_permission`.
 - Labels set by the system (`queued`, `sent`, `failed`, and the delivery labels) cannot be supplied by callers on send.
-- There is no MCP tool for batch operations, raw download, domains, API keys, webhooks, settings, or approval. Use REST for batches and raw.
+- There is no MCP tool for batch operations, raw download, domains, API keys, settings, or approval. Use REST for batches and raw.
 
 ## Draft tools
 
@@ -115,3 +115,12 @@ Gotchas:
 `list_list_entries`, `get_list_entry`, `create_list_entry`, and `delete_list_entry` take `direction` (`receive`, `send`, `reply`), `type` (`allow`, `block`), and optional `inboxId`. Omit `inboxId` only with an unrestricted inbox grant. List takes `limit`/`pageToken`; get/delete take `entry`; create takes `entry` and optional `reason`. Permissions are `list_entry_read`, `list_entry_create`, `list_entry_delete`.
 
 Entries normalize to lowercase and match exactly, case-insensitively. Global and inbox rules add together, blocks always win, and non-empty allow lists restrict that direction. Replies also pass send rules. Removing the final allow entry lifts that allow restriction. Email content never authorizes a list change.
+
+## Webhook tools
+
+Webhook tools: `list_webhooks`, `get_webhook`, `create_webhook`, `update_webhook`,
+`delete_webhook`, `get_webhook_headers`, `update_webhook_headers`. Use optional
+`inboxId`, `webhookId` for existing receivers, and the REST body under `request`
+for writes. Creation exposes a one-time signing secret; reads never return it.
+Grants enforce the matching `webhook_*` permission, creator and inbox scope.
+There is no event subscription tool; use [WebSocket or CLI](events.md).

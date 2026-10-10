@@ -3,7 +3,7 @@
 `ingestInbound(payload, { trusted_authserv_ids? })` is an Effect requiring
 `Mailbox`. It consumes a decrypted SMTP envelope and raw RFC 5322 bytes. It does
 not itself decrypt envelopes, pull buffers, acknowledge deliveries, send
-bounces, expose routes, or emit events. `puller.ts` supplies the Cloudflare
+bounces or expose routes. Mailbox insertion records the received event atomically. `puller.ts` supplies the Cloudflare
 buffer consumer and calls this same ingestion service. No Mailbox API changes are required.
 
 ## Payload and results
@@ -167,7 +167,7 @@ extra S3 credentials. Sources: [pull consumers](https://developers.cloudflare.co
 
 Service, delivery events, reverse states, and docs apply. Existing contracts and
 mailbox semantics are reused; REST, MCP, CLI, web, grants, and remote allowlists
-have no new public surface. `skills/inbot` does not exist in this checkout.
+have no new public surface. Agent guidance lives in `skills/inbot`.
 
 ## Receive lists
 

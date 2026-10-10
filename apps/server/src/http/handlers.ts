@@ -1,3 +1,4 @@
+import { WebhooksLive } from "../events/handlers.js";
 import { Effect, Layer } from "effect";
 import { HttpApiBuilder } from "effect/http-api";
 import { CurrentPrincipal } from "../../../../packages/contracts/src/security.js";
@@ -9,7 +10,7 @@ import { AgentOperations } from "../agent/operations.js";
 import { ServerApi } from "./api.js";
 import { labelsAllowed, visible } from "../agent/authorization.js";
 import { Downloads } from "./downloads.js";
-import { respond, unsupported } from "./errors.js";
+import { respond } from "./errors.js";
 
 const InboxesLive = HttpApiBuilder.group(ServerApi, "inboxes", (handlers) =>
   Effect.gen(function* () {
@@ -317,24 +318,6 @@ const ListsLive = HttpApiBuilder.group(ServerApi, "lists", (handlers) =>
         respond(operations.deleteListEntry(undefined, params.direction, params.type, params.entry)),
       );
   }),
-);
-
-const WebhooksLive = HttpApiBuilder.group(ServerApi, "webhooks", (handlers) =>
-  handlers
-    .handle("inboxes_webhooks_list", unsupported)
-    .handle("inboxes_webhooks_create", unsupported)
-    .handle("inboxes_webhooks_get", unsupported)
-    .handle("inboxes_webhooks_update", unsupported)
-    .handle("inboxes_webhooks_delete", unsupported)
-    .handle("inboxes_webhooks_getHeaders", unsupported)
-    .handle("inboxes_webhooks_updateHeaders", unsupported)
-    .handle("webhooks_list", unsupported)
-    .handle("webhooks_create", unsupported)
-    .handle("webhooks_get", unsupported)
-    .handle("webhooks_update", unsupported)
-    .handle("webhooks_delete", unsupported)
-    .handle("webhooks_getHeaders", unsupported)
-    .handle("webhooks_updateHeaders", unsupported),
 );
 
 const DomainsLive = HttpApiBuilder.group(ServerApi, "domains", (handlers) =>

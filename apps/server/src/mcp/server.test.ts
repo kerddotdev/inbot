@@ -12,6 +12,7 @@ import {
   UpdateMessageResponse,
   ListMessagesResponse,
 } from "../../../../packages/contracts/src/messages.js";
+import { Webhook } from "../../../../packages/contracts/src/webhooks.js";
 import { Draft, ListDraftsResponse } from "../../../../packages/contracts/src/drafts.js";
 import { ErrorResponse } from "../../../../packages/contracts/src/errors.js";
 import { client as connect } from "./test-client.js";
@@ -70,7 +71,7 @@ function failure(result: McpSchema.CallToolResult, code: string) {
   return error;
 }
 
-test("initializes with an API key and lists only mailbox tools with object schemas and accurate annotations", async ({
+test("initializes with an API key and lists mailbox, list and webhook tools with object schemas and accurate annotations", async ({
   api,
 }) => {
   const mcp = await client(api);
@@ -106,6 +107,13 @@ test("initializes with an API key and lists only mailbox tools with object schem
       "get_list_entry",
       "create_list_entry",
       "delete_list_entry",
+      "list_webhooks",
+      "get_webhook",
+      "create_webhook",
+      "update_webhook",
+      "delete_webhook",
+      "get_webhook_headers",
+      "update_webhook_headers",
     ].sort(),
   );
   for (const tool of tools) {
@@ -426,4 +434,61 @@ test("lists persisted drafts over MCP and REST with an owner cookie session and 
   expect(created.isError).toBe(false);
   const stored = Schema.decodeUnknownSync(Draft)(created.structuredContent);
   expect((await api.run(api.drafts.get(inboxId, stored.draft_id))).created_by).toBe("owner");
+});
+
+test("MCP webhook operations share REST permissions, inbox isolation and one-time secrets", async ({
+  api,
+}) => {
+  const denied = await client(api);
+  failure(
+    await denied.call("create_webhook", {
+      request: { url: "http://localhost:1234/", event_types: ["message.received"] },
+    }),
+    "missing_permission",
+  );
+  const key = await api.run(
+    api.keys.create({
+      inbox_id: inboxId,
+      send_policy: "read_only",
+      permissions: {
+        message_read: true,
+        webhook_create: true,
+        webhook_read: true,
+        webhook_update: true,
+        webhook_delete: true,
+      },
+    }),
+  );
+  const mcp = await client(api, key.api_key);
+  failure(
+    await mcp.call("create_webhook", {
+      inboxId,
+      request: { url: "http://localhost:1234/", event_types: ["message.received"] },
+    }),
+    "validation_error",
+  );
+  const created = Schema.decodeUnknownSync(Webhook)(
+    (
+      await mcp.call("create_webhook", {
+        inboxId,
+        request: { url: "https://receiver.example.test/", event_types: ["message.received"] },
+      })
+    ).structuredContent,
+  );
+  expect(created.secret).toMatch(/^whsec_/);
+  const metadata = await mcp.call("get_webhook", { inboxId, webhookId: created.webhook_id });
+  expect(metadata.structuredContent).not.toHaveProperty("secret");
+  failure(
+    await mcp.call("get_webhook", { inboxId: "other@example.test", webhookId: created.webhook_id }),
+    "not_found",
+  );
+  const updated = await mcp.call("update_webhook", {
+    inboxId,
+    webhookId: created.webhook_id,
+    request: { enabled: false },
+  });
+  expect(updated.structuredContent).toMatchObject({ enabled: false });
+  expect(
+    (await mcp.call("delete_webhook", { inboxId, webhookId: created.webhook_id })).isError,
+  ).not.toBe(true);
 });

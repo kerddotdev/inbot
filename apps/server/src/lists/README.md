@@ -80,8 +80,12 @@ A policy edit cannot recall an already dispatched provider request.
 - Web: Settings > Allow and block lists manages one global or inbox list at a time,
   with pagination, explicit scope/direction/type, and loading, empty, and failure states.
   Existing session/CSRF and locked-screen handling applies.
-- Events: the current contract has no list-change event, and event streams/webhooks
-  are not implemented in this worktree. No speculative event is introduced.
+- Events: the current contract has no list-change event. Receive-list rejections
+  create no mailbox message or thread, so they cannot populate the existing
+  `message.received.blocked` snapshot or `message.rejected` identity payload.
+  No event names or resource identities are invented. Newly blocked queued mail
+  emits `message.failed` with reason `message_rejected` in its failure transaction;
+  signed webhooks and WebSocket replay deliver it under existing read permissions.
 - Remote: tunnel supervision and its path allowlist are not implemented in this
   worktree. This change registers only the existing authenticated loopback routes;
   it does not expose new remote routes.

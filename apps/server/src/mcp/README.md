@@ -10,8 +10,9 @@ Clients initialize with `protocolVersion: "2025-06-18"`, keep the returned
 `Mcp-Session-Id`, and send it with `MCP-Protocol-Version: 2025-06-18` on later
 requests. POST requests use `Content-Type: application/json` and
 `Accept: application/json, text/event-stream`; responses can be JSON or SSE.
-The initialized notification receives HTTP 202. OAuth, stdio, resumable event
-streams, and remote tunnel exposure are not implemented here.
+The initialized notification receives HTTP 202. OAuth, stdio, resumable MCP event
+streams, and remote tunnel exposure are not implemented here. Mail events support
+replay through the separate authenticated `/v0/ws` WebSocket.
 
 Every HTTP request requires `Authorization: Bearer <owner-token-or-api-key>`
 or an owner browser session cookie. Cookie-authenticated POST/DELETE requests
@@ -65,7 +66,7 @@ id is invented before the owner approves. Proposed message idempotency is shared
 with REST, including after the original draft is approved or deleted.
 
 There are no tools for owner authentication, sessions, passwords, domains, keys,
-webhooks, settings, transport, unlock, approval/rejection, or list entries.
+settings, transport, unlock, or approval/rejection.
 Owner-only capabilities never enter the MCP registry.
 
 ## Drafts
@@ -125,3 +126,15 @@ truncation, and server lifetime. No real Cloudflare request or email was sent.
 ## Allow and block list tools
 
 `list_list_entries`, `get_list_entry`, `create_list_entry`, and `delete_list_entry` use the same authorized service as REST. Arguments are `direction`, `type`, optional `inboxId`, plus `entry` on get/create/delete, optional `reason` on create, and `limit`/`pageToken` on list. Reads need `list_entry_read`, creates `list_entry_create`, deletes `list_entry_delete`. Global access requires an unrestricted inbox grant. Read/create/delete annotations follow the existing patterns. See [policy](../lists/README.md) for normalization, precedence, and durable enforcement.
+
+## Webhook tools
+
+Webhook tools: `list_webhooks`, `get_webhook`, `create_webhook`, `update_webhook`,
+`delete_webhook`, `get_webhook_headers`, and `update_webhook_headers`. All use the
+same service and grants as REST. Optional `inboxId` selects the inbox route scope;
+`webhookId` identifies a receiver; write tools take the shared REST body under
+`request`. `list_webhooks` uses existing pagination arguments. Reads are marked
+read-only, deletes destructive, and updates/deletes idempotent. Creation returns
+the secret once; header reads expose names only. Required permissions are named
+in descriptions and enforced by the service. No stream subscription or owner-only
+domain, session, settings, or key tools are added.

@@ -34,13 +34,17 @@ Implemented screens:
   Teardown and deletion require explicit confirmation. BIND exports download as
   authenticated blobs using the owner session. Pending operations disable actions;
   pending and verifying domains refresh while the view is open.
+- Settings webhook creation with one-time signing secret, listing, failure state,
+  enable/disable and delete. Metadata refreshes while the section is open.
+- Authenticated WebSocket updates invalidate mail, draft, approval and domain
+  caches. Reconnect uses backoff, durable event IDs and a cache refresh.
 
 Registration requires a configured transport; without one the server's
 `validation_error` message and fix are shown as returned.
 
 Remote access and other Settings sections retain their existing mock data. Browser
 database unlock, detailed authentication results, per-inbox unread totals, and
-WebSocket updates are unavailable.
+detailed event-history browsing is unavailable.
 The locked view directs the owner to unlock locally. Mail bodies and attachments
 are untrusted data; opening a thread never grants permissions or triggers sending.
 

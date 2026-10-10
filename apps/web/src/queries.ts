@@ -41,3 +41,9 @@ export const domainQuery = (id: string) =>
     queryFn: ({ signal }) => api.domain(id, signal),
     staleTime: 0,
   });
+
+export const webhooksQuery = queryOptions({
+  queryKey: ["webhooks"],
+  queryFn: ({ signal }) => api.webhooks(signal),
+  staleTime: 0,
+});

@@ -15,6 +15,7 @@ import { fixture } from "../http/test-fixture.js";
 import { client as connect } from "../mcp/test-client.js";
 import { evaluate, normalizeEntry } from "./policy.js";
 import { makeLists } from "./lists.js";
+import { readEvents } from "../events/log.js";
 
 const inbox = "agent@example.test";
 const other = "other@example.test";
@@ -450,6 +451,24 @@ test("new rules stop previously queued and scheduled mail before the fake provid
     send_status: "failed",
   });
   expect(api.sent).toEqual([]);
+  await api.run(api.outbox.processDue());
+  const failures = await api.run(api.store.use((db) => readEvents(db, 0)));
+  expect(
+    failures.filter((row) => row.payload.event_type === "message.failed").map((row) => row.payload),
+  ).toEqual([
+    {
+      type: "event",
+      event_type: "message.failed",
+      event_id: expect.any(String),
+      failure: {
+        inbox_id: inbox,
+        message_id: queued.message_id,
+        thread_id: queued.thread_id,
+        timestamp: "2026-10-10T12:00:00.000Z",
+        reason: "message_rejected",
+      },
+    },
+  ]);
 });
 
 test("global and inbox list wire responses agree between REST and MCP", async ({ api }) => {

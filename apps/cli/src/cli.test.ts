@@ -3,6 +3,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Schema } from "effect";
 import { expect, test as base } from "vitest";
+import { Event } from "../../../packages/contracts/src/events.js";
+import { Webhook, ListWebhooksResponse } from "../../../packages/contracts/src/webhooks.js";
+import { readEvents } from "../../server/src/events/log.js";
 import { Draft } from "../../../packages/contracts/src/drafts.js";
 import { ListInboxesResponse, Inbox } from "../../../packages/contracts/src/inboxes.js";
 import { Message, SendMessageResponse } from "../../../packages/contracts/src/messages.js";
@@ -572,4 +575,96 @@ test("list commands use global and inbox endpoints, decode entries, paginate and
   const help = await invoke(api, ["lists", "create", "--help"]);
   expect(help.stdout).toContain("<direction> <type>");
   expect(help.stdout).toContain("--entry");
+});
+
+test("webhook commands use shared REST contracts, inbox scope, custom headers and explicit secret output", async ({
+  api,
+}) => {
+  const args = [
+    "webhooks",
+    "create",
+    "--inbox",
+    inboxId,
+    "--url",
+    "http://localhost:1234/",
+    "--event-types",
+    "message.received",
+    "--json",
+  ];
+  const omitted = await invoke(api, args);
+  expect(omitted.code).toBe(0);
+  expect(Schema.decodeUnknownSync(Webhook)(JSON.parse(omitted.stdout)).secret).toBeUndefined();
+  expect(omitted.stderr).toContain("Secret omitted");
+  const result = await invoke(api, [...args, "--show-secret"]);
+  const created = Schema.decodeUnknownSync(Webhook)(JSON.parse(result.stdout));
+  expect(created.secret).toMatch(/^whsec_/);
+  const listed = await invoke(api, ["webhooks", "list", "--inbox", inboxId, "--json"]);
+  expect(
+    Schema.decodeUnknownSync(ListWebhooksResponse)(JSON.parse(listed.stdout)).webhooks,
+  ).toHaveLength(2);
+  const update = await invoke(api, [
+    "webhooks",
+    "update",
+    created.webhook_id,
+    "--inbox",
+    inboxId,
+    "--no-enabled",
+    "--json",
+  ]);
+  expect(Schema.decodeUnknownSync(Webhook)(JSON.parse(update.stdout)).enabled).toBe(false);
+  expect(
+    (
+      await invoke(api, [
+        "webhooks",
+        "update-headers",
+        created.webhook_id,
+        "--headers",
+        '{"X-Trace":"synthetic"}',
+      ])
+    ).code,
+  ).toBe(0);
+  const headers = await invoke(api, ["webhooks", "headers", created.webhook_id, "--json"]);
+  expect(JSON.parse(headers.stdout)).toEqual({ header_names: ["x-trace"] });
+  expect((await invoke(api, ["webhooks", "delete", created.webhook_id])).code).toBe(0);
+  expect((await invoke(api, ["webhooks", "get", created.webhook_id])).code).toBe(5);
+});
+
+test("events --follow replays typed JSON events through bearer WebSocket and stops on cancellation", async ({
+  api,
+}) => {
+  const previous = await api.run(api.store.use((db) => readEvents(db, 0)));
+  const cursor = previous.at(-1)?.event_id;
+  if (!cursor) throw new Error("Expected fixture event");
+  await api.run(
+    api.mailbox.insertMessage({
+      inbox_id: inboxId,
+      message_id: "<cli-event@example.test>",
+      direction: "received",
+      from: "sender@example.test",
+      to: [inboxId],
+      timestamp: "2026-10-10T12:00:00Z",
+      text: "Synthetic CLI event",
+      raw: Buffer.from("Synthetic raw"),
+    }),
+  );
+  const controller = new AbortController();
+  let stdout = "";
+  const code = await runCli(
+    ["events", "--follow", "--json", "--last-event-id", cursor, "--inbox", inboxId],
+    {
+      env: { INBOT_HOME: api.home },
+      signal: controller.signal,
+      stdout: (text) => {
+        stdout += text;
+        controller.abort();
+      },
+      stderr: () => {},
+    },
+  );
+  expect(code).toBe(0);
+  const event = Schema.decodeUnknownSync(Event)(JSON.parse(stdout));
+  expect(event).toMatchObject({
+    event_type: "message.received",
+    message: { message_id: "<cli-event@example.test>" },
+  });
 });

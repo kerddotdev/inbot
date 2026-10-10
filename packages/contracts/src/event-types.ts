@@ -10,6 +10,12 @@ export const EventType = Schema.Literals([
   "message.bounced",
   "message.complained",
   "message.rejected",
+  "message.failed",
+  "draft.created",
+  "draft.approval_required",
+  "draft.approved",
+  "draft.rejected",
+  "draft.sent",
   "domain.verified",
 ]).annotate({ identifier: "EventType" });
 export type EventType = typeof EventType.Type;

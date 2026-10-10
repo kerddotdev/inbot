@@ -63,7 +63,7 @@ Release packaging must ship `dist/worker/inbound.js` beside the compiled server 
 
 The Worker imports envelope crypto, frame validation, and key generation without the service's Effect schemas. Service-side schemas remain available. With the same esbuild version and settings, the measured baseline was 387,089 bytes and the resulting bundle is 138,290 bytes (64.3% smaller). The build and bundle test reject Effect inputs and enforce a 150 KB bound.
 
-Migration 9 adds domains, resource ownership/progress, self-test send confirmation, and inbox routing jobs after owner-session migration 8. The strict contiguous migration runner remains unchanged, with migrations 1 through 9.
+Migration 9 adds domains, resource ownership/progress, self-test send confirmation, and inbox routing jobs after owner-session migration 8. The strict contiguous migration runner remains unchanged, with the later event migration described in [event delivery](../events/README.md).
 
 ## Cloudflare endpoint references
 
@@ -86,3 +86,5 @@ All paths are relative to `https://api.cloudflare.com/client/v4`. No undocumente
 | Existing encrypted buffer          | `GET, DELETE /accounts/{account}/r2/buckets/{bucket}/objects[/key]`; `POST .../queues/{queue}/messages/pull`; `POST .../messages/ack` | [R2 objects](https://developers.cloudflare.com/api/resources/r2/subresources/buckets/subresources/objects/), [Queue messages](https://developers.cloudflare.com/api/resources/queues/subresources/messages/)                                                                                                                               |
 
 Synthetic tests use the account fake, injected DoH and buffer, temporary homes, stub keychains/clocks, the real encrypted Store, and real age encryption/decryption. Live DNS propagation, token scope, subscription warm-up, SMTP delivery, native Worker stream behavior, and provider deletion side effects still require a separately authorized test account.
+
+Observed verification appends `domain.verified` with the existing stable hook ID in the status transaction; retries cannot duplicate the log entry.

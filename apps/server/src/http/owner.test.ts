@@ -11,6 +11,7 @@ import {
   OwnerStatus,
   OwnerLoginLink,
 } from "../../../../packages/contracts/src/owner.js";
+import { migrations } from "../store.js";
 import { cookieName, sessionCookie } from "./owner-session.js";
 import { HttpServerResponse } from "effect/http";
 import { fixture } from "./test-fixture.js";
@@ -91,7 +92,7 @@ test("requires a one-time setup code and stores only password and session hashes
       version: db.pragma("user_version", { simple: true }),
     })),
   );
-  expect(rows.version).toBe(10);
+  expect(rows.version).toBe(migrations.at(-1)?.version);
   expect(JSON.stringify(rows)).not.toContain(password);
   expect(JSON.stringify(rows)).not.toContain(session.cookie.split("=")[1]);
   expect(await readFile(join(api.home, "inbot.db"), "utf8")).not.toContain("owner_sessions");

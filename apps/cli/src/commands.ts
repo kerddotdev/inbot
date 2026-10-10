@@ -1,4 +1,5 @@
 import type { HttpApiEndpoint } from "effect/http-api";
+import { WebhooksApi } from "../../../packages/contracts/src/api/webhooks.js";
 import { InboxesApi } from "../../../packages/contracts/src/api/inboxes.js";
 import { ThreadsApi } from "../../../packages/contracts/src/api/threads.js";
 import { MessagesApi } from "../../../packages/contracts/src/api/messages.js";
@@ -82,6 +83,69 @@ export const commands: readonly Command[] = [
     endpoint: ListsApi.endpoints.lists_delete,
     scopedEndpoint: ListsApi.endpoints.inboxes_lists_delete,
     params: ["direction", "type", "entry"],
+  },
+  {
+    name: "webhooks list",
+    description: "List webhook metadata, optionally within --inbox.",
+    endpoint: WebhooksApi.endpoints.webhooks_list,
+    scopedEndpoint: WebhooksApi.endpoints.inboxes_webhooks_list,
+    query: pagination,
+  },
+  {
+    name: "webhooks create",
+    description: "Create a webhook. --show-secret prints its one-time signing secret.",
+    endpoint: WebhooksApi.endpoints.webhooks_create,
+    scopedEndpoint: WebhooksApi.endpoints.inboxes_webhooks_create,
+    secret: true,
+    body: {
+      url: "string",
+      event_types: "array",
+      inbox_ids: "array",
+      client_id: "string",
+      headers: "object",
+    },
+  },
+  {
+    name: "webhooks get",
+    description: "Get webhook metadata.",
+    endpoint: WebhooksApi.endpoints.webhooks_get,
+    scopedEndpoint: WebhooksApi.endpoints.inboxes_webhooks_get,
+    params: ["webhook_id"],
+  },
+  {
+    name: "webhooks update",
+    description: "Update event filters, enabled state, or inbox filters.",
+    endpoint: WebhooksApi.endpoints.webhooks_update,
+    scopedEndpoint: WebhooksApi.endpoints.inboxes_webhooks_update,
+    params: ["webhook_id"],
+    body: {
+      event_types: "array",
+      enabled: "boolean",
+      add_inbox_ids: "array",
+      remove_inbox_ids: "array",
+    },
+  },
+  {
+    name: "webhooks delete",
+    description: "Delete a webhook and its pending deliveries.",
+    endpoint: WebhooksApi.endpoints.webhooks_delete,
+    scopedEndpoint: WebhooksApi.endpoints.inboxes_webhooks_delete,
+    params: ["webhook_id"],
+  },
+  {
+    name: "webhooks headers",
+    description: "List custom header names without their values.",
+    endpoint: WebhooksApi.endpoints.webhooks_getHeaders,
+    scopedEndpoint: WebhooksApi.endpoints.inboxes_webhooks_getHeaders,
+    params: ["webhook_id"],
+  },
+  {
+    name: "webhooks update-headers",
+    description: "Set or remove custom headers.",
+    endpoint: WebhooksApi.endpoints.webhooks_updateHeaders,
+    scopedEndpoint: WebhooksApi.endpoints.inboxes_webhooks_updateHeaders,
+    params: ["webhook_id"],
+    body: { headers: "object", remove_headers: "array" },
   },
   {
     name: "open",
