@@ -324,6 +324,13 @@ const DomainsLive = HttpApiBuilder.group(ServerApi, "domains", (handlers) =>
       )
       .handle("domains_delete", ({ params }) => respond(domains.delete(params.domain_id)))
       .handle("domains_getZoneFile", ({ params }) => respond(domains.zoneFile(params.domain_id)))
+      .handle("domains_plan", ({ params }) =>
+        respond(
+          domains
+            .get(params.domain_id)
+            .pipe(Effect.flatMap((domain) => domains.plan(domain.domain))),
+        ),
+      )
       .handle("domains_verify", ({ params }) =>
         respond(domains.verify(params.domain_id).pipe(Effect.asVoid)),
       )

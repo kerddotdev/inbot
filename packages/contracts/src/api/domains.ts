@@ -38,6 +38,11 @@ export const DomainsApi = HttpApiGroup.make("domains")
       success: Schema.String.pipe(HttpApiSchema.asText({ contentType: "text/plain" })),
       error: Errors.ReadErrors,
     }),
+    HttpApiEndpoint.get("domains_plan", "/v0/domains/:domain_id/plan", {
+      params: { domain_id: Common.DomainId },
+      success: Domains.ProvisionPlan,
+      error: Errors.ReadErrors,
+    }),
     HttpApiEndpoint.post("domains_verify", "/v0/domains/:domain_id/verify", {
       params: { domain_id: Common.DomainId },
       success: HttpApiSchema.Empty(200),

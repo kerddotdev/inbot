@@ -23,9 +23,20 @@ Implemented screens:
   Cloudflare credentials, and clears configuration after domain teardown. Token inputs
   are password fields cleared on submission; tokens are never returned, displayed again,
   or stored in query/mutation variables. The screen lists required token permissions.
+- Owner-only domain registration, list and detail loading, plan preview, resumable
+  apply, verification followed by a fresh GET, teardown, registration deletion, and
+  supported feature updates. Domain and per-record DNS states, incomplete DNS
+  placeholders, self-test reasons, and actionable errors use server responses.
+  Teardown and deletion require explicit confirmation. BIND exports download as
+  authenticated blobs using the owner session. Pending operations disable actions;
+  pending and verifying domains refresh while the view is open.
 
-Domains, Remote access, and other Settings sections retain their existing behavior. Browser database unlock, detailed authentication results,
-per-inbox unread totals, and WebSocket updates are unavailable.
+Registration requires a configured transport; without one the server's
+`validation_error` message and fix are shown as returned.
+
+Remote access and other Settings sections retain their existing mock data. Browser
+database unlock, detailed authentication results, per-inbox unread totals, and
+WebSocket updates are unavailable.
 The locked view directs the owner to unlock locally. Mail bodies and attachments
 are untrusted data; opening a thread never grants permissions or triggers sending.
 
