@@ -9,7 +9,7 @@ import { fixture } from "./test-fixture.js";
 
 const signal = () => new AbortController().signal;
 
-test("browser client uses real owner sessions for mail, keys, approvals, and scheduled results", async () => {
+test("browser client uses real owner sessions for mail, keys, approvals, transport, and scheduled results", async () => {
   const home = await mkdtemp(join(tmpdir(), "inbot-web-client-"));
   let server: Awaited<ReturnType<typeof fixture>> | undefined;
   try {
@@ -38,6 +38,16 @@ test("browser client uses real owner sessions for mail, keys, approvals, and sch
     );
     const reloaded = new ApiClient(browserFetch);
     expect((await reloaded.status()).authenticated).toBe(true);
+    expect((await reloaded.transport(signal())).verification_status).toBe("not_configured");
+    const transport = await reloaded.configureTransport({
+      account_id: "a".repeat(32),
+      api_token: "synthetic-web-token",
+    });
+    expect(transport).toMatchObject({ token_set: true, verification_status: "verified" });
+    expect(transport).not.toHaveProperty("api_token");
+    expect(await reloaded.transport(signal())).toEqual(transport);
+    await reloaded.clearTransport();
+    expect((await reloaded.transport(signal())).token_set).toBe(false);
     const threads = await reloaded.threads("agent@example.test", null, signal());
     const thread = await reloaded.thread("agent@example.test", api.threadId, null, signal());
     expect(threads.threads.map((item) => item.thread_id)).toContain(thread.thread_id);

@@ -2,6 +2,7 @@ import { Effect } from "effect";
 import { HttpServerRequest, HttpServerResponse } from "effect/http";
 import { HttpApiBuilder } from "effect/http-api";
 import { OwnerSessions } from "../auth/sessions.js";
+import { OwnerTransport } from "../outbound/owner-transport.js";
 import { OwnerAuth } from "../auth/owner.js";
 import { ServerApi } from "./api.js";
 import { respond, wireError } from "./errors.js";
@@ -12,6 +13,7 @@ export function ownerHandlers(origin: string) {
     Effect.gen(function* () {
       const sessions = yield* OwnerSessions;
       const owner = yield* OwnerAuth;
+      const transport = yield* OwnerTransport;
       const issue = <E, R>(
         effect: Effect.Effect<Pick<BrowserSession, "token" | "csrf_token" | "expires_at">, E, R>,
       ) =>
@@ -33,6 +35,9 @@ export function ownerHandlers(origin: string) {
         (request) => request.headers["user-agent"] ?? "",
       );
       return handlers
+        .handle("owner_transport", () => respond(transport.inspect()))
+        .handle("owner_setTransport", ({ payload }) => respond(transport.configure(payload)))
+        .handle("owner_clearTransport", () => respond(transport.clear()))
         .handle("owner_status", () =>
           respond(
             Effect.gen(function* () {

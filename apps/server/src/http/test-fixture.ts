@@ -21,8 +21,14 @@ import { startHttpServer } from "./server.js";
 
 const inboxId = "agent@example.test";
 
-export async function fixture(home: string, options: { readonly webRoot?: string } = {}) {
+export async function fixture(
+  home: string,
+  options: { readonly webRoot?: string; readonly transportFetch?: typeof globalThis.fetch } = {},
+) {
   const scope = Scope.makeUnsafe();
+  const transportFetch: typeof globalThis.fetch =
+    options.transportFetch ??
+    (async () => Response.json({ success: true, result: { status: "active" } }));
   let now = Date.parse("2026-10-10T12:00:00Z");
   const sent: ProviderMessage[] = [];
   const liveClock = Context.get(Context.empty(), Clock.Clock);
@@ -105,6 +111,7 @@ export async function fixture(home: string, options: { readonly webRoot?: string
     const server = await run(
       startHttpServer({
         runOutbox: false,
+        transportFetch,
         ...options,
         setupRequired: (code) => {
           setupCode = code;
@@ -168,7 +175,7 @@ export async function fixture(home: string, options: { readonly webRoot?: string
         const serverScope = Scope.makeUnsafe();
         try {
           const started = await run(
-            startHttpServer({ runScheduler }).pipe(
+            startHttpServer({ runScheduler, transportFetch }).pipe(
               Effect.provideService(Outbox, outbox),
               Effect.provideService(Clock.Clock, clock),
               Effect.provideService(Scope.Scope, serverScope),
@@ -191,6 +198,7 @@ export async function fixture(home: string, options: { readonly webRoot?: string
           const started = await run(
             startHttpServer({
               runOutbox: false,
+              transportFetch,
               setupRequired: (value) => {
                 code = value;
               },

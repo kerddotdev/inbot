@@ -19,6 +19,7 @@ import { Mailbox } from "../mailbox/mailbox.js";
 import { AgentOperations } from "../agent/operations.js";
 import { Drafts } from "../drafts/drafts.js";
 import { Outbox } from "../outbound/outbox.js";
+import { OwnerTransport } from "../outbound/owner-transport.js";
 import { TransportConfig } from "../outbound/transport-config.js";
 import { startDraftLoop } from "../drafts/runtime.js";
 import { startOutboxLoop } from "../outbound/runtime.js";
@@ -38,6 +39,7 @@ export function startHttpServer(
     readonly runScheduler?: boolean;
     readonly webRoot?: string;
     readonly setupRequired?: (code: string) => void;
+    readonly transportFetch?: typeof globalThis.fetch;
   } = {},
 ) {
   return Effect.gen(function* () {
@@ -81,7 +83,19 @@ export function startHttpServer(
     if (address === null || typeof address === "string")
       return yield* Effect.die("Expected a loopback TCP address");
     const url = `http://127.0.0.1:${address.port}`;
+    const ownerTransport = OwnerTransport.live(
+      options.transportFetch === undefined ? {} : { fetch: options.transportFetch },
+    ).pipe(
+      Layer.provide(
+        Layer.mergeAll(
+          Layer.succeed(Store, store),
+          Layer.succeed(TransportConfig, config),
+          Layer.succeed(Provisioner, provisioner),
+        ),
+      ),
+    );
     const services = Layer.mergeAll(
+      ownerTransport,
       Layer.succeed(Home, home),
       OwnerSessions.layer(options.setupRequired).pipe(Layer.provide(Layer.succeed(Store, store))),
       Layer.succeed(Mailbox, mailbox),

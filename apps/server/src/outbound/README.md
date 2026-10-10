@@ -187,18 +187,25 @@ Source: [event subscriptions](https://developers.cloudflare.com/email-service/pl
 
 The contiguous migration list uses **4** for the durable outbox and **5** for the
 singleton Cloudflare transport settings. `TransportConfig.Live` depends on Store
-and exposes only `get()`, `set({ account_id, api_token })`, and `clear()`. Settings
+and exposes `get()`, `set({ account_id, api_token }, verifiedAt?)`, and `clear()`. Settings
 and the token reside inside the encrypted database, including its encrypted WAL.
-Reads wrap the token in `Redacted`; no token is logged. There is no transport HTTP
-route, MCP tool, or owner UI yet. A later provisioning unit will add owner setup.
+Reads wrap the token in `Redacted`; no token is logged. Owner-only
+`GET`, `PUT`, and `DELETE /v0/owner/transport` routes and Settings > Mail transport
+inspect, verify, save, and clear configuration. `OwnerTransport` verifies candidate
+credentials with the existing provision adapter before persisting them. Failed checks
+preserve the previous configuration. The verification timestamp uses the existing
+`meta` table in the same transaction as credentials; migrations remain 1 through 9.
+Clearing requires domain teardown. See the [owner transport API](../http/README.md#owner-mail-transport)
+and [required token permissions](../provision/README.md#token-permissions). No transport
+MCP tool or CLI command is exposed.
 `ConfiguredProvider` reads those settings to select the existing live Cloudflare
 adapter. Test servers inject a fake provider instead.
 
 The existing schemas, service, REST, MCP, permissions, idempotency, reverse states,
 and documentation apply. Delivery events still apply through the existing internal
 service and the Queue consumer described below; event publishing, CLI resource
-commands, the web UI, and tunnel allowlists remain planned. `skills/inbot` does not exist, so no guidance for
-nonexistent commands was added. No real home or cloud resource was accessed.
+commands and tunnel allowlists remain planned. Agent guidance in `skills/inbot` directs
+owners to transport setup without granting agents access to credentials.
 
 ## Questions requiring an authorized real-account check
 

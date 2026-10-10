@@ -29,3 +29,21 @@ export const OwnerSession = Schema.Struct({
 export const OwnerSessionsResponse = Schema.Struct({ sessions: Schema.Array(OwnerSession) });
 export const OwnerLoginLink = Schema.Struct({ url: Schema.String });
 export const OwnerRedeemRequest = Schema.Struct({ token: Credential });
+
+export const OwnerTransportRequest = Schema.Struct({
+  account_id: Schema.String.check(Schema.isPattern(/^[a-f0-9]{32}$/i)),
+  api_token: Schema.String.check(
+    Schema.isMinLength(1),
+    Schema.isMaxLength(1024),
+    Schema.isPattern(/^\S+$/),
+  ),
+});
+export type OwnerTransportRequest = typeof OwnerTransportRequest.Type;
+export const OwnerTransportStatus = Schema.Struct({
+  provider: Schema.Literal("cloudflare"),
+  account_id: Schema.NullOr(Schema.String),
+  token_set: Schema.Boolean,
+  verification_status: Schema.Literals(["not_configured", "unverified", "verified"]),
+  verified_at: Schema.NullOr(Schema.String),
+});
+export type OwnerTransportStatus = typeof OwnerTransportStatus.Type;
