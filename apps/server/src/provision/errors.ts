@@ -34,18 +34,18 @@ export function invalid(message: string) {
   });
 }
 
-export function unavailable() {
+export function unavailable(operation?: string) {
   return new ProvisionError({
     code: "service_unavailable",
-    message: "Cloudflare did not confirm the provisioning operation.",
+    message: `Cloudflare did not confirm the provisioning operation${operation === undefined ? "" : ` (${operation})`}.`,
     fix: "Retry to reconcile durable progress. Check the account, token, and provider availability.",
   });
 }
 
-export function missingPermission(permission: string) {
+export function missingPermission(permission: string, operation?: string) {
   return new ProvisionError({
     code: "missing_permission",
-    message: `The Cloudflare token needs ${permission}.`,
+    message: `The Cloudflare token needs ${permission}${operation === undefined ? "" : ` (${operation})`}.`,
     fix: `Grant ${permission} on the configured account or zone, then retry.`,
   });
 }
