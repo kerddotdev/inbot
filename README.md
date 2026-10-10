@@ -2,7 +2,7 @@
 
 Self-hosted, privacy-first email for AI agents. Each agent gets its own inbox on your custom domain, mail is stored encrypted on your own machine, and agents reach it through MCP, a CLI, or a REST API. An optional Cloudflare Tunnel lets cloud-hosted agents reach your local instance with scoped credentials. The mail provider still sees plaintext in transit: Inbot is zero-knowledge at rest, not end-to-end encrypted.
 
-Status: early development. The encrypted storage foundation, mailbox service, [inbound MIME ingestion](apps/server/src/inbound/README.md), and [authenticated loopback HTTP API](apps/server/src/http/README.md) exist. Live mail delivery, MCP, the owner web UI, and installers remain planned.
+Status: early development. The encrypted storage foundation, mailbox service, [inbound MIME ingestion](apps/server/src/inbound/README.md), [authenticated loopback HTTP API](apps/server/src/http/README.md), shared [age envelope package](packages/envelope/README.md), and [inbound Email Worker handler](apps/worker/README.md) exist. Live mail delivery, the owner web UI, and installers remain planned.
 
 ## Development
 

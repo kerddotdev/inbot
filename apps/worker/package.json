@@ -1,0 +1,5 @@
+{
+  "name": "@inbot/worker",
+  "private": true,
+  "type": "module"
+}

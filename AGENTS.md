@@ -2,7 +2,7 @@
 
 Inbot is self-hosted, privacy-first email for AI agents. It gives each agent its own inbox on the owner's custom domain and runs on the owner's machine, with mail stored in an encrypted local database. Agents use it through MCP, a CLI, and a REST API. The owner manages it through a local web UI. An optional Cloudflare Tunnel lets cloud-hosted agents reach the local instance with scoped credentials.
 
-The workspace, home, key management, encrypted SQLite storage, mailbox service, inbound MIME ingestion, durable outbound sending runtime, authenticated loopback HTTP API, and streamable HTTP MCP server in `apps/server/src`, and the shared contracts in `packages/contracts` are implemented. Cloudflare transport settings currently have only an internal encrypted service; owner setup, inbound pulling, delivery Queue pulling, and the owner web UI remain planned. Update descriptions as the code lands, and never present a planned capability as implemented.
+The workspace, home, key management, encrypted SQLite storage, mailbox service, inbound MIME ingestion, durable outbound sending runtime, authenticated loopback HTTP API, and streamable HTTP MCP server in `apps/server/src`, the shared contracts in `packages/contracts`, the shared age envelope in `packages/envelope`, and the inbound Email Worker handler in `apps/worker` are implemented. Cloudflare transport settings currently have only an internal encrypted service; owner setup, inbound pulling, delivery Queue pulling, and the owner web UI remain planned. Update descriptions as the code lands, and never present a planned capability as implemented.
 
 ## What we never compromise on
 
@@ -106,14 +106,14 @@ The local `inbot serve` service owns the encrypted SQLite database and serves RE
 
 ## Where code lives
 
-`apps/server/src` contains the storage foundation, mailbox service, inbound MIME ingestion, outbound composition and durable outbox, authentication, loopback HTTP server, and `serve` entry point. `packages/contracts` contains the shared schemas and HTTP API declarations. The remaining layout is planned. Create a package only when it has a real implementation.
+`apps/server/src` contains the storage foundation, mailbox service, inbound MIME ingestion, outbound composition and durable outbox, authentication, loopback HTTP server, and `serve` entry point. `packages/contracts` contains the shared schemas and HTTP API declarations. `packages/envelope` and `apps/worker` implement inbound encryption and the Email Worker handler. The remaining layout is planned. Create a package only when it has a real implementation.
 
 - `apps/server` - implemented home, key management, encrypted store, mailbox service, inbound MIME parsing and ingestion, outbound composition and durable outbox, Cloudflare REST adapter, delivery event application, API keys, owner bearer authentication, HTTP mailbox and send APIs, streamable HTTP MCP, encrypted transport settings, and the scoped outbound runner; planned owner transport setup, owner web sessions, OAuth, inbound decryption and pulling, delivery Queue pulling, provisioning, and tunnel supervision.
 - `apps/cli` - the `inbot` entry point: service commands and resource commands.
 - `apps/web` - React, Vite, and Tailwind owner UI.
-- `apps/worker` - Cloudflare Email Worker that encrypts inbound mail into the buffer.
+- `apps/worker` - implemented streaming inbound encryption to R2 and Queue pointers; bundling, provisioning, and deployment remain planned.
 - `packages/contracts` - implemented Effect schemas and HTTP API declarations shared by every surface. No handlers or service runtime.
-- `packages/envelope` - the age envelope format shared by the Worker and the service.
+- `packages/envelope` - implemented X25519 age streaming encryption, the inbound frame carrying the SMTP envelope, buffered decryption, and the Queue pointer schema shared by the Worker and the planned service consumer.
 - `skills/inbot` - portable agent guidance for using Inbot.
 - `scripts` - packaging, release, and verification scripts. `install.sh` and `install.ps1` install releases.
 

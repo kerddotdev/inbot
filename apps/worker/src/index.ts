@@ -1,0 +1,32 @@
+import { encrypt, maxMessageSize } from "../../../packages/envelope/src/index.js";
+import { createInboundKey, type InboundPointer } from "../../../packages/envelope/src/pointer.js";
+
+export interface Env {
+  readonly INBOUND_BUCKET: Pick<R2Bucket, "put">;
+  readonly INBOUND_QUEUE: Pick<Queue<InboundPointer>, "send">;
+  readonly RECIPIENT: string;
+}
+
+export default {
+  async email(
+    message: Pick<ForwardableEmailMessage, "raw" | "rawSize" | "setReject">,
+    env: Env,
+  ): Promise<void> {
+    if (message.rawSize > maxMessageSize) {
+      message.setReject("Message exceeds 25 MiB.");
+      return;
+    }
+    const received_at = new Date().toISOString();
+    const key = createInboundKey();
+    const ciphertext = await encrypt(env.RECIPIENT, message.raw);
+    const size = ciphertext.size(message.rawSize);
+    const body = ciphertext.pipeThrough(new FixedLengthStream(size));
+    try {
+      await env.INBOUND_BUCKET.put(key, body);
+    } catch (error) {
+      await body.cancel().catch(() => {});
+      throw error;
+    }
+    await env.INBOUND_QUEUE.send({ version: 1, key, size, received_at }, { contentType: "json" });
+  },
+} satisfies ExportedHandler<Env>;
