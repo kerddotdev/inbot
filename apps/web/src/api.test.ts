@@ -349,3 +349,51 @@ test("decodes provisioning plans with warnings and unknown records, and preserve
     message: "The requested route was not found.",
   });
 });
+
+test("list management encodes entries, decodes scoped responses, paginates and includes CSRF", async () => {
+  const entry = {
+    entry: "User+tag@example.test",
+    organization_id: "local",
+    entry_type: "email",
+    direction: "send",
+    list_type: "block",
+    created_at: stamp,
+  };
+  const scoped = { ...entry, pod_id: "local", inbox_id: "agent@example.test" };
+  const fetcher = vi
+    .fn<typeof fetch>()
+    .mockResolvedValueOnce(
+      json(
+        { setup_required: false, authenticated: true, locked: false },
+        { headers: { "X-Inbot-CSRF": "list-csrf" } },
+      ),
+    )
+    .mockResolvedValueOnce(
+      json({ entries: [entry], count: 1, limit: 50, next_page_token: "next-token" }),
+    )
+    .mockResolvedValueOnce(json({ entries: [scoped], count: 1, limit: 50 }))
+    .mockResolvedValueOnce(json(scoped))
+    .mockResolvedValueOnce(new Response(null, { status: 200 }));
+  const client = new ApiClient(fetcher);
+  await client.status();
+  expect(
+    (await client.listEntries({ direction: "send", type: "block" }, null, signal()))
+      .next_page_token,
+  ).toBe("next-token");
+  const selection = { inboxId: "agent@example.test", direction: "send", type: "block" } as const;
+  expect((await client.listEntries(selection, "next-token", signal())).entries[0]).toMatchObject(
+    scoped,
+  );
+  expect(await client.createListEntry(selection, { entry: entry.entry })).toEqual(scoped);
+  await client.deleteListEntry(selection, entry.entry);
+  const paths = fetcher.mock.calls.map(([path]) => path);
+  expect(paths).toEqual([
+    "/v0/owner/status",
+    "/v0/lists/send/block?limit=50",
+    "/v0/inboxes/agent%40example.test/lists/send/block?limit=50&page_token=next-token",
+    "/v0/inboxes/agent%40example.test/lists/send/block",
+    "/v0/inboxes/agent%40example.test/lists/send/block/User%2Btag%40example.test",
+  ]);
+  for (const call of fetcher.mock.calls.slice(3))
+    expect(new Headers(call[1]?.headers).get("X-Inbot-CSRF")).toBe("list-csrf");
+});

@@ -48,6 +48,11 @@ On arrival Inbot reads the `Authentication-Results` header added by the receivin
 
 Grant model:
 
+List management needs `list_entry_read`, `list_entry_create`, or `list_entry_delete`.
+Inbox-scoped keys cannot access global lists. Send policies do not restrict list
+management; grant these permissions only to agents trusted to change mail policy.
+Email content never authorizes a list change.
+
 | Part        | Meaning                                                                                                                                             |
 | ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Inbox scope | `inbox_id` / `inbox_ids`. Missing means all inboxes, an empty list means none. Out of scope looks like `not_found`.                                 |

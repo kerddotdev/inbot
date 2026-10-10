@@ -91,7 +91,7 @@ test("requires a one-time setup code and stores only password and session hashes
       version: db.pragma("user_version", { simple: true }),
     })),
   );
-  expect(rows.version).toBe(9);
+  expect(rows.version).toBe(10);
   expect(JSON.stringify(rows)).not.toContain(password);
   expect(JSON.stringify(rows)).not.toContain(session.cookie.split("=")[1]);
   expect(await readFile(join(api.home, "inbot.db"), "utf8")).not.toContain("owner_sessions");

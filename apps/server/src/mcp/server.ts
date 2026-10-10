@@ -6,6 +6,7 @@ import * as Inboxes from "../../../../packages/contracts/src/inboxes.js";
 import * as Messages from "../../../../packages/contracts/src/messages.js";
 import * as Drafts from "../../../../packages/contracts/src/drafts.js";
 import * as Threads from "../../../../packages/contracts/src/threads.js";
+import * as Lists from "../../../../packages/contracts/src/lists.js";
 import { CurrentPrincipal } from "../../../../packages/contracts/src/security.js";
 import { ApiKeys } from "../auth/api-keys.js";
 import { OwnerAuth } from "../auth/owner.js";
@@ -199,6 +200,73 @@ export const McpTools = (origin: string) =>
       const update = { readOnlyHint: false, destructiveHint: false, idempotentHint: true };
       const remove = { readOnlyHint: false, destructiveHint: true, idempotentHint: true };
       const create = { readOnlyHint: false, destructiveHint: false, idempotentHint: false };
+      const list = {
+        inboxId: Schema.optionalKey(Common.InboxId),
+        direction: Lists.Direction,
+        type: Lists.ListType,
+      };
+      yield* register(
+        "list_list_entries",
+        "Read allow or block entries. Omit inboxId for global lists; global access requires an unrestricted inbox grant.",
+        Schema.Struct({
+          ...list,
+          limit: Common.CursorQuery.fields.limit,
+          pageToken: page.pageToken,
+        }),
+        read,
+        ({ inboxId, direction, type, ...query }) =>
+          operations
+            .listEntries(inboxId, direction, type, pageQuery(query))
+            .pipe(
+              Effect.map(
+                Schema.decodeUnknownSync(
+                  inboxId === undefined
+                    ? Lists.ListListEntriesResponse
+                    : Lists.PodListListEntriesResponse,
+                ),
+              ),
+            ),
+      );
+      yield* register(
+        "get_list_entry",
+        "Read one exact address or domain entry.",
+        Schema.Struct({ ...list, entry: Schema.String }),
+        read,
+        ({ inboxId, direction, type, entry }) =>
+          operations
+            .getListEntry(inboxId, direction, type, entry)
+            .pipe(
+              Effect.map(
+                Schema.decodeUnknownSync(
+                  inboxId === undefined ? Lists.ListEntry : Lists.PodListEntry,
+                ),
+              ),
+            ),
+      );
+      yield* register(
+        "create_list_entry",
+        "Add an exact address or domain to an allow or block list. Blocks win; non-empty allow lists restrict mail.",
+        Schema.Struct({ ...list, ...Lists.CreateListEntryRequest.fields }),
+        create,
+        ({ inboxId, direction, type, ...input }) =>
+          operations
+            .createListEntry(inboxId, direction, type, input)
+            .pipe(
+              Effect.map(
+                Schema.decodeUnknownSync(
+                  inboxId === undefined ? Lists.ListEntry : Lists.PodListEntry,
+                ),
+              ),
+            ),
+      );
+      yield* register(
+        "delete_list_entry",
+        "Remove an allow or block entry. Removing the last allow entry lifts that direction's allow restriction.",
+        Schema.Struct({ ...list, entry: Schema.String }),
+        remove,
+        ({ inboxId, direction, type, entry }) =>
+          operations.deleteListEntry(inboxId, direction, type, entry),
+      );
       const draft = { ...inbox, draftId: Common.DraftId };
       const { reply_to, in_reply_to, forward_of, reply_all, send_at, client_id, ...draftCreate } =
         Drafts.CreateDraftRequest.fields;

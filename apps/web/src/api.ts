@@ -6,6 +6,7 @@ import * as Messages from "@inbot/contracts/src/messages.js";
 import * as Keys from "@inbot/contracts/src/api-keys.js";
 import * as Drafts from "@inbot/contracts/src/drafts.js";
 import * as Domains from "@inbot/contracts/src/domains.js";
+import * as Lists from "@inbot/contracts/src/lists.js";
 import { ErrorResponse, type ErrorCode } from "@inbot/contracts/src/errors.js";
 
 export class ApiError extends Error {
@@ -26,6 +27,9 @@ export function errorText(error: unknown): string {
 
 const segment = encodeURIComponent;
 const inboxPath = (id: string) => `/v0/inboxes/${segment(id)}`;
+export type ListSelection = { inboxId?: string; direction: Lists.Direction; type: Lists.ListType };
+const listPath = ({ inboxId, direction, type }: ListSelection) =>
+  `${inboxId === undefined ? "/v0" : inboxPath(inboxId)}/lists/${segment(direction)}/${segment(type)}`;
 const threadPath = (inboxId: string, id: string) => `${inboxPath(inboxId)}/threads/${segment(id)}`;
 const draftPath = (draft: Pick<Drafts.DraftItem, "inbox_id" | "draft_id">) =>
   `${inboxPath(draft.inbox_id)}/drafts/${segment(draft.draft_id)}`;
@@ -175,6 +179,27 @@ export class ApiClient {
         this.request(`/v0/inboxes${pageQuery(token)}`, Inboxes.ListInboxesResponse, { signal }),
       (page) => page.inboxes,
     );
+
+  listEntries = (selection: ListSelection, token: string | null, signal: AbortSignal) =>
+    this.request(
+      `${listPath(selection)}${pageQuery(token)}`,
+      selection.inboxId === undefined
+        ? Lists.ListListEntriesResponse
+        : Lists.PodListListEntriesResponse,
+      { signal },
+    );
+
+  createListEntry = (selection: ListSelection, body: Lists.CreateListEntryRequest) =>
+    this.request(
+      listPath(selection),
+      selection.inboxId === undefined ? Lists.ListEntry : Lists.PodListEntry,
+      { method: "POST", body },
+    );
+
+  deleteListEntry = (selection: ListSelection, entry: string) =>
+    this.request(`${listPath(selection)}/${segment(entry)}`, Schema.Undefined, {
+      method: "DELETE",
+    });
 
   threads = (inboxId: string, token: string | null, signal: AbortSignal) =>
     this.request(`${inboxPath(inboxId)}/threads${pageQuery(token)}`, Threads.ListThreadsResponse, {

@@ -168,3 +168,7 @@ extra S3 credentials. Sources: [pull consumers](https://developers.cloudflare.co
 Service, delivery events, reverse states, and docs apply. Existing contracts and
 mailbox semantics are reused; REST, MCP, CLI, web, grants, and remote allowlists
 have no new public surface. `skills/inbot` does not exist in this checkout.
+
+## Receive lists
+
+Ingestion evaluates global and inbox `receive` lists against both From and the non-empty envelope sender. Blocked recipients return `skipped_blocked`, with a durable `blocked_sender` or `sender_not_allowed` trace in the encrypted Store. Allowed recipients are still ingested independently. The buffer receipt records `message_rejected` before deleting ciphertext; storage failure retains it for retry. See [list policy](../lists/README.md).

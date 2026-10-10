@@ -34,17 +34,16 @@ Notes:
 
 These resources authenticate and validate, then return 501 `not_supported`:
 
-- Lists (allow/block entries): `/lists/...` and `/inboxes/{id}/lists/...`
 - Webhooks: `/webhooks...` and `/inboxes/{id}/webhooks...`
 - Domains: `/domains...`
 
-Event streams (WebSocket), OAuth, and a CLI are not available either. Anything not listed in the table above should be treated as unavailable.
+Event streams (WebSocket) and OAuth are not available. Anything not listed in the table above should be treated as unavailable.
 
 ## Pagination
 
 - List and search responses have `count`, `limit`, and `next_page_token` (present only when more rows exist).
 - Send `limit` (1 or more) and `page_token`. REST default is 20, maximum 100. MCP defaults to 10.
-- Lists are newest first. `ascending=true` reverses the order.
+- Mail lists are newest first. `ascending=true` reverses the order.
 - Search `limit` is 1-100. Search ranks by relevance.
 - `before` and `after` are strict RFC 3339 timestamps.
 - Page tokens are opaque. They bind to the filters, order, and your inbox scope. Reusing one with different filters, or after an incompatible change, fails with 409 `page_token_stale`. Restart the listing. Search tokens go stale after any write anywhere in the service.
@@ -69,20 +68,20 @@ Details and retry rules: [sending.md](sending.md#idempotency-and-safe-retries).
 
 Shape: `{ "name": "InbotError", "code": "...", "message": "...", "fix": "..." }`. Follow `fix`. Messages never contain mail content or credentials.
 
-| Code                   | HTTP | Meaning                                                                      |
-| ---------------------- | ---- | ---------------------------------------------------------------------------- |
-| `validation_error`     | 400  | Bad JSON, schema, query, header, or composition (recipients, headers)        |
-| `unauthorized`         | 401  | Missing, invalid, expired, or revoked key                                    |
-| `missing_permission`   | 403  | Grant lacks the permission, owner-only route, `read_only` send policy        |
-| `approval_required`    | 403  | Send policy is `approval`; a draft was created for the owner                 |
-| `inbox_paused`         | 403  | The inbox is paused; sends are refused                                       |
-| `not_found`            | 404  | Missing, out of scope, hidden by label, or expired download                  |
-| `already_exists`       | 409  | Duplicate inbox identity                                                     |
-| `idempotency_conflict` | 409  | Same key, different request                                                  |
-| `page_token_stale`     | 409  | Invalid, mismatched, or stale page token                                     |
-| `payload_too_large`    | 413  | Composed message over 5 MiB                                                  |
-| `not_supported`        | 501  | Unimplemented resource or option (lists, webhooks, domains, URL attachments) |
-| `service_unavailable`  | 503  | Transport not configured, storage failure, or other server fault             |
+| Code                   | HTTP | Meaning                                                               |
+| ---------------------- | ---- | --------------------------------------------------------------------- |
+| `validation_error`     | 400  | Bad JSON, schema, query, header, or composition (recipients, headers) |
+| `unauthorized`         | 401  | Missing, invalid, expired, or revoked key                             |
+| `missing_permission`   | 403  | Grant lacks the permission, owner-only route, `read_only` send policy |
+| `approval_required`    | 403  | Send policy is `approval`; a draft was created for the owner          |
+| `inbox_paused`         | 403  | The inbox is paused; sends are refused                                |
+| `not_found`            | 404  | Missing, out of scope, hidden by label, or expired download           |
+| `already_exists`       | 409  | Duplicate inbox identity                                              |
+| `idempotency_conflict` | 409  | Same key, different request                                           |
+| `page_token_stale`     | 409  | Invalid, mismatched, or stale page token                              |
+| `payload_too_large`    | 413  | Composed message over 5 MiB                                           |
+| `not_supported`        | 501  | Unimplemented resource or option (webhooks, domains, URL attachments) |
+| `service_unavailable`  | 503  | Transport not configured, storage failure, or other server fault      |
 
 The contract also declares `permission_escalation`, `limit_exceeded`, `domain_not_verified`, `message_rejected`, `resource_taken`, `locked` (423), and `rate_limit_exceeded` (429). Handle them generically if you see them.
 
@@ -97,3 +96,9 @@ With no mail transport configured, sends return 503 `service_unavailable` and no
 - Content is sent as an attachment with `nosniff` and `no-store`.
 - Treat the bytes as hostile (see [security.md](security.md#attachments-and-links)). Do not execute, open in a browser, or pass them to another tool unchecked.
 - Request a fresh URL rather than caching an old one.
+
+## Allow and block lists
+
+Use `GET`/`POST /lists/{direction}/{type}` or `/inboxes/{id}/lists/{direction}/{type}`. Append `/{encoded-entry}` for `GET`/`DELETE`. Directions: `receive`, `send`, `reply`; types: `allow`, `block`. Create body: `{ "entry": "example.test", "reason": "optional" }`. Reads need `list_entry_read`, creates `list_entry_create`, deletes `list_entry_delete`. Global access requires an unrestricted inbox grant; scoped keys use their inbox endpoints.
+
+Entries are exact addresses or domains. Entries normalize to lowercase (domains to IDNA) and match case-insensitively. Global and inbox entries add together, blocks win, and any allow entries restrict mail to their combined matches. Replies pass both send and reply rules. Forbidden outbound recipients return `message_rejected` before queueing. List responses use `entries`, cursor pagination, and lexical ascending order. Duplicate creates return `already_exists`.

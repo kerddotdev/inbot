@@ -121,3 +121,7 @@ Tests initialize and list tools over a real port-0 loopback server, use encrypte
 Store in temporary homes, inject fake providers and an in-memory keychain, and
 check cross-surface idempotency, policies, scope, labels, current credentials,
 truncation, and server lifetime. No real Cloudflare request or email was sent.
+
+## Allow and block list tools
+
+`list_list_entries`, `get_list_entry`, `create_list_entry`, and `delete_list_entry` use the same authorized service as REST. Arguments are `direction`, `type`, optional `inboxId`, plus `entry` on get/create/delete, optional `reason` on create, and `limit`/`pageToken` on list. Reads need `list_entry_read`, creates `list_entry_create`, deletes `list_entry_delete`. Global access requires an unrestricted inbox grant. Read/create/delete annotations follow the existing patterns. See [policy](../lists/README.md) for normalization, precedence, and durable enforcement.
