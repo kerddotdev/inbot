@@ -68,8 +68,18 @@ exposes authenticated streamable HTTP MCP at `/mcp`; see
 [the MCP reference](../mcp/README.md).
 
 Raw and attachment endpoints return the declared metadata and a signed
-five-minute URL under `/v0/downloads/:token`. Downloads still require a bearer
-token or owner session cookie and recheck its current permissions, inbox scope, and hidden labels. They
+five-minute capability URL under `/v0/downloads/:token`. No bearer header or cookie
+is required to fetch it. The HMAC-signed token binds the resource, issuing principal,
+and exact issuing origin. Downloads recheck the issuer's current permissions,
+inbox scope, hidden labels, and credential activity. API key expiry/deletion, OAuth
+access token expiry/family revocation, and owner session expiry/revocation invalidate
+the capability. OAuth tickets retain the original token hash and audience (including
+`/mcp`), never its secret. Local owner bearer tickets live only within the service
+lifetime. A supplied bearer must authenticate the same owner, API key, or OAuth
+grant; a different principal returns 404. Inactive issuers return 401, missing read
+permission returns 403, and invalid, expired, wrong-origin, out-of-scope, or hidden
+resources return 404. Local and tunnel URLs cannot be moved between listeners.
+Treat URLs as temporary credentials and never log or publish them. Downloads
 read encrypted storage at download time and send binary content as an attachment
 with `nosniff` and `no-store`. No plaintext download cache is written. URLs
 expire on restart as well as at their advertised expiry time.

@@ -183,6 +183,14 @@ test("supports owner cookies, enforces CSRF and origin, and preserves agent cred
   const downloaded = await fetch(raw.download_url, { headers: { cookie: session.cookie } });
   expect(downloaded.status).toBe(200);
   expect(Buffer.from(await downloaded.arrayBuffer())).toEqual(api.raw);
+  expect((await fetch(raw.download_url)).status).toBe(200);
+  const logout = await api.request("/v0/owner/logout", {
+    token: null,
+    method: "POST",
+    headers: session.headers,
+  });
+  expect(logout.status).toBe(200);
+  expect((await fetch(raw.download_url)).status).toBe(401);
 });
 
 test("logs in, limits password failures, and revokes a session on logout", async ({ api }) => {

@@ -8,6 +8,7 @@ import * as OAuth from "../../../../packages/contracts/src/oauth.js";
 import type { Grant } from "../../../../packages/contracts/src/api-keys.js";
 import { ListInboxesResponse } from "../../../../packages/contracts/src/inboxes.js";
 import { ErrorResponse } from "../../../../packages/contracts/src/errors.js";
+import { AttachmentResponse } from "../../../../packages/contracts/src/attachments.js";
 import { makeOAuth } from "../oauth/service.js";
 import { hashToken } from "../auth/api-keys.js";
 import { Store } from "../store.js";
@@ -117,6 +118,91 @@ async function oauthFailure(response: Response, error: string, status = 400) {
     error,
   );
 }
+
+for (const resourcePath of ["/mcp", "/v0"])
+  test(`${resourcePath} OAuth capabilities recheck the issuing access token and grant`, async ({
+    f,
+  }) => {
+    const { input, exchange: code } = await flow(f, resourcePath);
+    const tokens = await exchange(f, code);
+    const stored = await f.run(
+      f.mailbox.insertMessage({
+        inbox_id: inboxId,
+        message_id: "<oauth-file@example.test>",
+        direction: "received",
+        from: "alice@example.test",
+        to: [inboxId],
+        timestamp: "2026-10-10T12:00:00Z",
+        raw: Buffer.from("Synthetic MIME"),
+        attachments: [
+          {
+            attachment_id: "file-1",
+            filename: "sample.txt",
+            content: Buffer.from("Synthetic OAuth attachment"),
+          },
+        ],
+      }),
+    );
+    const attachment =
+      resourcePath === "/mcp"
+        ? Schema.decodeUnknownSync(AttachmentResponse)(
+            (
+              await (
+                await mcpClient(f, tokens.access_token)
+              ).call("get_attachment", { threadId: stored.thread_id, attachmentId: "file-1" })
+            ).structuredContent,
+          )
+        : Schema.decodeUnknownSync(AttachmentResponse)(
+            await (
+              await f.request(
+                `/v0/inboxes/${inboxId}/messages/${encodeURIComponent("<oauth-file@example.test>")}/attachments/file-1`,
+                { token: tokens.access_token },
+              )
+            ).json(),
+          );
+    const path = new URL(attachment.download_url).pathname;
+    expect(await (await f.request(path, { token: null })).text()).toBe(
+      "Synthetic OAuth attachment",
+    );
+    expect((await f.request(path, { token: tokens.access_token })).status).toBe(200);
+    expect(attachment.download_url).not.toContain(tokens.access_token);
+    await f.run(
+      f.store.use((db) =>
+        db
+          .prepare("UPDATE api_keys SET permissions = ? WHERE prefix = 'oauth'")
+          .run(JSON.stringify({ inbox_read: true })),
+      ),
+    );
+    expect((await f.request(path, { token: null })).status).toBe(403);
+    await f.run(
+      f.store.use((db) =>
+        db
+          .prepare("UPDATE api_keys SET permissions = ? WHERE prefix = 'oauth'")
+          .run(JSON.stringify(grant.permissions)),
+      ),
+    );
+    await post(f, "/oauth/revoke", { client_id: input.client_id, token: tokens.access_token });
+    expect((await f.request(path, { token: null })).status).toBe(401);
+  });
+
+test("OAuth token expiry invalidates a capability before its advertised expiry", async ({ f }) => {
+  const { exchange: code } = await flow(f, "/v0");
+  const tokens = await exchange(f, code);
+  f.advance(30_000);
+  const capability = Schema.decodeUnknownSync(
+    Schema.Struct({ download_url: Schema.String, expires_at: Schema.String }),
+  )(
+    await (
+      await f.request(
+        `/v0/inboxes/${inboxId}/messages/${encodeURIComponent("<first@example.test>")}/raw`,
+        { token: tokens.access_token },
+      )
+    ).json(),
+  );
+  f.advance(270_000);
+  expect(Date.parse(capability.expires_at)).toBe(Date.parse("2026-10-10T12:05:30Z"));
+  expect((await fetch(capability.download_url)).status).toBe(401);
+});
 
 test("discovers canonical resources and completes the owner code/PKCE flow with hashed credentials and MCP access", async ({
   f,

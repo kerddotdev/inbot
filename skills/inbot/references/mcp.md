@@ -65,7 +65,7 @@ Gotchas:
 - Array filters (`labels`, `senders`, ...) must all match. Sender, recipient, and subject filters are case-insensitive substring matches.
 - Search terms are plain words joined with AND. Punctuation and operators have no special meaning. Search always excludes hidden labels, regardless of `include*` flags. Highlights wrap matches in `**`.
 - A search page token goes stale after any write in the service (`page_token_stale`). Start the search again.
-- `get_attachment` returns `download_url` and `expires_at`. The URL lasts five minutes and still requires your bearer token. See [rest.md](rest.md#downloads).
+- `get_attachment` returns `download_url` and `expires_at`. Fetch the absolute URL directly without a bearer header, including when your API key is available only inside the MCP configuration. It is an HMAC-signed, five-minute capability bound to the issuing principal and origin. Current permissions, scope, hidden labels, and credential activity are rechecked on every download. Treat the URL as a temporary credential. File content is not embedded in MCP results. See [rest.md](rest.md#downloads).
 
 ## Message tools
 
