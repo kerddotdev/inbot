@@ -147,3 +147,5 @@ in descriptions and enforced by the service. No stream subscription or owner-onl
 domain, session, settings, or key tools are added.
 
 OAuth-capable MCP clients can connect without an API key after browser approval by the owner. See [OAuth authorization](../oauth/README.md).
+
+System state labels (`received`, `queued`, `sent`, `send_unknown`, `failed`, `delivered`, `bounced`, `complained`, `rejected`, `deferred`) are protected on every message, including messages without an outbox entry. Message, thread, and batch label edits that add or remove any of them return `validation_error` with a fix and make no changes. Custom labels and `unread` remain editable.

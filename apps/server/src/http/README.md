@@ -184,7 +184,7 @@ without another event. Resolution commits the state and `message.sent` or
 `owner_confirmed_not_sent` as reason. It never invokes the provider. A deliberate
 retry uses the normal send route with a new key and a new message.
 Agents receive 403 `missing_permission`; no MCP tool exposes resolution, and the
-tunnel blocks its route. Public label updates cannot change outbox send labels.
+tunnel blocks its route. System state labels (`received`, `queued`, `sent`, `send_unknown`, `failed`, `delivered`, `bounced`, `complained`, `rejected`, `deferred`) are protected on every message, including messages without an outbox entry. Message, thread, and batch label edits that add or remove any of them return `validation_error` with a fix and make no changes. Custom labels and `unread` remain editable.
 
 ## Drafts and owner decisions
 

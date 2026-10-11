@@ -111,3 +111,5 @@ Settings > Allow and block lists > Rejected mail, owner REST, or `inbot lists
 rejections`. `list_entry_read` does not authorize reading these mail metadata
 records. There are no rejection MCP tools or tunnel routes. Ask the owner to
 inspect a suspected receive-list rejection; the record does not retain a body.
+
+System state labels (`received`, `queued`, `sent`, `send_unknown`, `failed`, `delivered`, `bounced`, `complained`, `rejected`, `deferred`) are protected on every message, including messages without an outbox entry. Message, thread, and batch label edits that add or remove any of them return `validation_error` with a fix and make no changes. Custom labels and `unread` remain editable.
