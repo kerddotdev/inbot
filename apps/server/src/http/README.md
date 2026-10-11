@@ -84,13 +84,20 @@ verification has `verified` status and an ISO timestamp. This records the last
 successful token check; it does not prove the token remains active or has all required
 permissions. Responses never contain the API token or a token hint.
 
-`PUT /v0/owner/transport` accepts `{ account_id, api_token }`. The account ID is 32
-hexadecimal characters and the token must be nonempty without whitespace. The existing
-provision adapter checks the candidate with account token verification and user-token
-fallback before persisting credentials and the verification time atomically in the
-encrypted Store. Failure leaves the existing configuration and timestamp unchanged.
-Provider errors never include response bodies, credentials, or keys. See the
-[required token permissions](../provision/README.md#token-permissions).
+`PUT /v0/owner/transport` accepts `{ api_token, account_id? }`. A supplied account ID is 32
+hexadecimal characters and the token must be nonempty without whitespace. With an
+explicit ID, the existing provision adapter checks the candidate with account token
+verification and user-token fallback. Without it, the adapter first verifies the user
+token, then lists accessible accounts with `GET /accounts`. Exactly one is selected;
+none or several return 409 `action_required`. For several accounts, the error's `fix`
+lists their names and IDs; resubmit with the chosen `account_id`. Discovery or verification
+failure preserves the existing configuration. Account-owned tokens can use an explicit ID.
+
+Only after verification and account selection are credentials and the verification time
+persisted atomically in the encrypted Store. Provider errors never include response bodies,
+credentials, or keys. Token verification confirms active status; domain preflight and provider
+operations check permissions. Missing permissions name the dashboard selection
+and scope in the fix. See the [shared permission table and token template](../provision/README.md#token-permissions).
 
 `DELETE /v0/owner/transport` returns an empty 200 response and is idempotent. Active
 provisioning or remaining resource ledger entries return 409 `action_required` with a
