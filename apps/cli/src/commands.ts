@@ -57,6 +57,18 @@ const draft = ["inbox_id", "draft_id"];
 
 export const commands: readonly Command[] = [
   {
+    name: "lists rejections",
+    description: "List rejected inbound metadata as owner, optionally filtered by --inbox-id.",
+    endpoint: OwnerApiGroup.endpoints.owner_listRejections,
+    query: { ...cursor, inbox_id: "string" },
+  },
+  {
+    name: "lists delete-rejection",
+    description: "Delete rejected inbound metadata as owner; this does not accept the mail.",
+    endpoint: OwnerApiGroup.endpoints.owner_deleteRejection,
+    params: ["rejection_id"],
+  },
+  {
     name: "oauth clients",
     description: "List authorized OAuth clients and grants as owner.",
     endpoint: OAuthOwnerApi.endpoints.oauth_clients,

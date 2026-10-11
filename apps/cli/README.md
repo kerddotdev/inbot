@@ -85,37 +85,39 @@ are `--home <directory>`, `--flavor development|production`, and `--json`.
 Place the command first, or precede it with global options. Addresses and IDs are
 positional; quote IDs containing shell metacharacters.
 
-| Command            | Arguments                                                       | REST operation                               |
-| ------------------ | --------------------------------------------------------------- | -------------------------------------------- |
-| `serve`            | Existing server flags                                           | Existing server entry point                  |
-| `open`             | Optional `--browser`                                            | POST `/v0/owner/login-links`                 |
-| `inboxes list`     | Pagination flags                                                | GET `/v0/inboxes`                            |
-| `inboxes create`   | Body flags or JSON                                              | POST `/v0/inboxes`                           |
-| `inboxes get`      | `<inbox_id>`                                                    | GET `/v0/inboxes/:inbox_id`                  |
-| `inboxes delete`   | `<inbox_id>`                                                    | DELETE `/v0/inboxes/:inbox_id`               |
-| `threads list`     | Optional `--inbox`, filters                                     | GET `/v0/threads` or inbox threads           |
-| `threads get`      | `<thread_id>`, optional `--inbox`                               | GET organization or inbox thread             |
-| `messages get`     | `<inbox_id> <message_id>`                                       | GET inbox message                            |
-| `messages resolve` | `<inbox_id> <message_id> --decision sent or failed`             | POST inbox message/resolve (local owner)     |
-| `messages send`    | `<inbox_id>`, body                                              | POST inbox messages/send                     |
-| `messages reply`   | `<inbox_id> <message_id>`, body                                 | POST inbox message/reply                     |
-| `messages forward` | `<inbox_id> <message_id>`, body                                 | POST inbox message/forward                   |
-| `messages update`  | `<inbox_id> <message_id>`, labels                               | PATCH inbox message                          |
-| `drafts list`      | Optional `--inbox`, filters                                     | GET `/v0/drafts` or inbox drafts             |
-| `drafts create`    | `<inbox_id>`, body                                              | POST inbox drafts                            |
-| `drafts get`       | `<draft_id>`, optional `--inbox`                                | GET organization or inbox draft              |
-| `drafts update`    | `<inbox_id> <draft_id>`, body                                   | PATCH inbox draft                            |
-| `drafts delete`    | `<inbox_id> <draft_id>`                                         | DELETE inbox draft                           |
-| `drafts send`      | `<inbox_id> <draft_id>`, labels                                 | POST inbox draft/send                        |
-| `drafts approve`   | `<inbox_id> <draft_id>`                                         | POST inbox draft/approve (owner)             |
-| `drafts reject`    | `<inbox_id> <draft_id>`, optional `--reason`                    | POST inbox draft/reject (owner)              |
-| `lists list`       | `<direction> <type>`, optional `--inbox`, cursor flags          | GET global or inbox list                     |
-| `lists create`     | `<direction> <type>`, `--entry`, optional `--reason`, `--inbox` | POST global or inbox list                    |
-| `lists get`        | `<direction> <type> <entry>`, optional `--inbox`                | GET global or inbox list entry               |
-| `lists delete`     | `<direction> <type> <entry>`, optional `--inbox`                | DELETE global or inbox list entry            |
-| `api-keys list`    | Optional `--inbox`, cursor flags                                | GET organization or inbox API keys (owner)   |
-| `api-keys create`  | Optional `--inbox`, body                                        | POST organization or inbox API keys (owner)  |
-| `api-keys revoke`  | `<api_key_id>`, optional `--inbox`                              | DELETE organization or inbox API key (owner) |
+| Command                  | Arguments                                                       | REST operation                                |
+| ------------------------ | --------------------------------------------------------------- | --------------------------------------------- |
+| `serve`                  | Existing server flags                                           | Existing server entry point                   |
+| `open`                   | Optional `--browser`                                            | POST `/v0/owner/login-links`                  |
+| `inboxes list`           | Pagination flags                                                | GET `/v0/inboxes`                             |
+| `inboxes create`         | Body flags or JSON                                              | POST `/v0/inboxes`                            |
+| `inboxes get`            | `<inbox_id>`                                                    | GET `/v0/inboxes/:inbox_id`                   |
+| `inboxes delete`         | `<inbox_id>`                                                    | DELETE `/v0/inboxes/:inbox_id`                |
+| `threads list`           | Optional `--inbox`, filters                                     | GET `/v0/threads` or inbox threads            |
+| `threads get`            | `<thread_id>`, optional `--inbox`                               | GET organization or inbox thread              |
+| `messages get`           | `<inbox_id> <message_id>`                                       | GET inbox message                             |
+| `messages resolve`       | `<inbox_id> <message_id> --decision sent or failed`             | POST inbox message/resolve (local owner)      |
+| `messages send`          | `<inbox_id>`, body                                              | POST inbox messages/send                      |
+| `messages reply`         | `<inbox_id> <message_id>`, body                                 | POST inbox message/reply                      |
+| `messages forward`       | `<inbox_id> <message_id>`, body                                 | POST inbox message/forward                    |
+| `messages update`        | `<inbox_id> <message_id>`, labels                               | PATCH inbox message                           |
+| `drafts list`            | Optional `--inbox`, filters                                     | GET `/v0/drafts` or inbox drafts              |
+| `drafts create`          | `<inbox_id>`, body                                              | POST inbox drafts                             |
+| `drafts get`             | `<draft_id>`, optional `--inbox`                                | GET organization or inbox draft               |
+| `drafts update`          | `<inbox_id> <draft_id>`, body                                   | PATCH inbox draft                             |
+| `drafts delete`          | `<inbox_id> <draft_id>`                                         | DELETE inbox draft                            |
+| `drafts send`            | `<inbox_id> <draft_id>`, labels                                 | POST inbox draft/send                         |
+| `drafts approve`         | `<inbox_id> <draft_id>`                                         | POST inbox draft/approve (owner)              |
+| `drafts reject`          | `<inbox_id> <draft_id>`, optional `--reason`                    | POST inbox draft/reject (owner)               |
+| `lists rejections`       | optional `--inbox-id`, cursor flags                             | GET owner rejection metadata (local owner)    |
+| `lists delete-rejection` | `<rejection_id>`                                                | DELETE owner rejection metadata (local owner) |
+| `lists list`             | `<direction> <type>`, optional `--inbox`, cursor flags          | GET global or inbox list                      |
+| `lists create`           | `<direction> <type>`, `--entry`, optional `--reason`, `--inbox` | POST global or inbox list                     |
+| `lists get`              | `<direction> <type> <entry>`, optional `--inbox`                | GET global or inbox list entry                |
+| `lists delete`           | `<direction> <type> <entry>`, optional `--inbox`                | DELETE global or inbox list entry             |
+| `api-keys list`          | Optional `--inbox`, cursor flags                                | GET organization or inbox API keys (owner)    |
+| `api-keys create`        | Optional `--inbox`, body                                        | POST organization or inbox API keys (owner)   |
+| `api-keys revoke`        | `<api_key_id>`, optional `--inbox`                              | DELETE organization or inbox API key (owner)  |
 
 `open` prints a single-use login URL and never opens a browser unless
 `--browser` is present. Password setup must already be complete; links expire
@@ -261,3 +263,9 @@ inspect status and retry the same hostname to reconcile, or disable to clean up.
 See [remote access](../server/src/remote/README.md) for the exact tunnel policy.
 
 `inbot oauth clients` lists approved OAuth grants as owner; `inbot oauth revoke <grant_id>` revokes a grant and every associated token. `inbot oauth purge` deletes unused client registrations without revoking existing grants and reports `deleted_clients`. These management commands use the local owner API.
+
+Rejected mail metadata is available only with the local owner connection. List
+permissions do not authorize it. Records contain time, inbox, sender, and rules;
+legacy sender/rule metadata may be missing. Bodies and subjects are never returned.
+Deletion does not release mail and preserves the durable rejection decision.
+There is no transport configuration command; use Settings or the owner REST API.

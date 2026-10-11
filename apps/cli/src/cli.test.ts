@@ -3,11 +3,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Schema } from "effect";
 import { expect, test as base } from "vitest";
+import { makeLists } from "../../server/src/lists/lists.js";
 import { makeOAuth } from "../../server/src/oauth/service.js";
 import {
   OAuthClientsResponse,
   PurgeOAuthClientsResponse,
 } from "../../../packages/contracts/src/oauth.js";
+import { ListRejectionsResponse } from "../../../packages/contracts/src/lists.js";
 import { Event } from "../../../packages/contracts/src/events.js";
 import { Webhook, ListWebhooksResponse } from "../../../packages/contracts/src/webhooks.js";
 import { readEvents } from "../../server/src/events/log.js";
@@ -792,4 +794,48 @@ test("owner OAuth CLI lists, purges unused registrations and revokes grants whil
     Schema.decodeUnknownSync(Schema.fromJsonString(OAuthClientsResponse))(after.stdout).grants,
   ).toEqual([]);
   expect((await invoke(api, ["inboxes", "list", "--json"])).code).toBe(0);
+});
+
+test("lists and deletes owner rejection metadata and denies scoped agents", async ({ api }) => {
+  const lists = makeLists(api.store);
+  await api.run(lists.create(undefined, "receive", "block", { entry: "blocked.test" }));
+  await api.run(
+    api.mailbox.acceptInbound(
+      inboxId,
+      ["sender@blocked.test"],
+      Buffer.from("Synthetic rejected mail"),
+      "2026-10-11T12:00:00Z",
+    ),
+  );
+  const result = await invoke(api, [
+    "lists",
+    "rejections",
+    "--inbox-id",
+    inboxId,
+    "--limit",
+    "1",
+    "--json",
+  ]);
+  expect(result.code).toBe(0);
+  const page = Schema.decodeUnknownSync(ListRejectionsResponse)(JSON.parse(result.stdout));
+  expect(page.count).toBe(1);
+  expect(page.rejections[0]?.sender_address).toBe("sender@blocked.test");
+  expect((await invoke(api, ["lists", "rejections"])).stdout).toContain("SENDER_ADDRESS");
+  const key = await api.run(
+    api.keys.create({
+      inbox_id: inboxId,
+      permissions: { list_entry_read: true },
+      send_policy: "direct",
+    }),
+  );
+  expect(
+    (await invoke(api, ["lists", "rejections"], { env: agentEnv(api, key.api_key) })).code,
+  ).toBe(4);
+  const removed = await invoke(api, [
+    "lists",
+    "delete-rejection",
+    page.rejections[0]?.rejection_id ?? "",
+  ]);
+  expect(removed.code).toBe(0);
+  expect((await api.run(lists.rejections())).count).toBe(0);
 });

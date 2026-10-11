@@ -167,7 +167,7 @@ test("discovers canonical resources and completes the owner code/PKCE flow with 
       version: db.pragma("user_version", { simple: true }),
     })),
   );
-  expect(rows.version).toBe(13);
+  expect(rows.version).toBe(14);
   const persisted = JSON.stringify(rows);
   for (const secret of [tokens.access_token, tokens.refresh_token, code.code, code.code_verifier])
     expect(persisted).not.toContain(secret);

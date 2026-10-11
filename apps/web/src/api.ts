@@ -263,6 +263,17 @@ export class ApiClient {
       (page) => page.inboxes,
     );
 
+  rejections = (inboxId: string | undefined, token: string | null, signal: AbortSignal) =>
+    this.request(
+      `/v0/owner/lists/rejections${pageQuery(token)}${inboxId === undefined ? "" : `&inbox_id=${segment(inboxId)}`}`,
+      Lists.ListRejectionsResponse,
+      { signal },
+    );
+  deleteRejection = (id: string) =>
+    this.request(`/v0/owner/lists/rejections/${segment(id)}`, Schema.Undefined, {
+      method: "DELETE",
+    });
+
   listEntries = (selection: ListSelection, token: string | null, signal: AbortSignal) =>
     this.request(
       `${listPath(selection)}${pageQuery(token)}`,

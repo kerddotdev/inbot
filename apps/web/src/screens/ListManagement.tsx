@@ -1,3 +1,4 @@
+import { RejectedMail } from "./RejectedMail";
 import { useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Direction, ListType } from "@inbot/contracts/src/lists.js";
@@ -204,6 +205,7 @@ export function ListManagement() {
         </label>
       </div>
       <EntryList key={`${inboxId}/${direction}/${type}`} selection={selection} />
+      <RejectedMail key={inboxId} {...(inboxId ? { inboxId } : {})} />
     </section>
   );
 }

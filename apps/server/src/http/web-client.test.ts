@@ -62,6 +62,20 @@ test("browser client uses real owner sessions for mail, keys, approvals, transpo
     expect(
       (await reloaded.listEntries({ direction: "receive", type: "block" }, null, signal())).entries,
     ).toEqual([]);
+    await api.run(
+      api.mailbox.acceptInbound(
+        "agent@example.test",
+        ["blocked@example.test"],
+        Buffer.from("From: blocked@example.test\r\nSubject: Private\r\n\r\nPrivate body"),
+        "2026-10-11T12:00:00Z",
+      ),
+    );
+    const rejections = await reloaded.rejections("agent@example.test", null, signal());
+    expect(rejections.rejections).toMatchObject([{ sender_address: "blocked@example.test" }]);
+    const rejection = rejections.rejections[0];
+    if (!rejection) throw new Error("Expected a rejection");
+    await reloaded.deleteRejection(rejection.rejection_id);
+    expect((await reloaded.rejections(undefined, null, signal())).rejections).toEqual([]);
     await reloaded.deleteListEntry(selection, entry.entry);
     expect((await reloaded.listEntries(selection, null, signal())).entries).toEqual([]);
     const threads = await reloaded.threads("agent@example.test", null, signal());
