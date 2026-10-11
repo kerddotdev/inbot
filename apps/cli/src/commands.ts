@@ -387,6 +387,14 @@ export const commands: readonly Command[] = [
     },
   },
   {
+    name: "api-keys update",
+    description: "Update an API key's name, permissions, or send policy as owner.",
+    endpoint: ApiKeysApi.endpoints.apiKeys_update,
+    scopedEndpoint: ApiKeysApi.endpoints.inboxes_apiKeys_update,
+    params: ["api_key_id"],
+    body: { name: "string", permissions: "object", send_policy: "string" },
+  },
+  {
     name: "api-keys revoke",
     description: "Revoke an API key as owner.",
     endpoint: ApiKeysApi.endpoints.apiKeys_delete,

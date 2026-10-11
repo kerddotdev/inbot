@@ -29,7 +29,8 @@ Implemented screens:
   Message and draft attachments download as files through signed download URLs;
   they are never rendered inline.
 - API key listing, creation with inbox scope, explicit permissions and send policy,
-  one-time secret display, and revocation. Key secrets are not cached or persisted.
+  one-time secret display, editing of names, permissions and send policies, and
+  revocation. Edits apply on the next request without rotating the secret. Key secrets are not cached or persisted.
 - Pending approval listing across all draft pages, draft review, approval, and
   rejection with an optional reason. Scheduled approval is shown separately from
   immediate queueing. Failed operations show the server's message and fix.

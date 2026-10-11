@@ -208,6 +208,20 @@ test("browser client uses real owner sessions for mail, keys, approvals, transpo
     });
     expect(created.api_key).toMatch(/^inbot_/);
     expect((await reloaded.keys(signal()))[0]).not.toHaveProperty("api_key");
+    const updated = await reloaded.updateKey(created.api_key_id, {
+      name: "Updated web key",
+      permissions: { ...created.permissions, message_send: true },
+      send_policy: "read_only",
+    });
+    expect(updated).toMatchObject({ name: "Updated web key", send_policy: "read_only" });
+    expect(updated.permissions.message_send).toBe(true);
+    expect(updated.inbox_ids).toEqual(created.inbox_ids);
+    expect(updated).not.toHaveProperty("api_key");
+    expect((await reloaded.keys(signal()))[0]).toEqual(updated);
+    await expect(reloaded.updateKey(created.api_key_id, {})).rejects.toMatchObject({
+      code: "validation_error",
+    });
+    await reloaded.updateKey(created.api_key_id, { send_policy: "approval" });
     const response = await api.request("/v0/inboxes/agent@example.test/drafts", {
       token: created.api_key,
       method: "POST",

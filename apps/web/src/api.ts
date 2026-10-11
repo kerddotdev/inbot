@@ -350,6 +350,9 @@ export class ApiClient {
   createKey = (body: Keys.CreateApiKeyRequest) =>
     this.request("/v0/api-keys", Keys.CreateApiKeyResponse, { method: "POST", body });
 
+  updateKey = (id: string, body: Keys.UpdateApiKeyRequest) =>
+    this.request(`/v0/api-keys/${segment(id)}`, Keys.ApiKey, { method: "PATCH", body });
+
   revokeKey = (id: string) =>
     this.request(`/v0/api-keys/${segment(id)}`, Schema.Undefined, { method: "DELETE" });
 

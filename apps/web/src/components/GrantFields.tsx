@@ -4,26 +4,8 @@ import { Permissions, type Grant, type SendPolicy } from "@inbot/contracts/src/a
 import type { IconName } from "../icons";
 import { Disclosure, Segmented, type Tone } from "./ui";
 import { LoadError } from "../feedback";
+import { permissionPreset, presetPermissions, type PermissionPreset } from "./grant-presets";
 
-type PermissionPreset = "read" | "read-draft" | "full";
-const readPermissions = { inbox_read: true, message_read: true, draft_read: true };
-const draftPermissions = {
-  ...readPermissions,
-  draft_create: true,
-  draft_update: true,
-  draft_delete: true,
-};
-const presetPermissions = {
-  read: readPermissions,
-  "read-draft": draftPermissions,
-  full: {
-    ...draftPermissions,
-    message_update: true,
-    message_reply: true,
-    message_send: true,
-    draft_send: true,
-  },
-} satisfies Record<PermissionPreset, Permissions>;
 const presetHint: Record<PermissionPreset, string> = {
   read: "Can read threads. Cannot create drafts or send.",
   "read-draft": "Can read threads and create drafts. Cannot send or manage inboxes.",
@@ -55,12 +37,6 @@ const presets: { value: PermissionPreset; label: string }[] = [
   { value: "full", label: "Full access" },
 ];
 
-export const defaultGrant: Grant = {
-  inbox_ids: [],
-  permissions: presetPermissions["read-draft"],
-  send_policy: "approval",
-};
-
 export function GrantFields({
   value,
   onChange,
@@ -68,6 +44,7 @@ export function GrantFields({
   inboxError,
   loadingInboxes,
   retryInboxes,
+  showInboxScope = true,
 }: {
   value: Grant;
   onChange: (grant: Grant) => void;
@@ -75,9 +52,10 @@ export function GrantFields({
   inboxError: unknown;
   loadingInboxes: boolean;
   retryInboxes: () => void;
+  showInboxScope?: boolean;
 }) {
-  const [customized, setCustomized] = useState(false);
-  const [preset, setPreset] = useState<PermissionPreset>("read-draft");
+  const preset = permissionPreset(value.permissions);
+  const customized = preset === "custom";
   const [selectedInboxes, setSelectedInboxes] = useState(value.inbox_ids ?? []);
   const allInboxes = value.inbox_ids === undefined;
   const scope = new Set(value.inbox_ids ?? selectedInboxes);
@@ -91,8 +69,6 @@ export function GrantFields({
     onChange(all ? rest : { ...rest, inbox_ids: selectedInboxes });
   };
   const choosePreset = (next: PermissionPreset) => {
-    setPreset(next);
-    setCustomized(false);
     onChange({
       ...value,
       permissions: presetPermissions[next],
@@ -106,41 +82,50 @@ export function GrantFields({
   };
   return (
     <>
-      <fieldset className="mb-4 min-w-0">
-        <legend className="mb-[7px] p-0 font-semibold">Inbox scope</legend>
-        <label className="mb-2 flex items-center gap-2">
-          <input
-            type="checkbox"
-            checked={allInboxes}
-            onChange={(event) => setAllInboxes(event.target.checked)}
-          />
-          All current and future inboxes
-        </label>
-        {loadingInboxes ? (
-          <p role="status">Loading inboxes...</p>
-        ) : inboxError ? (
-          <LoadError error={inboxError} retry={retryInboxes} />
-        ) : inboxIds.length === 0 ? (
-          <p className="text-ink2">No inboxes exist yet.</p>
-        ) : null}
-        <div className="grid grid-cols-2 gap-x-3 gap-y-1.5">
-          {inboxIds.map((inbox) => (
-            <label key={inbox} className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                className="size-[15px]"
-                checked={scope.has(inbox)}
-                disabled={allInboxes}
-                onChange={() => toggleInbox(inbox)}
-              />
-              {inbox}
-            </label>
-          ))}
-        </div>
-      </fieldset>
+      {showInboxScope ? (
+        <fieldset className="mb-4 min-w-0">
+          <legend className="mb-[7px] p-0 font-semibold">Inbox scope</legend>
+          <label className="mb-2 flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={allInboxes}
+              onChange={(event) => setAllInboxes(event.target.checked)}
+            />
+            All current and future inboxes
+          </label>
+          {loadingInboxes ? (
+            <p role="status">Loading inboxes...</p>
+          ) : inboxError ? (
+            <LoadError error={inboxError} retry={retryInboxes} />
+          ) : inboxIds.length === 0 ? (
+            <p className="text-ink2">No inboxes exist yet.</p>
+          ) : null}
+          <div className="grid grid-cols-2 gap-x-3 gap-y-1.5">
+            {inboxIds.map((inbox) => (
+              <label key={inbox} className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  className="size-[15px]"
+                  checked={scope.has(inbox)}
+                  disabled={allInboxes}
+                  onChange={() => toggleInbox(inbox)}
+                />
+                {inbox}
+              </label>
+            ))}
+          </div>
+        </fieldset>
+      ) : null}
       <fieldset className="mb-4 min-w-0">
         <legend className="mb-[7px] p-0 font-semibold">Permissions</legend>
-        <Segmented name="preset" options={presets} value={preset} onChange={choosePreset} />
+        <Segmented<PermissionPreset | "custom">
+          name="preset"
+          options={presets}
+          value={preset}
+          onChange={(next) => {
+            if (next !== "custom") choosePreset(next);
+          }}
+        />
         <p className="mt-1.5 text-xs text-ink2">
           {customized ? "Only the checked permissions are granted." : presetHint[preset]}
         </p>
@@ -154,7 +139,6 @@ export function GrantFields({
                     ([key, enabled]) => key === permission && enabled,
                   )}
                   onChange={(event) => {
-                    setCustomized(true);
                     setPermissions(
                       Schema.decodeUnknownSync(Permissions)({
                         ...permissions,
