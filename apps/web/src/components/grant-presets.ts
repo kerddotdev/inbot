@@ -22,7 +22,7 @@ export const presetPermissions = {
 
 export const defaultGrant: Grant = {
   inbox_ids: [],
-  permissions: presetPermissions["read-draft"],
+  permissions: presetPermissions.full,
   send_policy: "approval",
 };
 

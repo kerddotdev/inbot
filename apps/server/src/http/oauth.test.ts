@@ -15,6 +15,7 @@ import { Store } from "../store.js";
 import { EventLog, eventVisible } from "../events/log.js";
 import { client as mcpClient } from "../mcp/test-client.js";
 import { fixture } from "./test-fixture.js";
+import { defaultGrant } from "../../../web/src/components/grant-presets.js";
 
 const inboxId = "agent@example.test";
 const otherInbox = "other@example.test";
@@ -1075,4 +1076,22 @@ test("API key authentication rejects internal OAuth rows even if their hashes ma
   expect(await f.run(f.keys.authenticate(synthetic))).toBeUndefined();
   expect((await f.request("/v0/inboxes", { token: synthetic })).status).toBe(401);
   expect((await f.request("/v0/inboxes", { token: token.access_token })).status).toBe(200);
+});
+
+test("the default consent grant holds OAuth sends for owner approval", async ({ f }) => {
+  const { exchange: code } = await flow(f, "/mcp", { ...defaultGrant, inbox_ids: [inboxId] });
+  const tokens = await exchange(f, code);
+  const mcp = await mcpClient(f, tokens.access_token);
+  const result = await mcp.call("send_message", {
+    inboxId,
+    to: ["recipient@example.test"],
+    text: "Synthetic default consent send",
+    idempotencyKey: "default-consent-send",
+  });
+  expect(result.isError).toBe(true);
+  expect(result.structuredContent).toMatchObject({ code: "approval_required" });
+  const pending = await f.run(f.drafts.list(inboxId, {}));
+  expect(pending.drafts).toHaveLength(1);
+  expect(pending.drafts[0]).toMatchObject({ inbox_id: inboxId, pending_approval: true });
+  expect(f.sent).toHaveLength(0);
 });
