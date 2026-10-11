@@ -57,3 +57,6 @@ semantics, MCP tools, CLI commands, and tunnel exposure are unchanged.
 Focused tests under `src` and `apps/server/src/http/web-client.test.ts` verify CSRF restoration, actionable errors, auth routing,
 pagination, encoded identifiers, idempotency, and browser-client integration with
 an isolated encrypted server fixture, memory keychain, and fake transport.
+
+Thread messages offer Show quoted text only when the normalized full text contains
+more text than the extracted reply. Whitespace-only differences do not show it.
