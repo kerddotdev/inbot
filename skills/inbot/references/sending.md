@@ -62,7 +62,7 @@ Read the state with `get_message` (`send_status`, optional `send_reason`, and la
 
 ### Outbox behavior
 
-- The outbox sends in the background. Idle checks run every 30 seconds, and every 2 seconds after work. If the service is down, mail stays `queued` and goes out later.
+- The outbox sends in the background. Committed sends wake the runner promptly, including approved and due scheduled drafts. Recovery checks run every 30 seconds while idle and every 2 seconds after work; enqueueing does not wait for them. If the service is down, mail stays `queued` and goes out later.
 - Retryable provider failures (429, quota, 5xx) back off from 1 second up to 1 hour, at most 8 attempts, then become `failed`. Permanent failures (invalid message, unverified sender, authentication) become `failed` immediately.
 - A timeout, lost response, or crash with an expired 5-minute sending lease becomes `send_unknown`, with `send_reason: "unknown_outcome"`. It is never retried automatically. Do not resend; inform the human.
 - `send_status: "failed"` means the send permanently failed without provider acceptance. A `failed` delivery label beside `send_status: "sent"` records a later delivery failure.

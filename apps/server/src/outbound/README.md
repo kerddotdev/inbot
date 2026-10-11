@@ -46,8 +46,10 @@ Paused inboxes remain queued until resumed. `start(interval_ms = 1000)` returns
 a scoped, interruptible Effect fiber. An idle iteration performs indexed queries
 without loading bodies or calling the provider. Storage failures end the fiber;
 its owner must observe it, rather than silently continuing a broken store.
-The server instead uses `startOutboxLoop()`: 2 seconds after processing work,
-30 seconds while idle or unconfigured. No provider call occurs without due mail.
+The server instead uses `startOutboxLoop()`: committed sends wake it promptly,
+including approved and due scheduled drafts. A capacity-one notification queue
+coalesces wakeups without blocking producers. Recovery checks remain every
+2 seconds after processing work and 30 seconds while idle or unconfigured. No provider call occurs without due mail.
 The server scope interrupts it on shutdown, and `serve` observes its failures.
 Configuration is reread each iteration and before each provider dispatch; clearing
 it suspends processing. A clear during an active batch leaves unaccepted attempts

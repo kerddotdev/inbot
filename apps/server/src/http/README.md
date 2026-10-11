@@ -239,8 +239,9 @@ failure leaves a `failed` draft for editing, explicit send, or owner retry.
 Deleting the draft or setting `send_at: null` cancels the schedule. Already
 `sending` drafts cannot be edited, deleted, or rejected.
 
-Schedules fire only while the service runs. The scheduler polls every 30 seconds
-when idle and every 2 seconds after work. After an outage it processes overdue
+Schedules fire only while the service runs. Schedule creation, updates, and approval
+wake the scheduler. It waits until the next due time, capped at 30 seconds for
+recovery checks or 2 seconds after work. After an outage it processes overdue
 drafts and recovers persisted `sending` drafts before retrying. Message timestamps
 reflect the actual queue time, including lateness; `send_at` is not a delivery
 promise. Outbox retries, provider acceptance, and delivery can introduce further
@@ -389,8 +390,9 @@ code and actionable fix. Unexpected details, mail content, and credentials are
 never returned or logged.
 
 The outbox loop belongs to the server's Effect scope. It checks configuration and
-runs `processDue()` every 2 seconds after processing work, backing off to 30 seconds
-when idle or unconfigured. Settings are reread on each dispatch. Shutdown interrupts
+runs `processDue()` when committed sends wake it, including approved and due
+scheduled drafts. Wakeups coalesce without blocking enqueueing. Timed recovery
+checks remain every 2 seconds after work and 30 seconds while idle or unconfigured. Settings are reread on each dispatch. Shutdown interrupts
 the runner before releasing its resources; `serve` observes runner failures and
 stops rather than leaving a broken background task. Integration tests disable the
 automatic loop when they need to call the fake provider's `processDue()` explicitly.

@@ -42,7 +42,7 @@ export function startOutboxLoop() {
     return yield* Effect.gen(function* () {
       while (true) {
         const processed = (yield* config.get()) === undefined ? 0 : yield* outbox.processDue();
-        yield* Effect.sleep(processed === 0 ? "30 seconds" : "2 seconds");
+        yield* outbox.waitForWork(processed === 0 ? 30_000 : 2000);
       }
     }).pipe(Effect.forkScoped);
   });
