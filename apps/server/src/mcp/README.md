@@ -33,9 +33,16 @@ at least one documented field; `list_inboxes` accepts optional pagination fields
 Parameters use camelCase (`inboxId`, `messageId`, `threadId`, `pageToken`,
 `replyTo`, `replyAll`, `inReplyTo`, `forwardOf`, `sendAt`, `draftId`, `clientId`, `addLabels`, `removeLabels`, `idempotencyKey`).
 Attachment objects retain the shared request fields. `get_attachment`
-uses `threadId`, `attachmentId`, and optional `inboxId` and returns the same signed,
-authenticated download metadata as REST. Thread tools may omit `inboxId` for
-a scoped organization lookup. Default page size is 10; `limit` can override it.
+uses `threadId`, `attachmentId`, and optional `inboxId` and returns the same signed
+capability download metadata as REST. Fetch the absolute URL without a bearer
+header. The HMAC-signed URL expires after five minutes or service restart and is
+bound to the issuing principal and origin. Every download rechecks credential
+activity, current permissions, inbox scope, and hidden labels. OAuth capabilities
+retain the issuing access token's hash and audience, including `/mcp`; owner session
+capabilities stop working on session revocation. A supplied bearer must authenticate
+the issuing principal. Keep URLs private. File bytes are not embedded in tool results.
+
+Thread tools may omit `inboxId` for a scoped organization lookup. Default page size is 10; `limit` can override it.
 
 | Tools                                                                                                               | readOnlyHint | destructiveHint | idempotentHint | Permission       |
 | ------------------------------------------------------------------------------------------------------------------- | ------------ | --------------- | -------------- | ---------------- |
@@ -116,7 +123,7 @@ marker plus guidance to fetch individual messages or attachments. If unusually
 large metadata still exceeds the budget, a small identity/count result with the
 same marker is returned. Repeat an oversized page with a smaller `limit` before
 using any continuation token. MCP `get_message` is also bounded; full raw mail is
-available through REST's authenticated raw download, without a plaintext cache.
+available through REST's capability raw download, without a plaintext cache.
 
 Tests initialize and list tools over a real port-0 loopback server, use encrypted
 Store in temporary homes, inject fake providers and an in-memory keychain, and

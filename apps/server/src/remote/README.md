@@ -96,7 +96,14 @@ The tunnel listener permits:
 - `/v0` and `/v0/*` agent API routes with existing scope, label, permission and
   send-policy checks, including list permissions and scoped webhook ownership,
   subject to the management exclusions below. Signed
-  `/v0/downloads/*` URLs retain authentication and use the public origin.
+  `/v0/downloads/*` URLs use the public origin and remain on the agent allowlist.
+  They are HMAC-signed, five-minute capabilities that need no bearer header or
+  cookie. They recheck the issuing credential's activity, current permissions,
+  scope, and hidden labels. Tokens bind the exact origin: local capabilities
+  (including owner bearer capabilities) cannot cross to the tunnel, and tunnel
+  capabilities cannot cross to the local listener. A supplied bearer must
+  authenticate the issuing principal; local owner bearer headers remain rejected.
+  Treat these URLs as temporary credentials and never log or publish them.
 - Exactly `/.well-known/oauth-authorization-server`,
   `/.well-known/oauth-protected-resource`, and its `/mcp` and `/v0` variants.
 - Exactly `/oauth/register`, `/oauth/token`, and `/oauth/revoke`, public with
