@@ -56,7 +56,7 @@ function help(command?: Command, group?: string): string {
       group === undefined
         ? commands
         : commands.filter((entry) => entry.name.startsWith(`${group} `));
-    return `Usage: inbot <command> [options] | inbot --version\n\n${available.map((entry) => `  ${entry.name.padEnd(20)} ${entry.description}`).join("\n")}\n  events --follow      Stream accessible events (--json, --last-event-id).\n  serve                Run the existing server (inbot serve --help).\n\nGlobal options: --home <directory>, --flavor development|production, --json, --help\nOwner: read connection.json from the server home. Agent: set INBOT_URL and INBOT_API_KEY.\n`;
+    return `Usage: inbot <command> [options] | inbot --version\n\n${group === undefined ? "  serve                Run the existing server (inbot serve --help).\n" : ""}${available.map((entry) => `  ${entry.name.padEnd(20)} ${entry.description}`).join("\n")}${group === undefined ? "\n  events --follow      Stream accessible events (--json, --last-event-id)." : ""}\n\nGlobal options: --home <directory>, --flavor development|production, --json, --help\nOwner: read connection.json from the server home. Agent: set INBOT_URL and INBOT_API_KEY.\n`;
   }
   const flags = commandOptions(command);
   return `Usage: inbot ${command.name}${(command.params ?? []).map((param) => ` <${param}>`).join("")} [options]\n\n${command.description}\n\n${Object.entries(
