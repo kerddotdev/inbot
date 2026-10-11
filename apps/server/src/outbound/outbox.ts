@@ -15,7 +15,7 @@ import { Store, type StoreService } from "../store.js";
 import { MailboxError, notFound, validate } from "../mailbox/errors.js";
 import { insertMessage, updateMessage } from "../mailbox/messages.js";
 import { getInbox, getMessage } from "../mailbox/rows.js";
-import { compose, decodeRequest } from "./compose.js";
+import { compose, decodeRequest, localMessageId } from "./compose.js";
 import { OutboundProvider, ProviderMessage, type OutboundProviderService } from "./cloudflare.js";
 import { invalid, OutboundError } from "./errors.js";
 import { prepare } from "./prepare.js";
@@ -343,7 +343,7 @@ function makeOutbox(store: StoreService, provider: OutboundProviderService) {
         request.kind === "reply-all" ||
         (draft && composed.in_reply_to !== undefined),
     );
-    const messageId = `<${randomUUID()}@inbot.local>`;
+    const messageId = localMessageId(inboxId, randomUUID());
     const timestamp = new Date(now).toISOString();
     const raw = renderMime(composed.provider, messageId, timestamp);
     const identity = insertMessage(

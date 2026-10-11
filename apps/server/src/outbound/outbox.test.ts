@@ -129,8 +129,8 @@ test("enqueue stores queued replies atomically, acceptance adds an alias, and in
         message_id: original.message_id,
         request: { text: "Reply", labels: ["custom", "sent", "delivered"] },
       });
+      expect(reply.message_id).toMatch(/^<[0-9a-f-]+@example\.test>$/);
       expect(reply.thread_id).toBe(original.thread_id);
-      expect(reply.message_id).toMatch(/^<[\w-]+@inbot\.local>$/);
       expect((yield* mailbox.getMessage(inbox.inbox_id, reply.message_id)).labels).toEqual([
         "custom",
         "queued",
