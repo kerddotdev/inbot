@@ -1,4 +1,5 @@
 import { Schema } from "effect";
+import { cloudflareTokenPermissions } from "../../../../packages/contracts/src/cloudflare-permissions.js";
 
 export class ProvisionError extends Schema.TaggedError<ProvisionError>()("ProvisionError", {
   code: Schema.Literals([
@@ -46,9 +47,12 @@ export function unavailable(operation?: string) {
 }
 
 export function missingPermission(permission: string, operation?: string) {
+  const required = cloudflareTokenPermissions.find((item) => item.apiPermission === permission);
   return new ProvisionError({
     code: "missing_permission",
     message: `The Cloudflare token needs ${permission}${operation === undefined ? "" : ` (${operation})`}.`,
-    fix: `Grant ${permission} on the configured account or zone, then retry.`,
+    fix: required
+      ? `Grant ${required.name}: ${required.level === "read" ? "Read" : "Edit"} (${required.scope}) in Cloudflare, then verify and save a replacement token in Settings > Mail transport before retrying.`
+      : `Grant ${permission} on the configured account or zone, then retry.`,
   });
 }

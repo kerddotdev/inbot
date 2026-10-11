@@ -22,7 +22,17 @@ Implemented screens:
 - Settings > Mail transport inspects safe configuration metadata, verifies and saves
   Cloudflare credentials, and clears configuration after domain teardown. Token inputs
   are password fields cleared on submission; tokens are never returned, displayed again,
-  or stored in query/mutation variables. The screen lists required token permissions.
+  or stored in query/mutation variables. Account ID is optional: one accessible account is
+  detected after token verification; multiple-account errors list names and IDs for an
+  explicit choice. The Create API token button opens a prefilled dashboard link. Its
+  adjacent instruction asks the owner to narrow Account Resources and Zone Resources
+  to their account and mail zone before token creation. Required permissions expands
+  a table with scope, level, and purpose, including the optional remote access tunnel.
+  Both copy and URL come from the
+  [shared permission definition](../../packages/contracts/src/cloudflare-permissions.ts).
+  Its two email keys and tunnel key were owner-verified against the live dashboard on
+  2026-10-11. See the
+  [token setup notes](../server/src/provision/README.md#token-permissions).
 - Settings > Allow and block lists manages global and inbox entries for receive, send,
   and reply using the shared API. Scope, direction, and list type are explicit; entries
   have cursor pagination, optional reasons, and removal. Blocks win over allows;

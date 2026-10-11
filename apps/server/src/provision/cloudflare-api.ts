@@ -1,4 +1,8 @@
 import { Context, Effect, Layer, Redacted, Schema } from "effect";
+import {
+  cloudflareTokenPermissions,
+  cloudflareTunnelPermission,
+} from "../../../../packages/contracts/src/cloudflare-permissions.js";
 import { TransportConfig } from "../outbound/transport-config.js";
 import type { DatabaseError } from "../store.js";
 import { invalid, missingPermission, ProvisionError, unavailable } from "./errors.js";
@@ -14,6 +18,7 @@ export const DnsRecord = Schema.Struct({
   comment: Schema.optionalKey(Schema.NullOr(Schema.String)),
 });
 export type DnsRecord = typeof DnsRecord.Type;
+export const Account = Schema.Struct({ id: Schema.String, name: Schema.String });
 export const Zone = Schema.Struct({
   id: Schema.String,
   name: Schema.String,
@@ -67,7 +72,7 @@ export const Tunnel = Schema.Struct({
   remote_config: Schema.optionalKey(Schema.Boolean),
 });
 export type Tunnel = typeof Tunnel.Type;
-export const remoteTokenPermission = "Cloudflare Tunnel Write";
+export const remoteTokenPermission = cloudflareTunnelPermission.apiPermission;
 
 export const sendingEvents = [
   "message.delivered",
@@ -77,16 +82,9 @@ export const sendingEvents = [
   "message.rejected",
   "message.complained",
 ];
-export const tokenPermissions = [
-  "Zone Zone Read",
-  "DNS Write",
-  "Zone Settings Write",
-  "Email Routing Rules Write",
-  "Email Sending: Edit",
-  "Workers Scripts Write",
-  "Workers R2 Storage Write",
-  "Queues Write",
-];
+export const tokenPermissions = cloudflareTokenPermissions
+  .filter((permission) => permission.key !== cloudflareTunnelPermission.key)
+  .map((permission) => permission.apiPermission);
 type ApiEffect<A> = Effect.Effect<A, ProvisionError | DatabaseError>;
 export interface WorkerInput {
   readonly name: string;
@@ -109,6 +107,8 @@ export interface CloudflareApiService {
     marker: string,
   ) => ApiEffect<DnsRecord>;
   readonly verifyToken: () => ApiEffect<void>;
+  readonly accounts: () => ApiEffect<readonly (typeof Account.Type)[]>;
+  readonly verifyUserToken: () => ApiEffect<void>;
   readonly zones: (name: string) => ApiEffect<readonly Zone[]>;
   readonly dns: (zoneId: string) => ApiEffect<readonly DnsRecord[]>;
   readonly exportDns: (zoneId: string) => ApiEffect<string>;
@@ -289,13 +289,14 @@ export class CloudflareApi extends Context.Service<CloudflareApi, CloudflareApiS
           path: string,
           permission: string,
           schema: S,
+          perPage = 100,
         ) {
           return Effect.gen(function* () {
             const items: S["Type"][] = [];
             let page = 1;
             while (true) {
               const response = yield* request(
-                `${path}${path.includes("?") ? "&" : "?"}page=${page}&per_page=100`,
+                `${path}${path.includes("?") ? "&" : "?"}page=${page}&per_page=${perPage}`,
                 permission,
               );
               items.push(
@@ -369,6 +370,9 @@ export class CloudflareApi extends Context.Service<CloudflareApi, CloudflareApiS
               });
               return yield* decode(DnsRecord, response.result, "POST tunnel DNS");
             }),
+          accounts: () => list("/accounts", "access to the intended account", Account, 50),
+          verifyUserToken: () =>
+            Effect.asVoid(get("/user/tokens/verify", "an active API token", Token)),
           verifyToken: () =>
             Effect.gen(function* () {
               const path = yield* account("/tokens/verify");

@@ -41,47 +41,84 @@ function makeOwnerTransport(
               () =>
                 new ProvisionError({
                   code: "validation_error",
-                  message: "A Cloudflare account ID and API token are required.",
-                  fix: "Use the 32-character account ID and an API token without whitespace.",
+                  message: "A valid Cloudflare API token is required.",
+                  fix: "Use an API token without whitespace and, optionally, a 32-character account ID.",
                 }),
             ),
           );
-          const remote = yield* remoteRepository(store).get();
-          if (remote !== undefined && remote.account_id !== settings.account_id)
-            return yield* actionRequired(
-              "Remote access belongs to a different Cloudflare account.",
-              "Disable remote access before changing accounts.",
-            );
-          if ((yield* repo.all()).some((domain) => domain.account_id !== settings.account_id))
-            return yield* actionRequired(
-              "Registered domains belong to a different Cloudflare account.",
-              "Teardown and delete the registered domains before changing accounts.",
-            );
           const candidate = CloudflareApi.live(fetch === undefined ? {} : { fetch }).pipe(
             Layer.provide(
               Layer.succeed(TransportConfig, {
                 ...transport,
                 get: () =>
                   Effect.succeed({
-                    account_id: settings.account_id,
+                    account_id: settings.account_id ?? "",
                     api_token: Redacted.make(settings.api_token),
                   }),
               }),
             ),
           );
-          yield* Effect.flatMap(CloudflareApi, (api) => api.verifyToken()).pipe(
+          yield* Effect.flatMap(CloudflareApi, (api) =>
+            settings.account_id === undefined ? api.verifyUserToken() : api.verifyToken(),
+          ).pipe(
             Effect.provide(candidate),
             Effect.mapError(
               (error) =>
                 new ProvisionError({
                   code: error instanceof ProvisionError ? error.code : "service_unavailable",
                   message: "The Cloudflare token could not be verified.",
-                  fix: "Check the account ID, active token, and Cloudflare availability, then verify and save again.",
+                  fix:
+                    settings.account_id === undefined
+                      ? "Check that the token is active. Account-owned tokens need their account ID; enter it and save again."
+                      : "Check the account ID, active token, and Cloudflare availability, then verify and save again.",
                 }),
             ),
           );
+          let accountId = settings.account_id;
+          if (accountId === undefined) {
+            const accounts = yield* Effect.flatMap(CloudflareApi, (api) => api.accounts()).pipe(
+              Effect.provide(candidate),
+            );
+            if (accounts.length === 0)
+              return yield* actionRequired(
+                "The token cannot access any Cloudflare accounts.",
+                "Grant the token access to the intended account, or enter its account ID, then retry.",
+              );
+            if (accounts.length !== 1)
+              return yield* actionRequired(
+                "Choose a Cloudflare account for this token.",
+                `Set account_id to one of: ${accounts.map((account) => `${account.name} (${account.id})`).join(", ")}.`,
+              );
+            accountId = accounts[0]?.id;
+          }
+          const configured = yield* Schema.decodeUnknownEffect(
+            Schema.Struct({
+              account_id: Schema.String.check(Schema.isPattern(/^[a-f0-9]{32}$/i)),
+              api_token: OwnerTransportRequest.fields.api_token,
+            }),
+          )({ ...settings, account_id: accountId }).pipe(
+            Effect.mapError(
+              () =>
+                new ProvisionError({
+                  code: "service_unavailable",
+                  message: "Cloudflare did not return a usable account ID.",
+                  fix: "Enter the account ID explicitly and retry.",
+                }),
+            ),
+          );
+          const remote = yield* remoteRepository(store).get();
+          if (remote !== undefined && remote.account_id !== configured.account_id)
+            return yield* actionRequired(
+              "Remote access belongs to a different Cloudflare account.",
+              "Disable remote access before changing accounts.",
+            );
+          if ((yield* repo.all()).some((domain) => domain.account_id !== configured.account_id))
+            return yield* actionRequired(
+              "Registered domains belong to a different Cloudflare account.",
+              "Teardown and delete the registered domains before changing accounts.",
+            );
           const verifiedAt = new Date(yield* Clock.currentTimeMillis).toISOString();
-          yield* transport.set(settings, verifiedAt);
+          yield* transport.set(configured, verifiedAt);
           return yield* inspect();
         }),
       ),

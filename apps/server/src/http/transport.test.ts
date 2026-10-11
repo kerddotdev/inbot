@@ -218,3 +218,63 @@ test("refuses clearing provisioned domains or changing their account and permits
   expect((await api.request(path, { method: "DELETE" })).status).toBe(200);
   expect(await status(await api.request(path))).toEqual(empty);
 });
+
+test("detects one account, requires a choice for several, and preserves saved settings on discovery failures", async () => {
+  const home = await mkdtemp(join(tmpdir(), "inbot-transport-accounts-"));
+  let accounts = [{ id: settings.account_id, name: "First account" }];
+  let active = true;
+  let unavailable = false;
+  const fetcher = vi.fn<typeof fetch>(async (input, options) => {
+    expect(new Headers(options?.headers).get("authorization")).toBe(`Bearer ${settings.api_token}`);
+    if (String(input).endsWith("/user/tokens/verify"))
+      return Response.json({ success: true, result: { status: active ? "active" : "disabled" } });
+    if (String(input).includes("/accounts?")) {
+      if (unavailable) throw new Error("synthetic network failure");
+      return Response.json({ success: true, result: accounts });
+    }
+    return Response.json({ success: true, result: { status: "active" } });
+  });
+  const api = await fixture(home, { transportFetch: fetcher });
+  try {
+    const body = { api_token: settings.api_token };
+    const configured = await status(await api.request(path, { method: "PUT", body }));
+    expect(configured.account_id).toBe(settings.account_id);
+    expect(fetcher.mock.calls.map(([url]) => String(url))).toEqual([
+      "https://api.cloudflare.com/client/v4/user/tokens/verify",
+      "https://api.cloudflare.com/client/v4/accounts?page=1&per_page=50",
+    ]);
+    accounts = [...accounts, { id: "b".repeat(32), name: "Second account" }];
+    const multiple = await api.request(path, { method: "PUT", body });
+    expect(multiple.status).toBe(409);
+    const error = Schema.decodeUnknownSync(ErrorResponse)(await multiple.json());
+    expect(error.code).toBe("action_required");
+    for (const account of accounts) {
+      expect(error.fix).toContain(account.id);
+      expect(error.fix).toContain(account.name);
+    }
+    expect(await status(await api.request(path))).toEqual(configured);
+    expect(
+      (
+        await status(
+          await api.request(path, { method: "PUT", body: { ...body, account_id: "b".repeat(32) } }),
+        )
+      ).account_id,
+    ).toBe("b".repeat(32));
+    accounts = [];
+    const none = await api.request(path, { method: "PUT", body });
+    expect(none.status).toBe(409);
+    expect(Schema.decodeUnknownSync(ErrorResponse)(await none.json()).message).toContain(
+      "cannot access any",
+    );
+    unavailable = true;
+    expect((await api.request(path, { method: "PUT", body })).status).toBe(503);
+    active = false;
+    fetcher.mockClear();
+    expect((await api.request(path, { method: "PUT", body })).status).toBe(503);
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect((await status(await api.request(path))).account_id).toBe("b".repeat(32));
+  } finally {
+    await api.close();
+    await rm(home, { recursive: true, force: true });
+  }
+});
