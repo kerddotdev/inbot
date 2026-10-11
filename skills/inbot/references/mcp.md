@@ -128,3 +128,5 @@ There is no event subscription tool; use [WebSocket or CLI](events.md).
 On `send_unknown`, do not resend; inform the human. Message reads expose
 `send_status` and optional `send_reason`. Outcome resolution is local owner-only
 and has no MCP tool.
+
+System state labels (`received`, `queued`, `sent`, `send_unknown`, `failed`, `delivered`, `bounced`, `complained`, `rejected`, `deferred`) are protected on every message, including messages without an outbox entry. Message, thread, and batch label edits that add or remove any of them return `validation_error` with a fix and make no changes. Custom labels and `unread` remain editable.

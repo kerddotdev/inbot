@@ -478,10 +478,13 @@ test("updates message and thread labels as a union and omits missing batch ids",
       expect((yield* mailbox.listMessages(inboxId, { labels: ["other", "read"] })).count).toBe(0);
       const updated = yield* mailbox.updateThread(inboxId, first.thread_id, {
         add_labels: ["archive"],
-        remove_labels: ["received", "other"],
+        remove_labels: ["other"],
       });
-      expect(updated.labels).toEqual(["archive", "read"]);
-      expect((yield* mailbox.getMessage(inboxId, second.message_id)).labels).toEqual(["archive"]);
+      expect(updated.labels).toEqual(["archive", "read", "received"]);
+      expect((yield* mailbox.getMessage(inboxId, second.message_id)).labels).toEqual([
+        "archive",
+        "received",
+      ]);
       const batch = yield* mailbox.batchGetMessages(inboxId, {
         message_ids: [second.message_id, "<missing@example.test>", first.message_id],
       });
@@ -498,7 +501,11 @@ test("updates message and thread labels as a union and omits missing batch ids",
         remove_labels: "archive",
       });
       expect(changes).toMatchObject({ count: 2, limit: 3 });
-      expect((yield* mailbox.getThread(inboxId, first.thread_id)).labels).toEqual(["done", "read"]);
+      expect((yield* mailbox.getThread(inboxId, first.thread_id)).labels).toEqual([
+        "done",
+        "read",
+        "received",
+      ]);
       expect(
         (yield* Effect.flip(
           mailbox.batchUpdateMessages(inboxId, { message_ids: [first.message_id] }),

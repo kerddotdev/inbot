@@ -881,3 +881,24 @@ test("builds and starts the service in a child process with a test keychain and 
   expect((await production.exited).code).toBe(1);
   expect(production.stderr()).toContain("server.failed");
 }, 20_000);
+
+test("thread and batch label edits reject system state labels without partial changes", async ({
+  api,
+}) => {
+  const before = await api.run(api.mailbox.getMessage(inboxId, messageId));
+  for (const [method, path, body] of [
+    [
+      "POST",
+      `/v0/inboxes/${inboxId}/messages/batch-update`,
+      { message_ids: [messageId], add_labels: ["custom", "delivered"] },
+    ],
+    [
+      "PATCH",
+      `/v0/inboxes/${inboxId}/threads/${api.threadId}`,
+      { add_labels: ["custom"], remove_labels: "received" },
+    ],
+  ] as const) {
+    await failure(await api.request(path, { method, body }), 400, "validation_error");
+    expect(await api.run(api.mailbox.getMessage(inboxId, messageId))).toEqual(before);
+  }
+});

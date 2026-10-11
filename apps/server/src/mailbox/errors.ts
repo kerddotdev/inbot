@@ -22,11 +22,14 @@ export function alreadyExists() {
   });
 }
 
-export function validationError(message: string) {
+export function validationError(
+  message: string,
+  fix = "Check the request fields and their documented limits.",
+) {
   return new MailboxError({
     code: "validation_error",
     message,
-    fix: "Check the request fields and their documented limits.",
+    fix,
   });
 }
 
