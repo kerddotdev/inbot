@@ -122,7 +122,7 @@ export function fakeCloudflare() {
     {
       type: "TXT",
       name: `_dmarc.${domain}`,
-      content: "v=DMARC1; p=reject; sp=reject; adkim=s; aspf=s;",
+      content: "v=DMARC1; p=reject;",
       ttl: 1,
     },
   ];

@@ -163,7 +163,7 @@ export function makeProvisioner(options: {
               {
                 type: "TXT",
                 name: `_dmarc.${domain}`,
-                value: "v=DMARC1; p=reject; sp=reject; adkim=s; aspf=s;",
+                value: "v=DMARC1; p=reject;",
                 status: "MISSING",
               } satisfies VerificationRecord,
             ]
