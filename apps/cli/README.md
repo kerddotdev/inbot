@@ -117,6 +117,7 @@ positional; quote IDs containing shell metacharacters.
 | `lists delete`           | `<direction> <type> <entry>`, optional `--inbox`                | DELETE global or inbox list entry             |
 | `api-keys list`          | Optional `--inbox`, cursor flags                                | GET organization or inbox API keys (owner)    |
 | `api-keys create`        | Optional `--inbox`, body                                        | POST organization or inbox API keys (owner)   |
+| `api-keys update`        | `<api_key_id>`, optional `--inbox`, body                        | PATCH organization or inbox API key (owner)   |
 | `api-keys revoke`        | `<api_key_id>`, optional `--inbox`                              | DELETE organization or inbox API key (owner)  |
 
 `open` prints a single-use login URL and never opens a browser unless
@@ -269,3 +270,15 @@ permissions do not authorize it. Records contain time, inbox, sender, and rules;
 legacy sender/rule metadata may be missing. Bodies and subjects are never returned.
 Deletion does not release mail and preserves the durable rejection decision.
 There is no transport configuration command; use Settings or the owner REST API.
+
+Update an existing key without rotating its secret:
+
+```sh
+inbot api-keys update <api_key_id> --name researcher \
+  --permissions '{"inbox_read":true,"message_read":true,"message_send":true}' \
+  --send-policy approval
+```
+
+Use `--inbox <inbox_id>` for the inbox route. Omitted fields stay unchanged;
+`--permissions` replaces the permission set. Changes apply on the next request.
+Inbox scope and expiry cannot be changed by this command.

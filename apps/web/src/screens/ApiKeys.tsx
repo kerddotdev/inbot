@@ -1,7 +1,8 @@
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { Grant } from "@inbot/contracts/src/api-keys.js";
-import { GrantFields, defaultGrant, policyDisplay } from "../components/GrantFields";
+import type { ApiKey, Grant } from "@inbot/contracts/src/api-keys.js";
+import { GrantFields, policyDisplay } from "../components/GrantFields";
+import { defaultGrant } from "../components/grant-presets";
 import { api } from "../api";
 import { inboxesQuery, keysQuery } from "../queries";
 import { OAuthGrants } from "./OAuth";
@@ -20,6 +21,7 @@ import {
 
 export function ApiKeys() {
   const [creating, setCreating] = useState(false);
+  const [editing, setEditing] = useState<ApiKey>();
   const [revoking, setRevoking] = useState<string>();
   const client = useQueryClient();
   const query = useQuery(keysQuery);
@@ -128,16 +130,21 @@ export function ApiKeys() {
                             </Button>
                           </div>
                         ) : (
-                          <Button
-                            variant="danger"
-                            disabled={revoke.isPending}
-                            onClick={() => {
-                              revoke.reset();
-                              setRevoking(key.api_key_id);
-                            }}
-                          >
-                            Revoke
-                          </Button>
+                          <div className="flex gap-2">
+                            <Button disabled={revoke.isPending} onClick={() => setEditing(key)}>
+                              Edit
+                            </Button>
+                            <Button
+                              variant="danger"
+                              disabled={revoke.isPending}
+                              onClick={() => {
+                                revoke.reset();
+                                setRevoking(key.api_key_id);
+                              }}
+                            >
+                              Revoke
+                            </Button>
+                          </div>
                         )}
                       </td>
                     </tr>
@@ -149,8 +156,19 @@ export function ApiKeys() {
         )}
         <OAuthGrants />
       </Page>
+      {editing ? (
+        <KeyDialog
+          key={editing.api_key_id}
+          existingKey={editing}
+          onClose={() => setEditing(undefined)}
+          inboxIds={inboxes.data?.map((inbox) => inbox.inbox_id) ?? []}
+          inboxError={inboxes.error}
+          loadingInboxes={inboxes.isPending}
+          retryInboxes={() => void inboxes.refetch()}
+        />
+      ) : null}
       {creating ? (
-        <CreateKeyDialog
+        <KeyDialog
           inboxIds={inboxes.data?.map((inbox) => inbox.inbox_id) ?? []}
           inboxError={inboxes.error}
           loadingInboxes={inboxes.isPending}
@@ -162,13 +180,15 @@ export function ApiKeys() {
   );
 }
 
-function CreateKeyDialog({
+function KeyDialog({
+  existingKey,
   onClose,
   inboxIds,
   inboxError,
   loadingInboxes,
   retryInboxes,
 }: {
+  existingKey?: ApiKey;
   onClose: () => void;
   inboxIds: readonly string[];
   inboxError: unknown;
@@ -179,10 +199,10 @@ function CreateKeyDialog({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>();
   const [secret, setSecret] = useState<string>();
-  const [grant, setGrant] = useState<Grant>(defaultGrant);
+  const [grant, setGrant] = useState<Grant>(existingKey ?? defaultGrant);
   const dialogRef = useRef<HTMLDialogElement>(null);
   const nameId = useId();
-  const [name, setName] = useState("");
+  const [name, setName] = useState(existingKey?.name ?? "");
 
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -195,11 +215,17 @@ function CreateKeyDialog({
     setBusy(true);
     setError(undefined);
     try {
-      const result = await api.createKey({
-        name: name.trim(),
-        ...grant,
-      });
-      setSecret(result.api_key);
+      if (existingKey) {
+        await api.updateKey(existingKey.api_key_id, {
+          name: name.trim(),
+          permissions: grant.permissions,
+          send_policy: grant.send_policy,
+        });
+        onClose();
+      } else {
+        const result = await api.createKey({ name: name.trim(), ...grant });
+        setSecret(result.api_key);
+      }
       void client.invalidateQueries({ queryKey: ["keys"] });
     } catch (cause) {
       setError(cause);
@@ -245,7 +271,7 @@ function CreateKeyDialog({
               id={`${nameId}-title`}
               className="mb-[18px] text-[22px] font-semibold tracking-[-0.015em]"
             >
-              Create API key
+              {existingKey ? "Edit API key" : "Create API key"}
             </h2>
             <div className="mb-4">
               <label htmlFor={nameId} className="mb-[7px] block font-semibold">
@@ -261,6 +287,7 @@ function CreateKeyDialog({
               />
             </div>
             <GrantFields
+              showInboxScope={existingKey === undefined}
               value={grant}
               onChange={setGrant}
               inboxIds={inboxIds}
@@ -278,10 +305,16 @@ function CreateKeyDialog({
                 disabled={
                   busy ||
                   name.trim() === "" ||
-                  (grant.inbox_ids !== undefined && grant.inbox_ids.length === 0)
+                  (!existingKey && grant.inbox_ids !== undefined && grant.inbox_ids.length === 0)
                 }
               >
-                {busy ? "Creating..." : "Create key"}
+                {busy
+                  ? existingKey
+                    ? "Saving..."
+                    : "Creating..."
+                  : existingKey
+                    ? "Save changes"
+                    : "Create key"}
               </Button>
             </div>
             <ErrorNotice error={error} />
