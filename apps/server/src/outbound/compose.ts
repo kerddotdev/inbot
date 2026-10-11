@@ -154,6 +154,10 @@ export interface ComposeContext {
   readonly draft?: boolean;
 }
 
+export function localMessageId(inboxId: string, id: string) {
+  return `<${id}@${inboxId.slice(inboxId.lastIndexOf("@") + 1)}>`;
+}
+
 export function compose(inboxId: string, input: OutboundRequest, context: ComposeContext = {}) {
   const decoded = decodeRequest(input);
   const request = decoded.request;
@@ -261,7 +265,7 @@ export function compose(inboxId: string, input: OutboundRequest, context: Compos
   };
   const raw = renderMime(
     provider,
-    "<00000000-0000-0000-0000-000000000000@inbot.local>",
+    localMessageId(inboxId, "00000000-0000-0000-0000-000000000000"),
     "2026-01-01T00:00:00.000Z",
   );
   if (Math.max(raw.byteLength, Buffer.byteLength(JSON.stringify(provider))) > MAX_MESSAGE_BYTES)
