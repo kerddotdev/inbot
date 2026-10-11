@@ -31,7 +31,7 @@ export const OwnerLoginLink = Schema.Struct({ url: Schema.String });
 export const OwnerRedeemRequest = Schema.Struct({ token: Credential });
 
 export const OwnerTransportRequest = Schema.Struct({
-  account_id: Schema.String.check(Schema.isPattern(/^[a-f0-9]{32}$/i)),
+  account_id: Schema.optionalKey(Schema.String.check(Schema.isPattern(/^[a-f0-9]{32}$/i))),
   api_token: Schema.String.check(
     Schema.isMinLength(1),
     Schema.isMaxLength(1024),

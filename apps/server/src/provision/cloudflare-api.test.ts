@@ -406,13 +406,42 @@ test.each(["disabled", "expired", "unavailable"])(
   },
 );
 
-test("names routing unlock permission failures while preserving the permission fix", async () => {
+test("names routing unlock permission failures with the dashboard selection and scope", async () => {
   const api = await service(async () => new Response(null, { status: 403 }));
   await expect(Effect.runPromise(api.unlockRoutingDns(zone, domain))).rejects.toMatchObject({
     code: "missing_permission",
     message: "The Cloudflare token needs Zone Settings Write (PATCH routing DNS).",
-    fix: "Grant Zone Settings Write on the configured account or zone, then retry.",
+    fix: "Grant Zone Settings: Edit (Zone) in Cloudflare, then verify and save a replacement token in Settings > Mail transport before retrying.",
   });
+});
+
+test("denied email operations point to the dashboard permissions and their scopes", async () => {
+  const api = await service(async () => new Response(null, { status: 403 }));
+  for (const [operation, label] of [
+    [Effect.asVoid(api.sendingDomains(zone.id)), "Email Sending: Edit (Account)"],
+    [Effect.asVoid(api.rules(zone.id)), "Email Routing Rules: Edit (Zone)"],
+  ] as const) {
+    await expect(Effect.runPromise(operation)).rejects.toMatchObject({
+      code: "missing_permission",
+      fix: expect.stringContaining(`Grant ${label}`),
+    });
+  }
+});
+
+test("account discovery follows pagination using the documented page size", async () => {
+  const paths: string[] = [];
+  const api = await service(async (input) => {
+    const url = new URL(String(input));
+    paths.push(url.pathname + url.search);
+    expect(url.searchParams.get("per_page")).toBe("50");
+    const page = url.searchParams.get("page");
+    return response([{ id: page, name: `Account ${page}` }], { total_pages: 2 });
+  });
+  expect(await Effect.runPromise(api.accounts())).toEqual([
+    { id: "1", name: "Account 1" },
+    { id: "2", name: "Account 2" },
+  ]);
+  expect(paths).toHaveLength(2);
 });
 
 test("remote adapter uses remotely managed tunnels, secret tokens and proxied owned DNS", async () => {

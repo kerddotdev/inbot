@@ -216,6 +216,8 @@ export function fakeCloudflare() {
         },
         true,
       ),
+    accounts: () => perform("accounts", () => [{ id: account.id, name: "Synthetic account" }]),
+    verifyUserToken: () => perform("verifyUserToken", () => {}),
     verifyToken: () =>
       perform("verifyToken", () => {
         for (const permission of tokenPermissions)
