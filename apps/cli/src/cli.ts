@@ -9,6 +9,7 @@ import { connection, decodeWire, request, type Environment } from "./client.js";
 import { commands, flagName, type Command, type FieldKind } from "./commands.js";
 import { CliError, usage } from "./errors.js";
 import { humanOutput, record } from "./output.js";
+import { packageVersion } from "./version.js";
 
 export interface CliIO {
   readonly env: Environment;
@@ -55,7 +56,7 @@ function help(command?: Command, group?: string): string {
       group === undefined
         ? commands
         : commands.filter((entry) => entry.name.startsWith(`${group} `));
-    return `Usage: inbot <command> [options]\n\n${available.map((entry) => `  ${entry.name.padEnd(20)} ${entry.description}`).join("\n")}\n  events --follow      Stream accessible events (--json, --last-event-id).\n  serve                Run the existing server (inbot serve --help).\n\nGlobal options: --home <directory>, --flavor development|production, --json, --help\nOwner: read connection.json from the server home. Agent: set INBOT_URL and INBOT_API_KEY.\n`;
+    return `Usage: inbot <command> [options] | inbot --version\n\n${available.map((entry) => `  ${entry.name.padEnd(20)} ${entry.description}`).join("\n")}\n  events --follow      Stream accessible events (--json, --last-event-id).\n  serve                Run the existing server (inbot serve --help).\n\nGlobal options: --home <directory>, --flavor development|production, --json, --help\nOwner: read connection.json from the server home. Agent: set INBOT_URL and INBOT_API_KEY.\n`;
   }
   const flags = commandOptions(command);
   return `Usage: inbot ${command.name}${(command.params ?? []).map((param) => ` <${param}>`).join("")} [options]\n\n${command.description}\n\n${Object.entries(
@@ -98,6 +99,16 @@ function fields(
 
 export async function runCli(args: readonly string[], io: CliIO): Promise<number> {
   try {
+    if (args[0] === "--version" || args[0] === "version") {
+      const { positionals } = parseArgs({
+        args: args.slice(1),
+        options: globals,
+        allowPositionals: true,
+      });
+      if (positionals.length > 0) usage("Version does not accept positional arguments.");
+      io.stdout(`${await packageVersion()}\n`);
+      return 0;
+    }
     const scan = parseArgs({
       args: [...args],
       options: globals,

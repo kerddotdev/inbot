@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 import { expect, test } from "vitest";
+import { packageVersion } from "./version.js";
 import { packagedArguments } from "./packaged.js";
 
 test("packaged commands share the production home and serve the bundled UI with explicit overrides", async () => {
@@ -13,6 +14,8 @@ test("packaged commands share the production home and serve the bundled UI with 
     await mkdir(join(root, "application/dist/apps/cli/src"), { recursive: true });
     expect(packagedArguments(["serve"], entry)).toEqual(["serve"]);
     await writeFile(join(root, "BUILD.json"), "{}");
+    await writeFile(join(root, "application/package.json"), JSON.stringify({ version: "9.8.7" }));
+    expect(await packageVersion(entry)).toBe("9.8.7");
     expect(packagedArguments(["serve"], entry)).toEqual([
       "serve",
       "--flavor",
