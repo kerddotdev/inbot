@@ -6,7 +6,8 @@ import { api } from "../api";
 import { consentRedirect, readAuthorizationRequest } from "../oauth";
 import { inboxesQuery } from "../queries";
 import { ErrorNotice, LoadError } from "../feedback";
-import { GrantFields, defaultGrant, policyDisplay } from "../components/GrantFields";
+import { GrantFields, policyDisplay } from "../components/GrantFields";
+import { defaultGrant } from "../components/grant-presets";
 import { Button, ListMessage, Page, SkeletonRows, Status } from "../components/ui";
 
 export function OAuthGrants() {

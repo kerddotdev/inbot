@@ -16,7 +16,7 @@ import { readEvents } from "../../server/src/events/log.js";
 import { Draft } from "../../../packages/contracts/src/drafts.js";
 import { ListInboxesResponse, Inbox } from "../../../packages/contracts/src/inboxes.js";
 import { Message, SendMessageResponse } from "../../../packages/contracts/src/messages.js";
-import { CreateApiKeyResponse } from "../../../packages/contracts/src/api-keys.js";
+import { ApiKey, CreateApiKeyResponse } from "../../../packages/contracts/src/api-keys.js";
 import { fixture } from "../../server/src/http/test-fixture.js";
 import { runCli, type CliIO } from "./cli.js";
 import { errorExitCode } from "./errors.js";
@@ -368,6 +368,87 @@ test("maps resource commands, pagination, label edits, draft reversals, and key 
   ]);
   expect(hidden.code).toBe(0);
   expect(JSON.parse(hidden.stdout)).not.toHaveProperty("api_key");
+});
+
+test("updates global and inbox API keys and enforces changed grants on the next request", async ({
+  api,
+}) => {
+  for (const scoped of [false, true]) {
+    const key = await agent(api);
+    const env = agentEnv(api, key.api_key);
+    const scope = scoped ? ["--inbox", inboxId] : [];
+    const update = await invoke(api, [
+      "api-keys",
+      "update",
+      key.api_key_id,
+      ...scope,
+      "--name",
+      "Updated key",
+      "--permissions",
+      '{"inbox_read":true,"message_send":true}',
+      "--send-policy",
+      "approval",
+      "--json",
+    ]);
+    expect(update.code).toBe(0);
+    expect(Schema.decodeUnknownSync(ApiKey)(JSON.parse(update.stdout))).toMatchObject({
+      name: "Updated key",
+      permissions: { inbox_read: true, message_send: true },
+      send_policy: "approval",
+    });
+    expect(update.stdout + update.stderr).not.toContain(key.api_key);
+    const send = [
+      "messages",
+      "send",
+      inboxId,
+      "--data",
+      JSON.stringify(payload),
+      "--idempotency-key",
+      `updated-${key.api_key_id}`,
+    ];
+    const approval = await invoke(api, send, { env });
+    expect(approval.code).toBe(4);
+    expect(approval.stderr).toContain("approval_required");
+    const restricted = await invoke(api, [
+      "api-keys",
+      "update",
+      key.api_key_id,
+      ...scope,
+      "--data",
+      '{"send_policy":"read_only"}',
+      "--json",
+    ]);
+    expect(restricted.code).toBe(0);
+    expect(Schema.decodeUnknownSync(ApiKey)(JSON.parse(restricted.stdout)).name).toBe(
+      "Updated key",
+    );
+    const denied = await invoke(api, send, { env });
+    expect(denied.code).toBe(4);
+    expect(denied.stderr).toContain("missing_permission");
+    expect((await invoke(api, ["inboxes", "list"], { env })).code).toBe(0);
+    expect(
+      (await invoke(api, ["api-keys", "update", key.api_key_id, ...scope, "--permissions", "{}"]))
+        .code,
+    ).toBe(0);
+    const removed = await invoke(api, ["inboxes", "list"], { env });
+    expect(removed.code).toBe(4);
+    expect(removed.stderr).toContain("missing_permission");
+    expect((await invoke(api, ["api-keys", "update", key.api_key_id, ...scope])).code).toBe(2);
+    expect(
+      (
+        await invoke(
+          api,
+          ["api-keys", "update", key.api_key_id, ...scope, "--name", "Agent edit"],
+          { env },
+        )
+      ).code,
+    ).toBe(4);
+  }
+  expect(api.sent).toHaveLength(0);
+  const help = await invoke(api, ["api-keys", "update", "--help"]);
+  expect(help.code).toBe(0);
+  for (const flag of ["--name", "--permissions", "--send-policy", "--inbox"])
+    expect(help.stdout).toContain(flag);
 });
 
 test("returns stable usage and availability exits without exposing malformed credentials", async ({
