@@ -282,3 +282,5 @@ inbot api-keys update <api_key_id> --name researcher \
 Use `--inbox <inbox_id>` for the inbox route. Omitted fields stay unchanged;
 `--permissions` replaces the permission set. Changes apply on the next request.
 Inbox scope and expiry cannot be changed by this command.
+
+Startup failures from `serve` print `server.failed` JSON with the specific stable code and recovery fix for known key, keychain, home, and database errors. See [startup failures](../server/src/http/README.md#startup-failures).
