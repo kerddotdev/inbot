@@ -63,8 +63,8 @@ loopback origin, even while remote access is enabled. The tunnel listener uses t
 configured public HTTPS origin after remote access is usable. Issuer, endpoints,
 audiences and challenges use that same listener identity, never forwarded headers.
 Tokens cannot cross listeners or resources. Changing the tunnel hostname invalidates
-old public audiences without changing local audiences. REST downloads and WebSocket
-connections belong to `/v0`. API keys retain their existing behavior.
+old public audiences without changing local audiences. WebSocket connections belong to `/v0`. Download URLs are signed capabilities
+bound to the issuing token and listener, so tokens of either audience can mint them. API keys retain their existing behavior.
 401 responses include `WWW-Authenticate: Bearer resource_metadata="..."` pointing
 to the matching path-specific metadata document and the `inbot` scope. A presented
 invalid credential additionally receives `error="invalid_token"`; a missing credential

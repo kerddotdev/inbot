@@ -379,8 +379,20 @@ test("API keys retain inbox scope, send policy and public download links", async
     await raw.json(),
   );
   expect(download.download_url).toContain(`${publicOrigin}/v0/downloads/`);
-  const downloaded = await remoteRequest(f, new URL(download.download_url).pathname, { headers });
+  const downloadPath = new URL(download.download_url).pathname;
+  expect(tunnelRoute(downloadPath)).toBe("agent");
+  const downloaded = await remoteRequest(f, downloadPath);
+  expect(downloaded.status).toBe(200);
   expect(Buffer.from(await downloaded.arrayBuffer())).toEqual(f.raw);
+  expect((await remoteRequest(f, downloadPath, { headers })).status).toBe(200);
+  expect((await f.request(downloadPath, { token: null })).status).toBe(404);
+  for (const token of [key.api_key, f.token]) {
+    const local = await f.request(`/v0/inboxes/agent%40example.test/messages/${id}/raw`, { token });
+    const capability = Schema.decodeUnknownSync(Schema.Struct({ download_url: Schema.String }))(
+      await local.json(),
+    );
+    expect((await remoteRequest(f, new URL(capability.download_url).pathname)).status).toBe(404);
+  }
   expect(
     (
       await remoteRequest(f, new URL(download.download_url).pathname, {
@@ -399,6 +411,31 @@ test("API keys retain inbox scope, send policy and public download links", async
   });
   expect(send.status).toBe(403);
   expect(f.sent).toEqual([]);
+});
+
+test("tunnel owner download capabilities retain session revocation and origin boundaries", async ({
+  f,
+}) => {
+  await f.run(f.remote.enable({ hostname }));
+  const headers = await ownerSession(f);
+  const metadata = await remoteRequest(
+    f,
+    `/v0/inboxes/agent%40example.test/messages/${encodeURIComponent("<first@example.test>")}/raw`,
+    { headers },
+  );
+  expect(metadata.status).toBe(200);
+  const capability = Schema.decodeUnknownSync(Schema.Struct({ download_url: Schema.String }))(
+    await metadata.json(),
+  );
+  const path = new URL(capability.download_url).pathname;
+  const bytes = await remoteRequest(f, path);
+  expect(bytes.status).toBe(200);
+  expect(Buffer.from(await bytes.arrayBuffer())).toEqual(f.raw);
+  expect((await f.request(path, { token: null })).status).toBe(404);
+  expect((await remoteRequest(f, "/v0/owner/logout", { method: "POST", headers })).status).toBe(
+    200,
+  );
+  expect((await remoteRequest(f, path)).status).toBe(401);
 });
 
 test("public web uses owner login, secure cookies, host/origin checks and CSRF", async ({ f }) => {

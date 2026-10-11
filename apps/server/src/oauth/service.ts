@@ -193,12 +193,15 @@ function authorization(db: Database.Database, value: unknown, origin: string) {
   }
 }
 function tokenRow(db: Database.Database, token: string) {
+  return tokenHashRow(db, hashToken(token));
+}
+function tokenHashRow(db: Database.Database, hash: Uint8Array) {
   const value = db
     .prepare(`SELECT t.*, f.grant_id, f.revoked, f.expires_at AS family_expires_at,
     g.client_id, g.resource FROM oauth_tokens t
     JOIN oauth_families f ON f.family_id = t.family_id
     JOIN oauth_grants g ON g.grant_id = f.grant_id WHERE t.token_hash = ?`)
-    .get(hashToken(token));
+    .get(hash);
   return value === undefined ? undefined : Schema.decodeUnknownSync(TokenRow)(value);
 }
 
@@ -215,6 +218,34 @@ export function makeOAuth(store: StoreService) {
         }
       });
       return yield* Effect.fromResult(result);
+    });
+  }
+  function authenticateHash(hash: Uint8Array, audience: string) {
+    return run((db, now): Result.Result<Principal | undefined, OAuthError> => {
+      const token = tokenHashRow(db, hash);
+      if (
+        token === undefined ||
+        token.kind !== "access" ||
+        token.resource !== audience ||
+        token.revoked ||
+        token.expires_at <= now ||
+        token.family_expires_at <= now
+      )
+        return Result.succeed(undefined);
+      const key = keyRow(
+        db.prepare("SELECT * FROM api_keys WHERE api_key_id = ?").get(token.grant_id),
+      );
+      const { inbox_id, inbox_ids, permissions, send_policy } = key;
+      return Result.succeed({
+        kind: "agent",
+        api_key_id: key.api_key_id,
+        grant: {
+          ...(inbox_id === undefined ? {} : { inbox_id }),
+          ...(inbox_ids === undefined ? {} : { inbox_ids }),
+          permissions,
+          send_policy,
+        },
+      });
     });
   }
   function maintenance(db: Database.Database, now: number) {
@@ -570,34 +601,11 @@ export function makeOAuth(store: StoreService) {
           return Result.succeed(undefined);
         }),
       ),
+    authenticateHash,
     authenticate: (bearer: string, audience: string) =>
-      run((db, now): Result.Result<Principal | undefined, OAuthError> => {
-        if (!/^inbot_oauth_[A-Za-z0-9_-]{43}$/.test(bearer)) return Result.succeed(undefined);
-        const token = tokenRow(db, bearer);
-        if (
-          token === undefined ||
-          token.kind !== "access" ||
-          token.resource !== audience ||
-          token.revoked ||
-          token.expires_at <= now ||
-          token.family_expires_at <= now
-        )
-          return Result.succeed(undefined);
-        const key = keyRow(
-          db.prepare("SELECT * FROM api_keys WHERE api_key_id = ?").get(token.grant_id),
-        );
-        const { inbox_id, inbox_ids, permissions, send_policy } = key;
-        return Result.succeed({
-          kind: "agent",
-          api_key_id: key.api_key_id,
-          grant: {
-            ...(inbox_id === undefined ? {} : { inbox_id }),
-            ...(inbox_ids === undefined ? {} : { inbox_ids }),
-            permissions,
-            send_policy,
-          },
-        });
-      }),
+      /^inbot_oauth_[A-Za-z0-9_-]{43}$/.test(bearer)
+        ? authenticateHash(hashToken(bearer), audience)
+        : Effect.succeed(undefined),
     clients: () =>
       run((db, now) => {
         maintenance(db, now);

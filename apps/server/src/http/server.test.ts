@@ -39,6 +39,7 @@ import { Connection } from "../auth/owner.js";
 import { DatabaseError } from "../store.js";
 
 import { fixture } from "./test-fixture.js";
+import { client as mcpClient } from "../mcp/test-client.js";
 
 const inboxId = "agent@example.test";
 const otherInbox = "other@example.test";
@@ -345,7 +346,7 @@ test("requires hidden-label read permissions for flags, direct reads, batches, t
     ).count,
   ).toBe(0);
   await failure(
-    await api.request(raw.download_url.slice(api.url.length), { token: key.api_key }),
+    await api.request(raw.download_url.slice(api.url.length), { token: null }),
     404,
     "not_found",
   );
@@ -648,7 +649,7 @@ test("maps storage failures and unexpected defects to 503 without exposing inter
   }
 });
 
-test("serves authenticated raw and attachment downloads with live scope, revocation, tamper, and expiry checks", async ({
+test("serves capability raw and attachment downloads with principal binding, tamper, and five-minute expiry checks", async ({
   api,
 }) => {
   const key = await createKey(api);
@@ -658,10 +659,27 @@ test("serves authenticated raw and attachment downloads with live scope, revocat
   );
   expect(raw.size).toBe(api.raw.byteLength);
   const path = raw.download_url.slice(api.url.length);
-  await failure(await api.request(path, { token: null }), 401, "unauthorized");
-  const download = await api.request(path, { token: key.api_key });
+  const [payload, signature] = path.slice("/v0/downloads/".length).split(".");
+  const forged = Buffer.from(payload ?? "", "base64url")
+    .toString("utf8")
+    .replace(inboxId, otherInbox);
+  await failure(
+    await api.request(`/v0/downloads/${Buffer.from(forged).toString("base64url")}.${signature}`, {
+      token: null,
+    }),
+    404,
+    "not_found",
+  );
+  const download = await api.request(path, { token: null });
   expect(download.status).toBe(200);
+  expect(download.headers.get("content-disposition")).toBe("attachment");
+  expect(download.headers.get("x-content-type-options")).toBe("nosniff");
+  expect(download.headers.get("cache-control")).toBe("no-store");
   expect(Buffer.from(await download.arrayBuffer())).toEqual(api.raw);
+  expect((await api.request(path, { token: key.api_key })).status).toBe(200);
+  expect(Date.parse(raw.expires_at)).toBe(Date.parse("2026-10-10T12:05:00Z"));
+  const sameScope = await createKey(api);
+  await failure(await api.request(path, { token: sameScope.api_key }), 404, "not_found");
   const outside = await createKey(api, { inbox_ids: [otherInbox] });
   await failure(await api.request(path, { token: outside.api_key }), 404, "not_found");
   await failure(
@@ -699,22 +717,63 @@ test("serves authenticated raw and attachment downloads with live scope, revocat
     );
     expect(
       await (
-        await api.request(attachment.download_url.slice(api.url.length), { token: key.api_key })
+        await api.request(attachment.download_url.slice(api.url.length), { token: null })
       ).text(),
     ).toBe("Synthetic attachment");
   }
-  api.advance(5 * 60_000);
-  await failure(await api.request(path, { token: key.api_key }), 404, "not_found");
+  const mcp = await mcpClient(api, key.api_key);
+  const result = await mcp.call("get_attachment", {
+    threadId: stored.thread_id,
+    attachmentId: "file-1",
+  });
+  const attachment = Schema.decodeUnknownSync(AttachmentResponse)(result.structuredContent);
+  expect(await (await fetch(attachment.download_url)).text()).toBe("Synthetic attachment");
+  api.advance(5 * 60_000 - 1);
+  expect((await api.request(path, { token: null })).status).toBe(200);
+  api.advance(1);
+  await failure(await api.request(path, { token: null }), 404, "not_found");
   const fresh = await decoded(
     await api.request(`${messagePath}/raw`, { token: key.api_key }),
     RawMessageResponse,
   );
   await api.request(`/v0/api-keys/${key.api_key_id}`, { method: "DELETE" });
   await failure(
-    await api.request(fresh.download_url.slice(api.url.length), { token: key.api_key }),
+    await api.request(fresh.download_url.slice(api.url.length), { token: null }),
     401,
     "unauthorized",
   );
+});
+
+test("rechecks edited permissions, inbox scope, and key expiry without bearer credentials", async ({
+  api,
+}) => {
+  const key = await createKey(api, { expires_at: "2026-10-10T12:01:00Z" });
+  const raw = await decoded(
+    await api.request(`${messagePath}/raw`, { token: key.api_key }),
+    RawMessageResponse,
+  );
+  const path = new URL(raw.download_url).pathname;
+  await api.run(api.keys.update(key.api_key_id, { permissions: { inbox_read: true } }));
+  await failure(await api.request(path, { token: null }), 403, "missing_permission");
+  await api.run(api.keys.update(key.api_key_id, { permissions: { message_read: true } }));
+  await api.run(
+    api.store.use((db) =>
+      db
+        .prepare("UPDATE api_keys SET inbox_ids = ? WHERE api_key_id = ?")
+        .run(JSON.stringify([otherInbox]), key.api_key_id),
+    ),
+  );
+  await failure(await api.request(path, { token: null }), 404, "not_found");
+  await api.run(
+    api.store.use((db) =>
+      db
+        .prepare("UPDATE api_keys SET inbox_ids = ? WHERE api_key_id = ?")
+        .run(JSON.stringify([inboxId]), key.api_key_id),
+    ),
+  );
+  expect((await api.request(path, { token: null })).status).toBe(200);
+  api.advance(60_000);
+  await failure(await api.request(path, { token: null }), 401, "unauthorized");
 });
 
 const Ready = Schema.Struct({ event: Schema.Literal("server.ready"), url: Schema.String });

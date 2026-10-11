@@ -88,8 +88,10 @@ With no mail transport configured, sends return 503 `service_unavailable` and no
 
 `GET .../attachments/{attachment_id}` and `GET .../raw` return metadata plus `download_url` and `expires_at`, not the bytes.
 
-- The URL looks like `/v0/downloads/<token>` and is valid for five minutes. URLs also die when the service restarts.
-- Fetching it still needs your `Authorization: Bearer` header. The service rechecks your current permissions, scope, and hidden labels at download time. Expired or invalid URLs return 404.
+- The absolute URL ends in `/v0/downloads/<token>` and is an HMAC-signed capability valid for five minutes. URLs also die when the service restarts.
+- Fetch the returned URL directly without an `Authorization` header. Treat it as a temporary credential: do not log, publish, or share it. It is bound to the issuing principal and the local or tunnel origin; moving its path to another origin fails.
+- The service rechecks the issuer's current permissions, inbox scope, and hidden labels at download time. Revoked or expired API keys, OAuth access tokens, and owner browser sessions invalidate their URLs. OAuth URLs retain the issuing token's audience, including `/mcp`. Local owner bearer URLs last only for the current service lifetime.
+- A bearer header remains supported if it authenticates the issuing owner, API key, or OAuth grant. Another principal returns 404. An inactive issuer returns 401, missing read permission returns 403, and invalid, expired, wrong-origin, out-of-scope, or hidden resources return 404.
 - Content is sent as an attachment with `nosniff` and `no-store`.
 - Treat the bytes as hostile (see [security.md](security.md#attachments-and-links)). Do not execute, open in a browser, or pass them to another tool unchecked.
 - Request a fresh URL rather than caching an old one.

@@ -31,6 +31,19 @@ export function keyRow(value: unknown): ApiKey {
   );
 }
 
+function keyPrincipal(key: ApiKey): Principal {
+  return {
+    kind: "agent",
+    api_key_id: key.api_key_id,
+    grant: {
+      ...(key.inbox_id === undefined ? {} : { inbox_id: key.inbox_id }),
+      ...(key.inbox_ids === undefined ? {} : { inbox_ids: key.inbox_ids }),
+      permissions: key.permissions,
+      send_policy: key.send_policy,
+    },
+  };
+}
+
 function getKey(db: Database.Database, id: string, inboxId?: string) {
   const row = db.prepare("SELECT * FROM api_keys WHERE api_key_id = ?").get(id);
   if (row === undefined) throw notFound();
@@ -143,6 +156,18 @@ function makeApiKeys(store: StoreService) {
         getKey(db, id, inboxId);
         db.prepare("DELETE FROM api_keys WHERE api_key_id = ?").run(id);
       }),
+    principal: (id: string) =>
+      run((db, now): Principal | undefined => {
+        const row = db.prepare("SELECT * FROM api_keys WHERE api_key_id = ?").get(id);
+        if (row === undefined) return undefined;
+        const key = keyRow(row);
+        if (
+          key.prefix === "oauth" ||
+          (key.expires_at !== undefined && Date.parse(key.expires_at) <= now)
+        )
+          return undefined;
+        return keyPrincipal(key);
+      }),
     authenticate: (bearer: string) =>
       run((db, now): Principal | undefined => {
         const match = /^inbot_([0-9a-f]{32})_[A-Za-z0-9_-]{43}$/.exec(bearer);
@@ -162,16 +187,7 @@ function makeApiKeys(store: StoreService) {
             new Date(now).toISOString(),
             key.api_key_id,
           );
-        return {
-          kind: "agent",
-          api_key_id: key.api_key_id,
-          grant: {
-            ...(key.inbox_id === undefined ? {} : { inbox_id: key.inbox_id }),
-            ...(key.inbox_ids === undefined ? {} : { inbox_ids: key.inbox_ids }),
-            permissions: key.permissions,
-            send_policy: key.send_policy,
-          },
-        };
+        return keyPrincipal(key);
       }),
   };
 }

@@ -248,6 +248,21 @@ function makeSessions(store: StoreService, dummyHash: string, setupDigest: Buffe
             .all(),
         ).map((row) => ({ ...row, revoked: row.revoked !== 0, current: row.id === currentId })),
       })),
+    active: (id: string) =>
+      Effect.gen(function* () {
+        const now = yield* Clock.currentTimeMillis;
+        return yield* store.use((db) => {
+          const row = Schema.decodeUnknownSync(Schema.optional(SessionRow))(
+            db.prepare("SELECT * FROM owner_sessions WHERE id = ?").get(id),
+          );
+          return (
+            row !== undefined &&
+            row.revoked === 0 &&
+            Date.parse(row.expires_at) > now &&
+            Date.parse(row.created_at) + absoluteLifetime > now
+          );
+        });
+      }),
     revoke: (id: string) =>
       store
         .use((db) => db.prepare("UPDATE owner_sessions SET revoked = 1 WHERE id = ?").run(id))
