@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
+import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createInterface } from "node:readline";
@@ -778,10 +778,19 @@ test("rechecks edited permissions, inbox scope, and key expiry without bearer cr
 
 const Ready = Schema.Struct({ event: Schema.Literal("server.ready"), url: Schema.String });
 
-function spawnServer(home: string, args: readonly string[] = []) {
+function spawnServer(home: string, args: readonly string[] = [], initialize = true) {
   const child = spawn(
     process.execPath,
-    ["dist/apps/server/src/main.js", "serve", "--home", home, "--port", "0", "--init", ...args],
+    [
+      "dist/apps/server/src/main.js",
+      "serve",
+      "--home",
+      home,
+      "--port",
+      "0",
+      ...(initialize ? ["--init"] : []),
+      ...args,
+    ],
     {
       cwd: process.cwd(),
       env: { ...process.env, INBOT_TEST_MEMORY_KEYCHAIN: "1" },
@@ -817,6 +826,12 @@ test("builds and starts the service in a child process with a test keychain and 
     build.once("exit", resolve);
   });
   expect(buildCode, buildOutput).toBe(0);
+  const uninitialized = spawnServer(home, [], false);
+  expect((await uninitialized.exited).code).toBe(1);
+  expect(JSON.parse(uninitialized.stderr())).toMatchObject({
+    code: "not_initialized",
+    fix: expect.stringContaining("Initialize this home"),
+  });
   const processServer = spawnServer(home);
   const { child, exited } = processServer;
   let timer: NodeJS.Timeout | undefined;
@@ -877,6 +892,20 @@ test("builds and starts the service in a child process with a test keychain and 
       await exited;
     }
   }
+  const missingKey = spawnServer(home, [], false);
+  expect((await missingKey.exited).code).toBe(1);
+  expect(JSON.parse(missingKey.stderr())).toMatchObject({
+    code: "keychain_entry_missing",
+    fix: expect.stringContaining("passphrase"),
+  });
+  await writeFile(join(home, "keys.json"), "synthetic-corrupt-keys-with-secret");
+  const corruptKeys = spawnServer(home, [], false);
+  expect((await corruptKeys.exited).code).toBe(1);
+  expect(JSON.parse(corruptKeys.stderr())).toMatchObject({
+    code: "keys_file_corrupt",
+    fix: expect.stringContaining("backup"),
+  });
+  expect(corruptKeys.stderr()).not.toContain("synthetic-corrupt-keys-with-secret");
   const production = spawnServer(home, ["--flavor", "production"]);
   expect((await production.exited).code).toBe(1);
   expect(production.stderr()).toContain("server.failed");
