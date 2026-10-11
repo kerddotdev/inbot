@@ -20,16 +20,24 @@ import { ApiKeys } from "./screens/ApiKeys";
 import { Locked, Login, Setup } from "./screens/Auth";
 import { Domains } from "./screens/Domains";
 import { Mail } from "./screens/Mail";
+import { CreateInbox, EditInbox } from "./screens/InboxManagement";
 import { Remote } from "./screens/Remote";
 import { Settings } from "./screens/Settings";
 import { links, navigate, useRoute, type Route } from "./router";
 
 type OwnerRoute = Exclude<Route, { name: "setup" | "login" | "locked" }>;
 
-function Screen({ route }: { route: OwnerRoute }) {
+function Screen({ route, onManageInbox }: { route: OwnerRoute; onManageInbox: () => void }) {
   switch (route.name) {
     case "inbox":
-      return <Mail key={route.inboxId} inboxId={route.inboxId} selectedId={route.threadId} />;
+      return (
+        <Mail
+          key={route.inboxId}
+          inboxId={route.inboxId}
+          selectedId={route.threadId}
+          onManageInbox={onManageInbox}
+        />
+      );
     case "approvals":
       return <Approvals selectedId={route.draftId} />;
     case "domains":
@@ -48,6 +56,7 @@ function OwnerApp({ route }: { route: OwnerRoute }) {
   const inboxes = useQuery(inboxesQuery);
   const approvals = useQuery(approvalsQuery);
   const client = useQueryClient();
+  const [management, setManagement] = useState<"create" | { inboxId: string }>();
   const logout = useMutation({
     mutationFn: () => api.logout(),
     onSuccess: async () => {
@@ -62,14 +71,21 @@ function OwnerApp({ route }: { route: OwnerRoute }) {
   });
 
   useEffect(() => {
-    if (route.name === "inbox" && !route.inboxId && inboxes.data?.[0])
+    if (management === undefined && route.name === "inbox" && !route.inboxId && inboxes.data?.[0])
       navigate(links.inbox(inboxes.data[0].inbox_id));
-  }, [route, inboxes.data]);
+  }, [route, inboxes.data, management]);
+
+  useEffect(() => setManagement(undefined), [route]);
+  const managedInbox =
+    typeof management === "object"
+      ? inboxes.data?.find((inbox) => inbox.inbox_id === management.inboxId)
+      : undefined;
 
   return (
     <Shell
       route={route}
       inboxes={inboxes.data ?? []}
+      onNewInbox={() => setManagement("create")}
       approvalsCount={approvals.data?.length}
       onLogout={() => logout.mutate()}
       loggingOut={logout.isPending}
@@ -97,18 +113,72 @@ function OwnerApp({ route }: { route: OwnerRoute }) {
       }
     >
       <ErrorNotice error={logout.error} />
-      {route.name === "inbox" && !route.inboxId ? (
+      {management === "create" ? (
+        <CreateInbox
+          onClose={() => setManagement(undefined)}
+          onCreated={(inbox) => {
+            setManagement(undefined);
+            navigate(links.inbox(inbox.inbox_id));
+          }}
+        />
+      ) : managedInbox ? (
+        <EditInbox
+          key={managedInbox.inbox_id}
+          inbox={managedInbox}
+          onClose={() => setManagement(undefined)}
+          onDeleted={() => {
+            setManagement(undefined);
+            navigate(links.inbox());
+          }}
+        />
+      ) : management !== undefined ? (
+        inboxes.isPending ? (
+          <ListMessage icon="inbox" title="Loading inbox" />
+        ) : inboxes.error ? (
+          <LoadError error={inboxes.error} retry={() => void inboxes.refetch()} />
+        ) : (
+          <ListMessage
+            icon="inbox"
+            title="Inbox unavailable"
+            action={
+              <Button
+                onClick={() => {
+                  setManagement(undefined);
+                  navigate(links.inbox());
+                }}
+              >
+                Back to mail
+              </Button>
+            }
+          >
+            This inbox is no longer in the inbox list.
+          </ListMessage>
+        )
+      ) : route.name === "inbox" && !route.inboxId ? (
         inboxes.isPending ? (
           <ListMessage icon="inbox" title="Loading inboxes" />
         ) : inboxes.error ? (
           <LoadError error={inboxes.error} retry={() => void inboxes.refetch()} />
         ) : (
-          <ListMessage icon="inbox" title="No inboxes yet">
-            Create an inbox through the local API to start receiving mail.
+          <ListMessage
+            icon="inbox"
+            title="No inboxes yet"
+            action={
+              <Button variant="primary" icon="plus" onClick={() => setManagement("create")}>
+                New inbox
+              </Button>
+            }
+          >
+            Create an inbox to give your agent an email address.
           </ListMessage>
         )
       ) : (
-        <Screen route={route} />
+        <Screen
+          route={route}
+          onManageInbox={() => {
+            if (route.name === "inbox" && route.inboxId) setManagement({ inboxId: route.inboxId });
+          }}
+        />
       )}
     </Shell>
   );

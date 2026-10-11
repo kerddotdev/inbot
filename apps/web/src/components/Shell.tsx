@@ -2,7 +2,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { Icon, type IconName } from "../icons";
 import { links, type Route } from "../router";
 import type { Inbox } from "@inbot/contracts/src/inboxes.js";
-import { IconButton } from "./ui";
+import { Button, IconButton, Status } from "./ui";
 
 interface ShellProps {
   route: Route;
@@ -11,6 +11,7 @@ interface ShellProps {
   onLogout: () => void;
   loggingOut: boolean;
   inboxFeedback: ReactNode;
+  onNewInbox: () => void;
   children: ReactNode;
 }
 
@@ -33,6 +34,7 @@ export function Shell({
   onLogout,
   loggingOut,
   inboxFeedback,
+  onNewInbox,
 }: ShellProps) {
   const [navOpen, setNavOpen] = useState(false);
 
@@ -77,6 +79,17 @@ export function Shell({
         </div>
         <div className="mt-2.5">
           <h3 className="px-2.5 py-1 text-xs font-semibold text-ink2">Inboxes</h3>
+          <Button
+            variant="quiet"
+            icon="plus"
+            className="mb-1 w-full justify-start px-2.5"
+            onClick={() => {
+              setNavOpen(false);
+              onNewInbox();
+            }}
+          >
+            New inbox
+          </Button>
           {inboxFeedback}
           {inboxes.map((inbox) => (
             <a
@@ -89,10 +102,15 @@ export function Shell({
             >
               <Icon name="inbox" />
               <span className="flex min-w-0 flex-col leading-tight">
-                <span className="truncate">{inbox.display_name ?? inbox.email}</span>
-                {inbox.display_name === undefined ? null : (
+                <span className="truncate">{inbox.display_name || inbox.email}</span>
+                {!inbox.display_name ? null : (
                   <small className="truncate text-[11px] text-ink2">{inbox.email}</small>
                 )}
+                {inbox.status === "paused" ? (
+                  <Status tone="warn" icon="minus-circle" className="mt-1 text-[11px]">
+                    Paused
+                  </Status>
+                ) : null}
               </span>
             </a>
           ))}

@@ -14,6 +14,18 @@ Implemented screens:
   mark read/unread, thread labels, new mail, and replies. HTML source is displayed
   as escaped text, never executed. Sends retain an idempotency key when retrying
   the same composition and report queueing separately from provider delivery.
+- New inbox in the sidebar and empty Mail view creates an address from a username,
+  domain, and optional display name. The domain picker loads registration details
+  and offers only VERIFIED domains. If none are available or lookup fails, manual
+  entry remains available with a warning that receiving mail requires a configured,
+  verified domain. Lookup failures show the server's fix and a retry action.
+  Manage inbox in the Mail header edits the display name and active/paused status.
+  Paused inboxes are labeled in the sidebar. Clearing a display name shows the
+  address instead. Deletion requires a second confirmation explicitly stating
+  that all mail is permanently deleted. Successful deletion clears cached threads,
+  refreshes related lists, and selects a remaining inbox or returns to the empty view.
+  Pending operations disable controls; validation and duplicate-address errors
+  show the server's message and fix. These actions use the existing inbox endpoints.
 - API key listing, creation with inbox scope, explicit permissions and send policy,
   one-time secret display, and revocation. Key secrets are not cached or persisted.
 - Pending approval listing across all draft pages, draft review, approval, and

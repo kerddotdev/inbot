@@ -263,6 +263,14 @@ export class ApiClient {
       (page) => page.inboxes,
     );
 
+  createInbox = (body: Inboxes.CreateInboxRequest) =>
+    this.request("/v0/inboxes", Inboxes.Inbox, { method: "POST", body });
+
+  updateInbox = (id: string, body: Inboxes.UpdateInboxRequest) =>
+    this.request(inboxPath(id), Inboxes.Inbox, { method: "PATCH", body });
+
+  deleteInbox = (id: string) => this.request(inboxPath(id), Schema.Undefined, { method: "DELETE" });
+
   rejections = (inboxId: string | undefined, token: string | null, signal: AbortSignal) =>
     this.request(
       `/v0/owner/lists/rejections${pageQuery(token)}${inboxId === undefined ? "" : `&inbox_id=${segment(inboxId)}`}`,
