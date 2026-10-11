@@ -106,7 +106,7 @@ outbox, including old unknown rows. Custom labels survive these transitions.
 Public label updates cannot change an outbox message's send labels.
 `sent` means provider acceptance, not recipient delivery.
 
-Local ids are stable `<uuid@inbot.local>` RFC identifiers and remain the ids
+Local ids are stable `<uuid@inbox-domain>` RFC identifiers and remain the ids
 returned to clients. They are never supplied to Cloudflare as Message-ID.
 The provider's returned RFC id is stored as an inbox-scoped mailbox alias, so
 inbound In-Reply-To/References resolve to the existing thread. Replies to accepted
