@@ -1,7 +1,7 @@
 import { draftEvent } from "../events/log.js";
 import { createHash } from "node:crypto";
 import type Database from "better-sqlite3-multiple-ciphers";
-import { Clock, Context, Effect, Layer, Result, Schema } from "effect";
+import { Clock, Context, Effect, Layer, Queue, Result, Schema } from "effect";
 import {
   ListDraftsQuery,
   DraftItem,
@@ -70,7 +70,9 @@ function makeDrafts(
   store: StoreService,
   outbox: OutboxService,
   config: TransportConfig["Service"],
+  wakeup: Queue.Queue<void>,
 ) {
+  const notify = Effect.asVoid(Queue.offer(wakeup, undefined));
   function run<A>(operation: (db: Database.Database, now: number) => A, write = true) {
     return Effect.gen(function* () {
       const now = yield* Clock.currentTimeMillis;
@@ -98,6 +100,7 @@ function makeDrafts(
   });
   const processDue = () =>
     Effect.gen(function* () {
+      yield* Queue.clear(wakeup);
       const due = yield* run(
         (db, now) =>
           db
@@ -157,7 +160,7 @@ function makeDrafts(
     create: (inboxId: string, input: CreateDraftRequest, creator: string, approval: boolean) =>
       run((db, now) =>
         Rows.createDraft(db, inboxId, input, new Date(now).toISOString(), creator, approval),
-      ),
+      ).pipe(Effect.tap(() => notify)),
     get: (inboxId: string | undefined, draftId: string, inboxIds?: readonly string[]) =>
       run((db) => Rows.publicDraft(Rows.getDraft(db, inboxId, draftId, inboxIds)), false),
     list: (
@@ -218,7 +221,7 @@ function makeDrafts(
         if (before.approval_state !== "pending" && draft.approval_state === "pending")
           draftEvent(db, draft, "draft.approval_required", now);
         return draft;
-      }),
+      }).pipe(Effect.tap(() => notify)),
     delete: (inboxId: string, draftId: string) =>
       run((db) => {
         const draft = Rows.getDraft(db, inboxId, draftId);
@@ -348,7 +351,9 @@ function makeDrafts(
         ),
       ),
     approve: (inboxId: string, draftId: string, idempotencyKey?: string) =>
-      Effect.andThen(configured, outbox.sendDraft(inboxId, draftId, {}, idempotencyKey, true)),
+      Effect.andThen(configured, outbox.sendDraft(inboxId, draftId, {}, idempotencyKey, true)).pipe(
+        Effect.tap(() => notify),
+      ),
     reject: (inboxId: string, draftId: string, reason?: string) =>
       run((db, now) => {
         const draft = Rows.getDraft(db, inboxId, draftId);
@@ -363,6 +368,22 @@ function makeDrafts(
           updated_at: new Date(now).toISOString(),
         });
       }),
+    waitForDue: (maxDelayMs: number) =>
+      Effect.gen(function* () {
+        const delay = yield* run((db, now) => {
+          const row = Schema.decodeUnknownSync(
+            Schema.Struct({ next: Schema.NullOr(Schema.Finite) }),
+          )(
+            db
+              .prepare(
+                "SELECT MIN(send_at) AS next FROM drafts WHERE approval_state = 'approved' AND send_status IN ('scheduled', 'sending')",
+              )
+              .get(),
+          );
+          return row.next === null ? maxDelayMs : Math.min(maxDelayMs, Math.max(0, row.next - now));
+        }, false);
+        yield* Effect.raceFirst(Queue.take(wakeup), Effect.sleep(delay));
+      }),
     processDue,
   };
 }
@@ -372,7 +393,12 @@ export class Drafts extends Context.Service<Drafts, DraftsService>()("inbot/Draf
   static readonly Live = Layer.effect(
     Drafts,
     Effect.gen(function* () {
-      return makeDrafts(yield* Store, yield* Outbox, yield* TransportConfig);
+      return makeDrafts(
+        yield* Store,
+        yield* Outbox,
+        yield* TransportConfig,
+        yield* Queue.dropping<void>(1),
+      );
     }),
   );
 }
