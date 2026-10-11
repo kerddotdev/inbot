@@ -5,6 +5,7 @@ import * as Owner from "@inbot/contracts/src/owner.js";
 import * as Inboxes from "@inbot/contracts/src/inboxes.js";
 import * as Threads from "@inbot/contracts/src/threads.js";
 import * as Messages from "@inbot/contracts/src/messages.js";
+import { AttachmentResponse } from "@inbot/contracts/src/attachments.js";
 import * as Keys from "@inbot/contracts/src/api-keys.js";
 import * as Drafts from "@inbot/contracts/src/drafts.js";
 import * as Webhooks from "@inbot/contracts/src/webhooks.js";
@@ -411,6 +412,55 @@ export class ApiClient {
         "service_unavailable",
         "The service did not return a zone file.",
         "Update the UI and service together, then retry.",
+      );
+    return response.blob();
+  }
+
+  messageAttachment(message: Pick<Messages.Message, "inbox_id" | "message_id">, id: string) {
+    return this.attachmentDownload(
+      `${inboxPath(message.inbox_id)}/messages/${segment(message.message_id)}/attachments/${segment(id)}`,
+    );
+  }
+
+  draftAttachment(draft: Pick<Drafts.Draft, "inbox_id" | "draft_id">, id: string) {
+    return this.attachmentDownload(`${draftPath(draft)}/attachments/${segment(id)}`);
+  }
+
+  private async attachmentDownload(path: string) {
+    const attachment = await this.request(path, AttachmentResponse);
+    const url = new URL(attachment.download_url);
+    if (!/^\/v0\/downloads\/[^/]+$/.test(url.pathname) || url.search || url.hash)
+      throw new ApiError(
+        "service_unavailable",
+        "The service returned an invalid download URL.",
+        "Request a new download.",
+      );
+    const response = await this.fetcher(url.pathname, {
+      method: "GET",
+      credentials: "same-origin",
+      cache: "no-store",
+    });
+    if (!response.ok) {
+      let body: unknown;
+      try {
+        body = await response.json();
+      } catch {
+        throw new ApiError(
+          "service_unavailable",
+          "The service returned an invalid error response.",
+          "Retry the download.",
+        );
+      }
+      this.throwResponseError(url.pathname, body);
+    }
+    if (
+      response.headers.get("Content-Disposition")?.split(";")[0]?.trim().toLowerCase() !==
+      "attachment"
+    )
+      throw new ApiError(
+        "service_unavailable",
+        "The service did not return an attachment.",
+        "Request a new download.",
       );
     return response.blob();
   }

@@ -6,6 +6,7 @@ import { approvalsQuery, keysQuery } from "../queries";
 import { ErrorNotice, LoadError } from "../feedback";
 import { links, navigate } from "../router";
 import { Icon } from "../icons";
+import { AttachmentDownload } from "../components/AttachmentDownload";
 import {
   Button,
   Disclosure,
@@ -114,10 +115,11 @@ function DraftView({ draft, onDecision }: { draft: Draft; onDecision: (message: 
             </Disclosure>
           ) : null}
           {draft.attachments?.map((attachment) => (
-            <p key={attachment.attachment_id} className="mt-3 flex items-center gap-2">
-              <Icon name="file" />
-              {attachment.filename ?? "Attachment"} ({Math.ceil(attachment.size / 1024)} KB)
-            </p>
+            <AttachmentDownload
+              key={attachment.attachment_id}
+              attachment={attachment}
+              download={() => api.draftAttachment(draft, attachment.attachment_id)}
+            />
           ))}
           <ErrorNotice error={decision.error} />
           <div className="mt-7 flex flex-wrap items-center gap-2.5">
