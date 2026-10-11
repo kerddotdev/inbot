@@ -44,26 +44,26 @@ There are no MCP resources, prompts or subscriptions. For events, use the [WebSo
 
 ## Messages
 
-| Tool               | Permission                      | Inputs                                                                                                                   |
-| ------------------ | ------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| `list_messages`    | `message_read`                  | `inboxId`, the thread filters, `from`, `to`, `subject`                                                                   |
-| `search_messages`  | `message_read`                  | `inboxId`, `q`, `limit`, `pageToken`, `before`, `after`                                                                  |
-| `get_message`      | `message_read`                  | `inboxId`, `messageId`                                                                                                   |
-| `update_message`   | `message_update`                | `inboxId`, `messageId`, `addLabels`, `removeLabels`                                                                      |
-| `send_message`     | `message_send`                  | `inboxId`, `to`, `cc`, `bcc`, `replyTo`, `subject`, `text`, `html`, `labels`, `attachments`, `headers`, `idempotencyKey` |
-| `reply_to_message` | `message_reply`, `message_read` | `inboxId`, `messageId`, `replyAll`, and the send fields except `subject`                                                 |
-| `forward_message`  | `message_send`, `message_read`  | `inboxId`, `messageId`, and the send fields                                                                              |
+| Tool               | Permission                      | Inputs                                                                                                                                                                        |
+| ------------------ | ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `list_messages`    | `message_read`                  | `inboxId`, `limit`, `pageToken`, `ascending`, `before`, `after`, `labels`, `includeSpam`, `includeBlocked`, `includeUnauthenticated`, `includeTrash`, `from`, `to`, `subject` |
+| `search_messages`  | `message_read`                  | `inboxId`, `q`, `limit`, `pageToken`, `before`, `after`                                                                                                                       |
+| `get_message`      | `message_read`                  | `inboxId`, `messageId`                                                                                                                                                        |
+| `update_message`   | `message_update`                | `inboxId`, `messageId`, `addLabels`, `removeLabels`                                                                                                                           |
+| `send_message`     | `message_send`                  | `inboxId`, `to`, `cc`, `bcc`, `replyTo`, `subject`, `text`, `html`, `labels`, `attachments`, `headers`, `idempotencyKey`                                                      |
+| `reply_to_message` | `message_reply`, `message_read` | `inboxId`, `messageId`, `replyAll`, and the send fields except `subject`                                                                                                      |
+| `forward_message`  | `message_send`, `message_read`  | `inboxId`, `messageId`, and the send fields                                                                                                                                   |
 
 ## Drafts
 
-| Tool           | Permission                                                                          | Inputs                                                                                                                                |
-| -------------- | ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| `list_drafts`  | `draft_read`                                                                        | `inboxId` (optional), `limit`, `pageToken`, `ascending`, `before`, `after`, `labels`                                                  |
-| `get_draft`    | `draft_read`                                                                        | `inboxId`, `draftId`                                                                                                                  |
-| `create_draft` | `draft_create`; `draft_send` with `sendAt`; `message_read` for replies and forwards | `inboxId`, recipients, `subject`, `text`, `html`, `attachments`, `labels`, `inReplyTo`, `forwardOf`, `replyAll`, `sendAt`, `clientId` |
-| `update_draft` | `draft_update`; `draft_send` when scheduling                                        | `inboxId`, `draftId`, content fields, `sendAt`, `addAttachments`, `removeAttachments`, `addLabels`, `removeLabels`                    |
-| `send_draft`   | `draft_send`                                                                        | `inboxId`, `draftId`, `addLabels`, `removeLabels`, `idempotencyKey`                                                                   |
-| `delete_draft` | `draft_delete`                                                                      | `inboxId`, `draftId`                                                                                                                  |
+| Tool           | Permission                                                                          | Inputs                                                                                                                                                                |
+| -------------- | ----------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `list_drafts`  | `draft_read`                                                                        | `inboxId` (optional), `limit`, `pageToken`, `ascending`, `before`, `after`, `labels`                                                                                  |
+| `get_draft`    | `draft_read`                                                                        | `inboxId`, `draftId`                                                                                                                                                  |
+| `create_draft` | `draft_create`; `draft_send` with `sendAt`; `message_read` for replies and forwards | `inboxId`, `to`, `cc`, `bcc`, `replyTo`, `references`, `subject`, `text`, `html`, `attachments`, `labels`, `inReplyTo`, `forwardOf`, `replyAll`, `sendAt`, `clientId` |
+| `update_draft` | `draft_update`; `draft_send` when scheduling                                        | `inboxId`, `draftId`, content fields, `sendAt`, `addAttachments`, `removeAttachments`, `addLabels`, `removeLabels`                                                    |
+| `send_draft`   | `draft_send`                                                                        | `inboxId`, `draftId`, `addLabels`, `removeLabels`, `idempotencyKey`                                                                                                   |
+| `delete_draft` | `draft_delete`                                                                      | `inboxId`, `draftId`                                                                                                                                                  |
 
 ## Allow and block lists
 
@@ -92,7 +92,7 @@ An agent manages only the webhooks its own key created. `request` takes the REST
 
 ## Not available over MCP
 
-Owner actions are deliberately absent: domains, API keys, the transport, remote access, owner sessions, draft approval and rejection, `send_unknown` resolution, rejected mail and OAuth management. Batch operations, raw message downloads and draft attachment downloads are available only over REST.
+Owner actions are deliberately absent: domains, API keys, the transport, remote access, owner sessions, draft approval and rejection, `send_unknown` resolution, rejected mail and OAuth management. Message deletion, batch operations, organization-wide draft reads, raw message downloads, message-scoped attachments and draft attachment downloads are available only over REST. MCP `get_attachment` reads a thread attachment and returns a signed five-minute capability that needs no bearer. It rechecks the issuer's current grant and activity and is bound to the issuing origin; never share or log it.
 
 ## Send policies in MCP
 

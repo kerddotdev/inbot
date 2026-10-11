@@ -12,7 +12,7 @@ The REST API lives under `/v0` on the service's loopback URL, or on the [remote 
 - **Arrays in queries:** repeat the parameter, for example `?labels=unread&labels=important`.
 - **Time:** RFC 3339 timestamps, for example `2026-10-11T08:00:00Z`.
 - **Deletes** return an empty `200`. Deleting is permanent; there is no trash timer.
-- **Errors:** `{ name, code, message, fix }`. See [Errors and exit codes](/reference/errors).
+- **Errors:** `{ name, code, message, fix?, docs? }`. See [Errors and exit codes](/reference/errors).
 - **Scope:** for an agent, anything outside its inbox scope returns `404 not_found`, checked before permissions.
 
 In the tables, **Owner** means owner only, and a permission name means agents need that [permission](/reference/permissions); the owner may always call it.
@@ -36,14 +36,16 @@ Creating inboxes and drafts also accepts a `client_id`: repeating a create with 
 
 ## Inboxes
 
-| Route                        | Access         | Notes                                                                                                                 |
-| ---------------------------- | -------------- | --------------------------------------------------------------------------------------------------------------------- |
-| `GET /inboxes`               | `inbox_read`   | Only inboxes in scope                                                                                                 |
-| `POST /inboxes`              | `inbox_create` | `username`, `domain` (required), `display_name`, `status`, `metadata`, `client_id`. The new address must be in scope. |
-| `GET /inboxes/search?q=`     | `inbox_read`   |                                                                                                                       |
-| `GET /inboxes/{inbox_id}`    | `inbox_read`   |                                                                                                                       |
-| `PATCH /inboxes/{inbox_id}`  | `inbox_update` | `display_name`, `status` (`active`, `paused`), `metadata` (merged; `null` values remove keys)                         |
-| `DELETE /inboxes/{inbox_id}` | `inbox_delete` | Deletes the inbox and everything in it                                                                                |
+| Route                        | Access         | Notes                                                                                                                                                                |
+| ---------------------------- | -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /inboxes`               | `inbox_read`   | Only inboxes in scope                                                                                                                                                |
+| `POST /inboxes`              | `inbox_create` | Required: `domain`. Optional: `username` (16 random hex characters if omitted), `display_name`, `status`, `metadata`, `client_id`. The new address must be in scope. |
+| `GET /inboxes/search?q=`     | `inbox_read`   |                                                                                                                                                                      |
+| `GET /inboxes/{inbox_id}`    | `inbox_read`   |                                                                                                                                                                      |
+| `PATCH /inboxes/{inbox_id}`  | `inbox_update` | `display_name`, `status` (`active`, `paused`), `metadata` (merged; `null` values remove keys, `metadata: null` clears all)                                           |
+| `DELETE /inboxes/{inbox_id}` | `inbox_delete` | Deletes the inbox and everything in it                                                                                                                               |
+
+`inbot-selftest` is reserved on registered domains for verification.
 
 ## Threads
 
@@ -62,34 +64,34 @@ Each route exists inbox-scoped (`/inboxes/{inbox_id}/threads/...`) and organizat
 
 All message routes are inbox-scoped: `/inboxes/{inbox_id}/messages/...`.
 
-| Route                                                       | Access                          | Notes                                                                                     |
-| ----------------------------------------------------------- | ------------------------------- | ----------------------------------------------------------------------------------------- |
-| `GET .../messages`                                          | `message_read`                  | Thread filters plus `from`, `to`, `subject` substring matches                             |
-| `GET .../messages/search?q=`                                | `message_read`                  |                                                                                           |
-| `GET .../messages/{message_id}`                             | `message_read`                  | Includes `text`, `html`, `extracted_text`, `extracted_html`, `send_status`, `send_reason` |
-| `PATCH .../messages/{message_id}`                           | `message_update`                | `add_labels`, `remove_labels`. Outbox and delivery labels cannot be changed.              |
-| `DELETE .../messages/{message_id}`                          | `message_delete`                |                                                                                           |
-| `POST .../messages/batch-get`                               | `message_read`                  | `message_ids`, up to 500. Missing and hidden messages are omitted.                        |
-| `POST .../messages/batch-update`                            | `message_update`                | `message_ids` up to 50, `add_labels`, `remove_labels`. Removal wins over addition.        |
-| `GET .../messages/{message_id}/raw`                         | `message_read`                  | Download URL for the original MIME (`message/rfc822`)                                     |
-| `GET .../messages/{message_id}/attachments/{attachment_id}` | `message_read`                  | Attachment metadata with a download URL                                                   |
-| `POST .../messages/send`                                    | `message_send`                  | Idempotent. Returns `{ message_id, thread_id }` once queued.                              |
-| `POST .../messages/{message_id}/reply`                      | `message_reply`, `message_read` | Idempotent. `reply_all: true` includes the original To and Cc.                            |
-| `POST .../messages/{message_id}/reply-all`                  | `message_reply`, `message_read` | Idempotent                                                                                |
-| `POST .../messages/{message_id}/forward`                    | `message_send`, `message_read`  | Idempotent. Original attachments are included.                                            |
-| `POST .../messages/{message_id}/resolve`                    | Owner                           | `{ "decision": "sent" \| "failed" }`, only for `send_unknown`. Never contacts Cloudflare. |
+| Route                                                       | Access                          | Notes                                                                                                                             |
+| ----------------------------------------------------------- | ------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `GET .../messages`                                          | `message_read`                  | Pagination, time, label and hidden-label filters; `from`, `to`, `subject` substring matches. No `senders` or `recipients`.        |
+| `GET .../messages/search?q=`                                | `message_read`                  |                                                                                                                                   |
+| `GET .../messages/{message_id}`                             | `message_read`                  | Includes `text`, `html`, `extracted_text`, `extracted_html`, `send_status`, `send_reason`                                         |
+| `PATCH .../messages/{message_id}`                           | `message_update`                | `add_labels`, `remove_labels`. System state labels cannot be changed; attempting to add or remove one returns `validation_error`. |
+| `DELETE .../messages/{message_id}`                          | `message_delete`                |                                                                                                                                   |
+| `POST .../messages/batch-get`                               | `message_read`                  | `message_ids`, up to 500. Missing and hidden messages are omitted.                                                                |
+| `POST .../messages/batch-update`                            | `message_update`                | `message_ids` up to 50, `add_labels`, `remove_labels`. Removal wins over addition.                                                |
+| `GET .../messages/{message_id}/raw`                         | `message_read`                  | Download URL for the original MIME (`message/rfc822`)                                                                             |
+| `GET .../messages/{message_id}/attachments/{attachment_id}` | `message_read`                  | Attachment metadata with a download URL                                                                                           |
+| `POST .../messages/send`                                    | `message_send`                  | Idempotent. Returns `{ message_id, thread_id }` once queued.                                                                      |
+| `POST .../messages/{message_id}/reply`                      | `message_reply`, `message_read` | Idempotent. `reply_all: true` includes the original To and Cc.                                                                    |
+| `POST .../messages/{message_id}/reply-all`                  | `message_reply`, `message_read` | Idempotent                                                                                                                        |
+| `POST .../messages/{message_id}/forward`                    | `message_send`, `message_read`  | Idempotent. Original attachments are included.                                                                                    |
+| `POST .../messages/{message_id}/resolve`                    | Owner                           | `{ "decision": "sent" \| "failed" }`, only for `send_unknown`. Never contacts Cloudflare.                                         |
 
 ### Composing
 
-| Field             | Rules                                                                                                                                                                                                    |
-| ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `to`, `cc`, `bcc` | A string or a list. 1 to 50 recipients in total.                                                                                                                                                         |
-| `reply_to`        | At most one address                                                                                                                                                                                      |
-| `subject`         | At most 998 characters, no line breaks. Replies and forwards derive it.                                                                                                                                  |
-| `text`, `html`    | At least one is required                                                                                                                                                                                 |
-| `attachments`     | Up to 32, each `{ filename?, content_type?, content_disposition?, content_id?, content }` with canonical base64 `content`. Inline attachments need `content_id`. URL attachments return `not_supported`. |
-| `headers`         | Only `X-*`, `In-Reply-To`, `References` and `Auto-Submitted`; names up to 100 bytes, values up to 2048, 16 KiB in total. Replies set threading headers themselves.                                       |
-| `labels`          | Labels to add to the sent message                                                                                                                                                                        |
+| Field             | Rules                                                                                                                                                                                                                                                        |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `to`, `cc`, `bcc` | A string or a list. 1 to 50 recipients in total.                                                                                                                                                                                                             |
+| `reply_to`        | At most one address                                                                                                                                                                                                                                          |
+| `subject`         | At most 998 characters, no line breaks. Replies and forwards derive it.                                                                                                                                                                                      |
+| `text`, `html`    | At least one is required                                                                                                                                                                                                                                     |
+| `attachments`     | Up to 32, each `{ filename?, content_type?, content_disposition?, content_id?, content }` with canonical base64 `content`. Inline attachments need `content_id`. URL attachments return `not_supported`.                                                     |
+| `headers`         | Caller headers: `X-*` and `Auto-Submitted` (`no`, `auto-generated`, `auto-replied`); names up to 100 bytes, values 2048 bytes, 16 KiB total and at most 20 non-`X-` headers. `In-Reply-To` and `References` are reserved for threading; replies derive them. |
+| `labels`          | Labels to add to the sent message                                                                                                                                                                                                                            |
 
 The whole message, including attachments and encoding overhead, must stay under 5 MiB (`413 payload_too_large`). Before queueing, every recipient must pass the [send and reply lists](/guides/lists) (`403 message_rejected`), the inbox must be active (`403 inbox_paused`), and a transport must be configured (`503 service_unavailable`).
 
@@ -111,9 +113,15 @@ Inbox-scoped routes are `/inboxes/{inbox_id}/drafts/...`; listing and reading al
 | `POST /inboxes/{inbox_id}/drafts/{draft_id}/approve`    | Owner          | Idempotent. Returns `{ message_id, thread_id }`, or the draft if it stays scheduled.                                                                                                                           |
 | `POST /inboxes/{inbox_id}/drafts/{draft_id}/reject`     | Owner          | `{ "reason"? }`. Final.                                                                                                                                                                                        |
 
+System state labels are `received`, `queued`, `sent`, `send_unknown`, `failed`, `delivered`, `bounced`, `complained`, `rejected` and `deferred`. Message, thread and batch label edits that touch any of them return `validation_error` atomically; `unread` and custom labels remain editable.
+
 ## Downloads
 
-Attachment and raw message routes return a `download_url` that expires after five minutes and stops working when the service restarts. Fetching it (`GET /v0/downloads/{token}`) still requires the same kind of credential, rechecks scope and permissions, and returns the file as an attachment with `nosniff`.
+Attachment routes return attachment fields (`attachment_id`, `size` and optional filename, content type, disposition and content ID) alongside `download_url` and `expires_at`; the shared `AttachmentResponse` also declares optional `text_url`, which current handlers do not populate. Raw message routes return `{ download_url, expires_at }`.
+
+The HMAC-signed URL is a five-minute capability: fetch it (`GET /v0/downloads/{token}`) without a bearer header or cookie. Never share, log or publish it. It is bound to the issuing principal and listener origin; local and tunnel URLs cannot cross listeners, and a service restart invalidates them.
+
+Downloads recheck the issuer's activity, current permissions, inbox scope and hidden labels. Revocation or expiry of the issuing API key, OAuth access token or owner session invalidates its URL. OAuth capabilities retain their issuing audience, including `/mcp`. If a bearer is supplied, it must authenticate the issuing principal. An inactive issuer returns `401`; a missing read permission returns `403`; invalid, expired, wrong-origin, hidden or out-of-scope resources return `404`. Files are returned as attachments with `nosniff` and `no-store`.
 
 ## Allow and block lists
 

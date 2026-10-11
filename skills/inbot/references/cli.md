@@ -150,3 +150,11 @@ owner authentication, OAuth consent/protocol flows, and quarantine management
 are outside these resource commands.
 
 Owner-only local commands: `inbot quarantine list [--limit 20] [--page-token <token>] --json`, `inbot quarantine retry <quarantine_id> --json`, and `inbot quarantine delete <quarantine_id> --json`. Agent keys cannot use them. Queue metadata cannot be retried (`not_supported`); ask the owner to inspect the separately listed encrypted buffer object. Retry distinguishes `released` from another `quarantined` result; deletion is permanent and idempotent.
+
+`inbot --version` and `inbot version` print the package version without connecting.
+Use `inbot <resource> --help` for grouped command help.
+
+The local owner can edit a key with `inbot api-keys update <api_key_id>` using
+`--name`, `--permissions` and `--send-policy`. Permissions replace the set;
+scope and expiry are immutable. New web key and OAuth forms default to Full
+access with approval and no selected inboxes; CLI callers supply explicit grants.

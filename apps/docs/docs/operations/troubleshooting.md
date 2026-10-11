@@ -10,34 +10,36 @@ Every Inbot error carries a `code` and a `fix`. Start there; this page covers th
 | Symptom                                                               | Cause and fix                                                                                                                                             |
 | --------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `server.failed` with `not_initialized`                                | The home has no keys. Start once with `--init`, or check that `--home` or `INBOT_HOME` points where you expect.                                           |
-| `server.failed` with cause `KeychainError`                            | The OS keychain is locked or Inbot was denied access. Unlock it and allow access. On Linux, start a Secret Service such as GNOME Keyring in your session. |
+| `server.failed` with `keychain_unavailable`                           | The OS keychain is locked or Inbot was denied access. Unlock it and allow access. On Linux, start a Secret Service such as GNOME Keyring in your session. |
 | `keychain_entry_missing`                                              | The keychain item for this home is gone. The database cannot be opened without it.                                                                        |
 | `keys_file_corrupt` or `database_key_invalid`                         | `keys.json` is damaged or does not belong to this database. Restore both files from the same backup.                                                      |
 | `already_initialized` with `--init`                                   | `inbot.db` exists without `keys.json`. Do not delete the database; restore `keys.json`.                                                                   |
 | A source-checkout command does not see your installed instance's data | Source checkouts default to `~/.inbot-dev`, installed packages to `~/.inbot`. Pass the same `--home` or `--flavor` to both.                               |
-| The web app is not served                                             | In a source checkout, build it and pass `--web-root` with the absolute path to `apps/web/dist`.                                                           |
+| The web app is not served                                             | In a source checkout, build it and pass `--web-root` with a relative or absolute path to `apps/web/dist`.                                                 |
+
+Additional startup codes are `home_unavailable`, `key_storage_unavailable`, `database_failed` and `key_crypto_failed`; see [unlock and startup codes](/operations/service#unlock). A missing keychain entry cannot currently be recovered through a passphrase command, even if the internal error fix mentions one.
 
 ## Sign-in
 
-| Symptom                                 | Cause and fix                                                                                                                                                                                                            |
-| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `403 missing_permission` in the browser | Open `http://127.0.0.1:<port>`, not `localhost`. The service only accepts its exact host and origin.                                                                                                                     |
-| The setup code is rejected              | Each start prints a new code until setup completes. Use the code from the current run.                                                                                                                                   |
-| `429 rate_limit_exceeded`               | Failed password attempts back off for up to a minute. Wait, or restart the service to reset it.                                                                                                                          |
-| Forgotten password                      | There is no reset. From the same machine, `inbot open` prints a login link, and `POST /v0/owner/password` changes the password with the current one. Without the current password, the password cannot be changed today. |
-| `inbot open` fails                      | Password setup must be complete first, and the CLI must use the same home as the service.                                                                                                                                |
+| Symptom                                 | Cause and fix                                                                                                                                                                                                                |
+| --------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `403 missing_permission` in the browser | Open `http://127.0.0.1:<port>`, not `localhost`. The service only accepts its exact host and origin.                                                                                                                         |
+| The setup code is rejected              | Each start prints a new code until setup completes. Use the code from the current run.                                                                                                                                       |
+| `429 rate_limit_exceeded`               | Failed password attempts back off for up to a minute. Wait, or restart the service to reset it.                                                                                                                              |
+| Forgotten password                      | There is no reset. From the same machine, `inbot open` prints a login link, and `POST /v0/owner/password` changes the password with the current one. Without the current password, the password cannot be changed today.     |
+| `inbot open` fails                      | Check that the service is running and the CLI uses the same home and flavor. A login link expires after two minutes and is lost on service restart; generate a fresh one. Password setup is not required to create the link. |
 
 ## Agents and the CLI
 
-| Symptom                                                 | Cause and fix                                                                                                                                |
-| ------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| The agent stopped connecting after a restart            | With `--port 0`, the port changes on every start. Use a fixed `--port`.                                                                      |
-| `not_found` for an inbox that exists                    | It is outside the key's inbox scope, or hidden by a label the key cannot read.                                                               |
-| `missing_permission`                                    | `fix` names the permission. Owner-only routes have no permission for agents.                                                                 |
-| `approval_required`                                     | Expected for keys with the `approval` policy. Approve the draft on the Approvals page.                                                       |
-| CLI exits with code 10                                  | The service is not running, `connection.json` is from another home, or the URL is wrong. Check the service output and the `--home` you pass. |
-| CLI says `INBOT_URL` and `INBOT_API_KEY` are incomplete | Set both or neither. The CLI never falls back to owner access.                                                                               |
-| `page_token_stale`                                      | The filters changed or new mail invalidated a search. Start again without a page token.                                                      |
+| Symptom                                                 | Cause and fix                                                                                                                                                |
+| ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| The agent stopped connecting after a restart            | With `--port 0`, the port changes on every start. Use a fixed `--port`.                                                                                      |
+| `not_found` for an inbox that exists                    | The inbox is outside the key's scope. Hidden labels apply separately to messages and threads, which return `not_found` without the matching read permission. |
+| `missing_permission`                                    | `fix` names the permission. Owner-only routes have no permission for agents.                                                                                 |
+| `approval_required`                                     | Expected for keys with the `approval` policy. Approve the draft on the Approvals page.                                                                       |
+| CLI exits with code 10                                  | The service is not running, `connection.json` is from another home, or the URL is wrong. Check the service output and the `--home` you pass.                 |
+| CLI says `INBOT_URL` and `INBOT_API_KEY` are incomplete | Set both or neither. The CLI never falls back to owner access.                                                                                               |
+| `page_token_stale`                                      | The filters changed or new mail invalidated a search. Start again without a page token.                                                                      |
 
 ## Sending
 
@@ -62,11 +64,11 @@ Every Inbot error carries a `code` and a `fix`. Start there; this page covers th
 
 ## Domains
 
-| Symptom                                             | Cause and fix                                                                                                                                 |
-| --------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| Stuck in `VERIFYING`                                | Waiting for public DNS, or for the self-test message, which is retried every five minutes. Check record states.                               |
-| `FAILED` with `action_required`                     | Read `reason`. Common causes: apex mail records changed during apply, an existing routing rule for an address, or a missing token permission. |
-| `missing_permission` naming a Cloudflare permission | The token lacks it or does not cover the zone. Save a replacement token.                                                                      |
+| Symptom                                             | Cause and fix                                                                                                                                                                                        |
+| --------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Stuck in `VERIFYING`                                | Waiting for public DNS or the encrypted self-test arrival. Verification can take about ten minutes or longer; the self-test retries every five minutes. Check record states and the reported reason. |
+| `FAILED` with `action_required`                     | Read `reason`. Common causes: apex mail records changed during apply, an existing routing rule for an address, or a missing token permission.                                                        |
+| `missing_permission` naming a Cloudflare permission | The token lacks it or does not cover the zone. Save a replacement token.                                                                                                                             |
 
 ## Webhooks
 

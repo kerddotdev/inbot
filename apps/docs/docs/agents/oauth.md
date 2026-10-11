@@ -9,9 +9,11 @@ MCP clients that support OAuth can connect to Inbot without an API key. Inbot is
 
 1. The client calls `/mcp` without a credential and receives `401` with `WWW-Authenticate: Bearer resource_metadata="<origin>/.well-known/oauth-protected-resource/mcp", scope="inbot"`.
 2. It reads the protected resource and authorization server metadata, and registers itself at `/oauth/register`.
-3. It opens `/oauth/authorize` in the owner's browser. If the owner is signed out, they sign in first.
+3. It opens `/oauth/authorize` in the owner's browser. If the owner is signed out, Inbot redirects to `/login`, then returns them to the consent request after sign-in.
 4. The owner sees **Allow access to Inbot?** with the client's name and redirect host, both as declared by the client and unverified, chooses a grant, and approves or denies.
 5. The client exchanges the code at `/oauth/token` with its PKCE verifier and receives an access token and a refresh token.
+
+New consent grants default to **Full access** with **Approval**, with no inboxes selected. Select the intended inbox scope before approving; the preset includes reading, drafting and sending, while every send still needs owner approval.
 
 Consent requires the web app, so the service must run with the bundled app or `--web-root`. Without it, `/oauth/authorize` returns `not_supported`.
 
@@ -43,7 +45,7 @@ Discovery, registration, token and revocation responses allow any origin (`Acces
 
 Reusing a refresh token that was already used revokes the whole family, including its access tokens. Reusing an authorization code revokes the tokens it issued.
 
-Tokens are bound to the origin and resource they were issued for. A token for `/mcp` does not work on `/v0`, a token issued on the loopback URL does not work through the tunnel, and changing the remote access hostname invalidates tokens issued for the old one. WebSocket events and attachment downloads belong to `/v0`.
+Tokens are bound to the origin and resource they were issued for. A token for `/mcp` does not work on `/v0`, a token issued on the loopback URL does not work through the tunnel, and changing the remote access hostname invalidates tokens issued for the old one. WebSocket events and attachment metadata routes belong to `/v0`. MCP `get_attachment` can issue a signed download capability for an `/mcp` token; the URL needs no bearer, retains that token's audience, and rechecks its activity and grant. Never share the URL.
 
 ## Limits
 

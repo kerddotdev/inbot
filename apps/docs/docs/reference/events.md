@@ -38,6 +38,7 @@ Identifiers are `inbox_id`, `thread_id` and `message_id`.
 
 - A `message.received` event uses the hidden variant if the message has a hidden label, checked in the order blocked, spam, unauthenticated.
 - `message.failed` covers send failures, recipients refused by lists when the outbox rechecks them, and owner resolution of `send_unknown` (`owner_confirmed_not_sent`). Owner resolution as sent emits `message.sent` with `owner_confirmed_sent`.
+- `message.failed` also covers a provider failure report, with `failure.reason: "delivery_failed"`. Bounce and complaint payloads currently use `"unknown"` for both `type` and `sub_type`.
 - Deferred delivery, list changes and inbound list rejections produce no event.
 
 Every event is filtered by the consumer's current inbox scope and permissions at delivery time.

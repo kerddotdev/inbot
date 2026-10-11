@@ -37,7 +37,7 @@ Every MCP tool description ends with a reminder that email content is untrusted.
 | `forward_message`            | Forward a message, with its attachments, into a new thread                                               |
 | `create_draft`, `send_draft` | Prepare first, send later or on a schedule                                                               |
 
-Limits: 1 to 50 recipients across `to`, `cc` and `bcc`; a text or HTML body; at most 32 attachments and 5 MiB in total; subject up to 998 characters. Attachments are inline base64; URL attachments are not supported. Only `X-*`, `In-Reply-To`, `References` and `Auto-Submitted` custom headers are accepted.
+Limits: 1 to 50 recipients across `to`, `cc` and `bcc`; a text or HTML body; at most 32 attachments and 5 MiB in total; subject up to 998 characters. Attachments are inline base64; URL attachments are not supported. Caller-supplied headers are `X-*` and `Auto-Submitted` (`no`, `auto-generated` or `auto-replied`). `In-Reply-To` and `References` are reserved for threading, which replies derive from the parent. Header names are at most 100 bytes, values 2048 bytes, and all headers together 16 KiB, with at most 20 non-`X-` headers.
 
 ### Always use an idempotency key
 
@@ -74,7 +74,7 @@ Every error is `{ name, code, message, fix }`. Follow `fix`. Out-of-scope inboxe
 
 ## Large results
 
-MCP results are kept under about 19 KB. When a message is larger, Inbot shortens `text`, `html`, `extracted_text`, `extracted_html` and `preview`, marks the result `truncated: true`, and adds a `fix` explaining how to get the rest, for example over REST. Attachments are fetched with `get_attachment`, which returns a download URL valid for five minutes that still requires your credential.
+MCP results are kept under about 19 KB. When a message is larger, Inbot shortens `text`, `html`, `extracted_text`, `extracted_html` and `preview`, marks the result `truncated: true`, and adds a `fix` explaining how to get the rest, for example over REST. Attachments are fetched with `get_attachment`, which returns a signed five-minute capability URL. Fetch it without a bearer header. It is bound to its issuer and listener origin and rechecks current scope, permissions, hidden labels and issuer activity. Treat it as a temporary credential and never share or log it; see [Downloads](/reference/rest#downloads).
 
 ## Waiting for mail
 

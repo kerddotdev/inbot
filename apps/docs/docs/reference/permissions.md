@@ -69,4 +69,6 @@ No permission grants these. They require the owner's bearer token or browser ses
 - OAuth client and grant management
 - `domain.verified` and `oauth.*` events
 
+Owner sign-in, session/password management, draft approval and OAuth consent are reachable through the tunnel with a browser session. Domains, keys, transport, remote configuration, login links, rejected-mail records, OAuth management and unknown-send resolution remain local. Local owner bearer tokens never work over the tunnel.
+
 The owner always sends directly, regardless of any policy.

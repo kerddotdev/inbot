@@ -27,7 +27,7 @@ The delivery events Queue is the one exception to ciphertext-only storage: Cloud
 - **Inbound buffer.** age v1 with X25519. The Worker holds only your instance's public key. The private key lives in your encrypted database.
 - **Database.** SQLite encrypted with ChaCha20 (SQLite3 Multiple Ciphers) under a random 256-bit key (the DEK). The database holds raw mail, attachments, the Cloudflare token, the tunnel token, password and key hashes, drafts and the event log.
 - **Key wrapping.** The DEK is wrapped with AES-256-GCM by a key stored in your OS keychain, and the wrapped form is stored in `keys.json`. Neither file is usable without the other and the keychain item.
-- **Home directory.** Mode `0700`, secret files `0600`, written atomically.
+- **Home directory.** Mode `0700`, secret files `0600`, written atomically on Unix. Windows protection relies on the directory access control list.
 
 ## Owners and agents
 
@@ -37,7 +37,7 @@ There are two kinds of principal, and the boundary between them is enforced by t
 
 **Agents** authenticate with API keys or OAuth access tokens. Each maps to a grant: an inbox scope, an explicit permission list and a send policy. The current grant is read on every request, so revocation and permission changes apply immediately.
 
-Owner-only capabilities have no agent permission at all: domains, API keys, the mail transport, remote access, owner sessions and passwords, login links, draft approval and rejection, `send_unknown` resolution, rejected-mail records and OAuth management. None of them is an MCP tool, and none is reachable through the tunnel.
+Owner-only capabilities have no agent permission at all: domains, API keys, the mail transport, remote access, owner sessions and passwords, login links, draft approval and rejection, `send_unknown` resolution, rejected-mail records and OAuth management. None of them is an MCP tool. The tunnel allows owner browser sign-in, session and password management, draft approval and rejection, and OAuth consent. Domains, keys, transport, remote configuration, login links, rejected-mail records, OAuth management and `send_unknown` resolution stay local; the local owner bearer is always rejected over the tunnel.
 
 Out-of-scope resources return `not_found`, identical to missing ones, so a key cannot probe for other inboxes. Messages with hidden labels (`spam`, `blocked`, `unauthenticated`, `trash`) are invisible unless the grant includes the matching `label_*_read` permission.
 
@@ -54,16 +54,16 @@ What Inbot does not do: detect prompt injection, mark or wrap message bodies in 
 
 ## Credentials
 
-| Credential       | Storage and handling                                                                                                                                         |
-| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| API keys         | Shown once. Only a SHA-256 hash is stored; compared in constant time. Optional expiry.                                                                       |
-| OAuth tokens     | Opaque, stored as hashes. Access tokens last five minutes and are bound to one origin and resource.                                                          |
-| Owner password   | Argon2id. Failed sign-ins back off from one second to a minute.                                                                                              |
-| Owner sessions   | 32 random bytes, stored as a hash. `HttpOnly`, `SameSite=Strict` cookie; `Secure` and `__Host-` prefixed over HTTPS. CSRF token required on unsafe requests. |
-| Setup code       | Printed to stdout, held only as a hash in memory, single use                                                                                                 |
-| Login links      | Single use, two minutes, in memory, created only with the owner bearer token                                                                                 |
-| Webhook secrets  | Shown once at creation                                                                                                                                       |
-| Cloudflare token | Encrypted in the database, never returned by the API or shown again                                                                                          |
+| Credential       | Storage and handling                                                                                                                                                                                            |
+| ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| API keys         | Shown once. Only a SHA-256 hash is stored; compared in constant time. Optional expiry.                                                                                                                          |
+| OAuth tokens     | Opaque, stored as hashes. Access tokens last five minutes and are bound to one origin and resource.                                                                                                             |
+| Owner password   | Argon2id. Failed sign-ins back off from one second to a minute.                                                                                                                                                 |
+| Owner sessions   | 32 random bytes, stored as a hash. 14-day sliding lifetime, 30-day absolute lifetime. `HttpOnly`, `SameSite=Strict` cookie; `Secure` and `__Host-` prefixed over HTTPS. CSRF token required on unsafe requests. |
+| Setup code       | Printed to stdout, held only as a hash in memory, single use                                                                                                                                                    |
+| Login links      | Single use, two minutes, in memory, created only with the owner bearer token                                                                                                                                    |
+| Webhook secrets  | Shown once at creation                                                                                                                                                                                          |
+| Cloudflare token | Encrypted in the database, never returned by the API or shown again                                                                                                                                             |
 
 Message content, credentials and keys are never written to logs.
 
@@ -71,7 +71,7 @@ Message content, credentials and keys are never written to logs.
 
 - The service listens on `127.0.0.1` only and accepts only its exact `Host`, which blocks DNS rebinding. Requests from a foreign browser `Origin` are rejected.
 - API responses are not cached. The web app is served with a restrictive Content Security Policy, `frame-ancestors 'none'` and `no-referrer`.
-- Attachment and raw message downloads use signed URLs valid for five minutes that still require the credential, and are served as downloads with `nosniff`.
+- Attachment and raw message downloads use signed five-minute capability URLs and need no bearer or cookie. They are bound to the issuer and listener origin and recheck current permissions, inbox scope, hidden labels and issuer activity. A supplied bearer must authenticate the issuer. Never share or log these URLs. Restarting the service invalidates them; files are served as downloads with `nosniff` and `no-store`.
 - Webhooks only reach public HTTPS addresses, checked on every attempt, except owner webhooks to loopback.
 - Remote access uses a separate listener with a fixed route allowlist. See [Remote access](/guides/remote-access#what-is-reachable).
 

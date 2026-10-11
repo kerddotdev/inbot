@@ -25,7 +25,7 @@ Reply, reply-all, and forward also need `message_read` and a parent message you 
 - Forwards include an original-message section and the original attachments. Bcc is not shown in the forwarded summary.
 - Threading follows `Message-ID`, `In-Reply-To`, and `References`. Never change subjects to try to join threads. Replies thread automatically. Replies to your own outgoing message require that message to have been accepted by the provider (state `sent`); until then the reply is rejected.
 - Attachments: `content` is canonical base64, with `filename`, `content_type`, `content_disposition` (`inline` or `attachment`), and `content_id` (required for `inline`). `url` attachments fail with `not_supported`.
-- Custom `headers`: only `X-*`, `In-Reply-To`, `References`, and `Auto-Submitted`. Header names are case-insensitive and cannot repeat, names are at most 100 bytes, values at most 2048 bytes, total at most 16 KiB, and at most 20 non-`X-` fields. Replies set their own threading headers. Send and forward refuse threading headers. Line breaks in subject, addresses, or headers are refused.
+- Custom `headers`: caller-supplied fields are `X-*` and `Auto-Submitted` (`no`, `auto-generated`, `auto-replied`). `In-Reply-To` and `References` are reserved for threading. Header names are case-insensitive and cannot repeat, names are at most 100 bytes, values at most 2048 bytes, total at most 16 KiB, and at most 20 non-`X-` fields. Replies set their own threading headers. Send and forward refuse threading headers. Line breaks in subject, addresses, or headers are refused.
 - Do not set system labels yourself. `received`, `queued`, `sent`, `send_unknown`, `failed`, and delivery labels are managed by the service and caller-supplied ones are dropped. Other custom labels in `labels` are kept through state changes.
 
 ## Limits
@@ -38,7 +38,7 @@ Reply, reply-all, and forward also need `message_read` and a parent message you 
 | Idempotency key            | 1-256 characters of `A-Za-z0-9._~-`                              |
 | Inbound raw size           | 25 MiB (inbound only)                                            |
 
-Exceeding them fails before anything is saved: `validation_error` (recipients, attachments, headers) or `payload_too_large` (size). The size check is deliberately conservative and can refuse a message a provider would accept. Shrink attachments rather than retrying.
+The inbound limit causes SMTP rejection or quarantine, not an API response. Exceeding outbound limits fails before anything is saved: `validation_error` (recipients, attachments, headers) or `payload_too_large` (size). The size check is deliberately conservative and can refuse a message a provider would accept. Shrink attachments rather than retrying.
 
 System state labels (`received`, `queued`, `sent`, `send_unknown`, `failed`, `delivered`, `bounced`, `complained`, `rejected`, `deferred`) are protected on every message, including messages without an outbox entry. Message, thread, and batch label edits that add or remove any of them return `validation_error` with a fix and make no changes. Custom labels and `unread` remain editable.
 

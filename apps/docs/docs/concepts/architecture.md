@@ -20,7 +20,7 @@ Outbound
 
 Background loops send mail, pull inbound mail and delivery events, apply routing, check domain verification, send scheduled drafts, deliver webhooks and supervise the tunnel. They are listed in [Running the service](/operations/service#background-loops).
 
-The machine only makes outbound connections to Cloudflare. Nothing on the internet connects to it, unless you enable [remote access](/guides/remote-access).
+Mail transport connections go outbound to Cloudflare. Enabled webhooks also connect to their receivers, and enabling remote access downloads the pinned connector from GitHub. Remote access adds a second guarded loopback listener behind the tunnel; it does not bind a public interface on your machine.
 
 ## Inbound
 

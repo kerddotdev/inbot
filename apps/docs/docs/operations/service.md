@@ -23,7 +23,7 @@ The service prints one JSON line per event to stdout:
 | `{"event":"owner.setup_required","code":"..."}`          | No owner password exists yet. The code is single-use, held only in memory, and changes on every restart until setup is done. |
 | `{"event":"server.ready","url":"http://127.0.0.1:8025"}` | The database is unlocked and the API is serving.                                                                             |
 
-If startup fails, it prints `{"event":"server.failed","code":"service_unavailable","cause":"...","message":"...","fix":"..."}` to stderr and exits with code 1. `cause` names the failing component, such as `KeychainError`. [Troubleshooting](/operations/troubleshooting#startup) lists the common causes.
+If startup fails, it prints `{"event":"server.failed","code":"<stable code>","cause":"...","message":"...","fix":"..."}` to stderr and exits with code 1. Known home, key, keychain, connection and database errors preserve their specific code and recovery fix. Unknown failures use `service_unavailable` with `cause: "UnexpectedError"`; raw error details are not printed. [Troubleshooting](/operations/troubleshooting#startup) lists the common causes.
 
 On every start the service also writes `connection.json` into the home: the loopback URL and a fresh owner bearer token. The `inbot` CLI on the same machine reads it to act as the owner. Treat it as a secret.
 
@@ -39,9 +39,11 @@ The database key (DEK) is random and never stored in plaintext. On `--init`, Inb
 | Keychain item deleted            | `keychain_entry_missing`. The database cannot be opened.                          |
 | `keys.json` damaged or wrong key | `keys_file_corrupt` or `database_key_invalid`.                                    |
 
+Other startup codes include `home_unavailable` and `key_storage_unavailable` (home permissions or disk space), `database_failed` (database access or schema), and `key_crypto_failed` (runtime or memory). Key manager state failures include `method_not_configured`, `invalid_configuration`, `locked`, `last_unlock_method` and `invalid_passphrase`; these describe internal key-method state, not supported passphrase startup commands. Connection-file failures use `service_unavailable` with `cause: "ConnectionError"`. Follow the returned fix where the public interface supports it.
+
 The service only starts serving after a successful unlock, so a running service is never locked. `GET /v0/owner/status` reports `"locked": false`, and the web app's locked screen exists for the contract's `locked` state.
 
-A passphrase can wrap the key as a second unlock method in the key format, but no command, route or screen uses it yet. Headless passphrase startup is planned.
+The internal key manager can wrap the key with a passphrase, but `serve` has no passphrase option and no command, route or screen exposes passphrase unlock. Even if `keychain_entry_missing` suggests passphrase recovery in its fix, that recovery is not available through the current user interfaces.
 
 ## Stop
 
@@ -69,16 +71,16 @@ There is no log file and there are no log levels. stdout and stderr carry only t
 
 All loops start after unlock and stop with the service.
 
-| Loop              | What it does                                             | Timing                                                                        |
-| ----------------- | -------------------------------------------------------- | ----------------------------------------------------------------------------- |
-| Outbox            | Sends queued mail through Cloudflare                     | Every 2 s while busy, 30 s when idle or when no transport is configured       |
-| Inbound pull      | Fetches and decrypts new mail from the Cloudflare buffer | Every 2 s while busy, 30 s when idle                                          |
-| Inbound reconcile | Lists the buffer for anything the Queue missed           | At startup, then every 15 minutes                                             |
-| Delivery events   | Applies delivery, bounce and complaint reports           | Every 2 s while busy, 30 s when idle                                          |
-| Scheduled drafts  | Sends approved drafts whose `send_at` has passed         | Every 2 s while busy, 30 s when idle; overdue drafts are sent after an outage |
-| Provisioning      | Applies inbox routing and checks domain verification     | Every 10 s, with a full routing reconcile every 5 minutes                     |
-| Webhooks          | Delivers signed events                                   | Every second                                                                  |
-| Remote access     | Supervises the tunnel connector                          | Every second, restarting with backoff up to 60 s                              |
+| Loop              | What it does                                             | Timing                                                                                                                                                       |
+| ----------------- | -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Outbox            | Sends queued mail through Cloudflare                     | Wakes immediately after enqueue or approval; 2 s after work and 30 s idle/unconfigured are recovery checks                                                   |
+| Inbound pull      | Fetches and decrypts new mail from the Cloudflare buffer | Every 2 s while busy, 30 s when idle                                                                                                                         |
+| Inbound reconcile | Lists the buffer for anything the Queue missed           | At startup, then every 15 minutes                                                                                                                            |
+| Delivery events   | Applies delivery, bounce and complaint reports           | Every 2 s while busy, 30 s when idle                                                                                                                         |
+| Scheduled drafts  | Sends approved drafts whose `send_at` has passed         | Wakes on creation, editing or approval; waits until the next due time, with 30 s idle/2 s after-work recovery caps. Processes overdue drafts after an outage |
+| Provisioning      | Applies inbox routing and checks domain verification     | Every 10 s, with a full routing reconcile every 5 minutes                                                                                                    |
+| Webhooks          | Delivers signed events                                   | Every second                                                                                                                                                 |
+| Remote access     | Supervises the tunnel connector                          | Every second, restarting with backoff up to 60 s                                                                                                             |
 
 If a loop crashes, the service stops rather than running partially.
 

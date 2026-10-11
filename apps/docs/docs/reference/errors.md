@@ -14,6 +14,8 @@ Every REST and MCP error has the same shape:
 }
 ```
 
+Errors may also carry an optional `docs` link; the contract permits an omitted `fix`, while service errors provide an actionable fix.
+
 `code` is stable; `message` and `fix` are for people and agents to read. Follow `fix`. OAuth endpoints are the exception: they use the OAuth format, `{ error, error_description }`.
 
 A `401` response also carries `WWW-Authenticate: Bearer resource_metadata="<origin>/.well-known/oauth-protected-resource/...", scope="inbot"`, which OAuth-capable clients use to start authorization.
@@ -34,11 +36,13 @@ A `401` response also carries `WWW-Authenticate: Bearer resource_metadata="<orig
 | `idempotency_conflict` | 409  | The idempotency key was used with a different payload                                                                                          |
 | `page_token_stale`     | 409  | The page token does not match the query; restart without it                                                                                    |
 | `action_required`      | 409  | The owner must act first, for example choose an account, tear down a domain, or fix DNS                                                        |
-| `payload_too_large`    | 413  | The message exceeds 5 MiB, or an inbound message exceeds 25 MiB                                                                                |
+| `payload_too_large`    | 413  | The composed outbound message exceeds 5 MiB                                                                                                    |
 | `locked`               | 423  | The database is locked. The current service only serves after unlocking, so this is not returned in practice.                                  |
 | `rate_limit_exceeded`  | 429  | Too many password attempts or pending login links                                                                                              |
 | `not_supported`        | 501  | URL attachments, OAuth consent without the web app, or another unsupported option                                                              |
 | `service_unavailable`  | 503  | Storage failure, unexpected error, or no mail transport configured                                                                             |
+
+The inbound 25 MiB limit is an SMTP rejection or a quarantine reason, not an API `413` response.
 
 The contract also declares `permission_escalation`, `limit_exceeded` and `domain_not_verified` (403). The first two are not currently returned. `domain_not_verified` can appear as a failed message's `send_reason` when Cloudflare refuses the sender, rather than as a response to the send request.
 

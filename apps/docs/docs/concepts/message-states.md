@@ -49,6 +49,8 @@ Labels are free-form strings. A thread's labels are the union of its messages' l
 | `spam`, `blocked`, `trash`                                   | You or an agent. Inbot never sets them automatically.            |
 | Anything else                                                | You or an agent, with `add_labels` and `remove_labels`           |
 
+System state labels (`received`, `queued`, `sent`, `send_unknown`, `failed`, `delivered`, `bounced`, `complained`, `rejected`, `deferred`) are protected on every message, even without an outbox entry. Message, thread and batch edits that add or remove any of them return `validation_error` and make no changes. Custom labels and `unread` remain editable.
+
 Mark mail as handled by removing `unread`.
 
 ### Hidden labels
@@ -57,4 +59,4 @@ Mark mail as handled by removing `unread`.
 
 ## Events
 
-Each state change also produces an event: `message.received` (or `.spam`, `.blocked`, `.unauthenticated` for hidden mail), `message.sent`, `message.send_unknown`, `message.delivered`, `message.bounced`, `message.complained`, `message.rejected` and `message.failed`. Deferral produces no event. See [Events](/reference/events).
+Each state change also produces an event: `message.received` (or `.spam`, `.blocked`, `.unauthenticated` for hidden mail), `message.sent`, `message.send_unknown`, `message.delivered`, `message.bounced`, `message.complained`, `message.rejected` and `message.failed`. `message.failed` also comes from a provider failure report with `failure.reason: "delivery_failed"`, without changing the send status. Deferral produces no event. See [Events](/reference/events).
