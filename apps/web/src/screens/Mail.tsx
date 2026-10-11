@@ -1,3 +1,4 @@
+import { hasQuotedText } from "../mail-text";
 import { useRef, useState, type FormEvent } from "react";
 import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import type { ThreadItem } from "@inbot/contracts/src/threads.js";
@@ -193,9 +194,7 @@ function MessageView({ message }: { message: Message }) {
           {message.send_reason ? `Reason: ${message.send_reason}.` : "The send permanently failed."}
         </p>
       ) : null}
-      {message.extracted_text !== undefined &&
-      message.text &&
-      message.text !== message.extracted_text ? (
+      {hasQuotedText(message.text, message.extracted_text) ? (
         <Disclosure label="Show quoted text">
           <blockquote className="mt-2 whitespace-pre-wrap border-l border-line pl-3.5 font-serif text-[15px] leading-[1.55] text-ink2">
             {message.text}
