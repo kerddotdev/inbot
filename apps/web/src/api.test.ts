@@ -78,6 +78,64 @@ test.each([
     client.createInbox({ username: "agent", domain: "example.test" }).catch(errorText),
   ).resolves.toBe(`${wire.message} ${wire.fix}`);
 });
+test.each(["message", "draft"] as const)(
+  "%s attachment downloads use encoded routes, owner cookies, and safe binary responses",
+  async (kind) => {
+    const metadata = {
+      attachment_id: "file/a",
+      filename: "sample.html",
+      size: 12,
+      download_url: "https://inbot.example.test/v0/downloads/signed.ticket",
+      expires_at: stamp,
+    };
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(json(metadata))
+      .mockResolvedValueOnce(
+        new Response("<p>file</p>", {
+          headers: { "Content-Disposition": "attachment", "Content-Type": "text/html" },
+        }),
+      )
+      .mockResolvedValueOnce(json(metadata))
+      .mockResolvedValueOnce(
+        json(
+          {
+            name: "InbotError",
+            code: "locked",
+            message: "Storage is locked.",
+            fix: "Unlock Inbot.",
+          },
+          { status: 423 },
+        ),
+      )
+      .mockResolvedValueOnce(json(metadata))
+      .mockResolvedValueOnce(new Response("<html>Login</html>"));
+    const client = new ApiClient(fetcher);
+    const load = () =>
+      kind === "message"
+        ? client.messageAttachment(
+            { inbox_id: "agent+test@example.test", message_id: "<message/a>" },
+            "file/a",
+          )
+        : client.draftAttachment(
+            { inbox_id: "agent+test@example.test", draft_id: "draft/a" },
+            "file/a",
+          );
+    expect(await (await load()).text()).toBe("<p>file</p>");
+    expect(fetcher.mock.calls[0]?.[0]).toBe(
+      `/v0/inboxes/agent%2Btest%40example.test/${kind === "message" ? "messages/%3Cmessage%2Fa%3E" : "drafts/draft%2Fa"}/attachments/file%2Fa`,
+    );
+    expect(fetcher.mock.calls[1]).toEqual([
+      "/v0/downloads/signed.ticket",
+      { method: "GET", credentials: "same-origin", cache: "no-store" },
+    ]);
+    const listener = vi.fn();
+    client.subscribeSession(listener);
+    await expect(load()).rejects.toMatchObject({ code: "locked", fix: "Unlock Inbot." });
+    expect(listener).toHaveBeenCalledExactlyOnceWith("locked");
+    await expect(load()).rejects.toMatchObject({ code: "service_unavailable" });
+  },
+);
 
 test("restores CSRF from status, attaches it to unsafe requests, and clears it on logout", async () => {
   const fetcher = vi
