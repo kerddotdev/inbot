@@ -43,6 +43,9 @@ validated registered callback.
   the UI to navigate. These two POSTs require an owner browser session, exact
   server Origin and CSRF. Owner bearer credentials and agent tokens cannot consent.
   The consent body and its grant use strict decoding; unknown fields are rejected.
+  The owner UI defaults new consent to Full access with `approval`: sends have the
+  required permissions but wait for owner approval. Inbox selection is explicit;
+  existing grants retain their permissions and policy.
 - `POST /oauth/token` accepts `authorization_code` with `code_verifier`, or
   `refresh_token`. Both require `client_id` and `resource`. Code exchange additionally
   binds to the exact `redirect_uri` used at authorization, including its chosen port.

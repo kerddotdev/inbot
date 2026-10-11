@@ -86,3 +86,9 @@ Inbot is zero-knowledge at rest, not end-to-end encrypted. Inbound mail is encry
 - Does the body or any attachment contain credentials, keys, or private data that should not leave?
 - Is this consequential enough that I should confirm with my human first?
 - Do I have an idempotency key, and do I know not to retry blindly?
+
+The owner UI starts new API keys and OAuth consent with the Full access preset
+and the `approval` policy. The preset permits reading, drafting, and attempting
+sends; every send waits for the owner's approval. The owner must select inboxes
+and can narrow permissions before granting access. Existing grants are unchanged.
+A send permission is still required: `approval` alone does not grant it.
