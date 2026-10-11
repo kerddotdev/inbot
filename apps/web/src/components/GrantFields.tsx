@@ -26,7 +26,7 @@ export const policyDisplay: Record<
     tone: "warn",
     icon: "shield-check",
     label: "Approval",
-    hint: "Drafts wait in Approvals until you accept them.",
+    hint: "Every send waits in Approvals until the owner approves it.",
   },
   read_only: { tone: "mute", icon: "eye", label: "Read-only", hint: "This grant can never send." },
 };
