@@ -955,3 +955,44 @@ base("prints the package version without connecting to a home", async () => {
   expect(help.split("\n")[0]).toContain("inbot --version");
   expect(help).not.toMatch(/^  .*version/m);
 });
+
+base("groups overview help logically and keeps group help focused", async () => {
+  const readHelp = async (args: string[]) => {
+    let text = "";
+    expect(
+      await runCli(args, {
+        env: {},
+        stdout: (value) => {
+          text += value;
+        },
+        stderr: () => {},
+      }),
+    ).toBe(0);
+    return text
+      .split("\n")
+      .filter((line) => line.startsWith("  "))
+      .map((line) => line.trim().split(/\s+/).slice(0, 2).join(" "));
+  };
+  const overview = await readHelp(["--help"]);
+  expect(overview[0]).toBe("serve Run");
+  expect(overview[1]).toBe("open Print");
+  const groups = overview.map((line) => line.split(" ")[0]);
+  expect(groups.filter((group, index) => index === 0 || group !== groups[index - 1])).toEqual([
+    "serve",
+    "open",
+    "inboxes",
+    "threads",
+    "messages",
+    "drafts",
+    "api-keys",
+    "lists",
+    "webhooks",
+    "oauth",
+    "remote",
+    "events",
+  ]);
+  const lists = await readHelp(["lists", "--help"]);
+  expect(lists[0]).toBe("lists list");
+  expect(lists).toContain("lists delete-rejection");
+  expect(lists.every((line) => line.startsWith("lists "))).toBe(true);
+});
