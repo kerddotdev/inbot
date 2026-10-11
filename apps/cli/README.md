@@ -80,6 +80,8 @@ intentional retry is a new send with a new idempotency key.
 
 ## Commands
 
+`inbot --version` and `inbot version` print the package version without connecting to a server.
+
 Every command accepts `--help`; `inbot --help` lists all commands. Global options
 are `--home <directory>`, `--flavor development|production`, and `--json`.
 Place the command first, or precede it with global options. Addresses and IDs are
