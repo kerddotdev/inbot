@@ -199,6 +199,13 @@ function DomainView({
   });
   const busy = useIsMutating({ mutationKey: ["domain-operation", id] }) > 0;
   const status = domainDisplay[domain.status];
+  const applied = domain.status === "VERIFYING" || domain.status === "VERIFIED";
+  const lead =
+    domain.status === "VERIFIED"
+      ? "DNS records and encrypted mail delivery are verified."
+      : domain.status === "VERIFYING"
+        ? "DNS records were applied automatically via Cloudflare. Verification is in progress."
+        : "Apply these records via Cloudflare so agents can receive and send mail.";
   const actionRequired =
     operation.error instanceof ApiError && operation.error.code === "action_required";
   const records = plan.data?.records ?? domain.records;
@@ -207,7 +214,7 @@ function DomainView({
     <Page
       barTitle="Domains"
       title={domain.domain}
-      lead={`Add these records at your DNS provider so agents can receive and send mail. ${validCount} of ${records.length} are valid.`}
+      lead={`${lead} ${validCount} of ${records.length} are valid.`}
     >
       <div className="mb-4" role="status" aria-live="polite">
         <Status tone={status.tone} icon={status.icon} small={false}>
@@ -242,7 +249,7 @@ function DomainView({
           Preview plan
         </Button>
         <Button
-          variant="primary"
+          variant={applied ? "default" : "primary"}
           icon="cloud"
           disabled={busy || !!confirm}
           onClick={() => operation.mutate("apply")}
@@ -269,14 +276,16 @@ function DomainView({
         <div className="mt-5">
           <h2 className="font-semibold">Provisioning preview</h2>
           <ul className="mt-2 space-y-2">
-            {plan.data.warnings.map((warning, index) => (
-              <li key={index}>
-                <Status tone="warn" icon="alert">
-                  Warning
-                </Status>
-                <p className="mt-1 text-ink2">{warning}</p>
-              </li>
-            ))}
+            {plan.data.warnings
+              .filter((warning) => warning !== domain.reason)
+              .map((warning, index) => (
+                <li key={index}>
+                  <Status tone="warn" icon="alert">
+                    Warning
+                  </Status>
+                  <p className="mt-1 text-ink2">{warning}</p>
+                </li>
+              ))}
           </ul>
           <Disclosure label="Provisioning steps">
             <ol className="mt-2 list-inside list-decimal space-y-1 text-ink2">
