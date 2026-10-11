@@ -9,6 +9,88 @@ import { fixture } from "./test-fixture.js";
 
 const signal = () => new AbortController().signal;
 
+test("browser inbox management creates, renames, pauses, resumes, and permanently deletes synthetic mail", async () => {
+  const home = await mkdtemp(join(tmpdir(), "inbot-web-inboxes-"));
+  let server: Awaited<ReturnType<typeof fixture>> | undefined;
+  try {
+    server = await fixture(home);
+    const api = server;
+    let cookie = "";
+    const browserFetch: typeof fetch = async (path, options) => {
+      const headers = new Headers(options?.headers);
+      headers.set("Origin", api.url);
+      if (cookie) headers.set("Cookie", cookie);
+      const response = await fetch(`${api.url}${String(path)}`, { ...options, headers });
+      const next = response.headers.get("set-cookie");
+      if (next !== null) cookie = next.split(";")[0] ?? "";
+      return response;
+    };
+    const client = new ApiClient(browserFetch);
+    if (!api.setupCode) throw new Error("Expected a setup code");
+    await client.authenticate({ code: api.setupCode, password: "synthetic inbox password" });
+    const inbox = await client.createInbox({
+      username: "browser+mail",
+      domain: "example.test",
+      display_name: "Browser agent",
+    });
+    expect(inbox).toMatchObject({ inbox_id: "browser+mail@example.test", status: "active" });
+    await expect(
+      client.createInbox({ username: "browser+mail", domain: "example.test" }),
+    ).rejects.toMatchObject({ code: "already_exists", fix: expect.any(String) });
+    const message = await api.run(
+      api.mailbox.insertMessage({
+        inbox_id: inbox.inbox_id,
+        message_id: "<synthetic-browser-message@example.test>",
+        direction: "received",
+        from: "sender@example.test",
+        to: [inbox.email],
+        subject: "Synthetic inbox mail",
+        text: "Synthetic body",
+        timestamp: "2026-10-11T12:00:00Z",
+        raw: Buffer.from(
+          "From: sender@example.test\r\nTo: browser+mail@example.test\r\nSubject: Synthetic inbox mail\r\n\r\nSynthetic body",
+        ),
+      }),
+    );
+    expect(
+      await client.updateInbox(inbox.inbox_id, { display_name: "Renamed", status: "paused" }),
+    ).toMatchObject({ display_name: "Renamed", status: "paused" });
+    expect(
+      (await client.thread(inbox.inbox_id, message.thread_id, null, signal())).messages,
+    ).toHaveLength(1);
+    await client.configureTransport({
+      account_id: "a".repeat(32),
+      api_token: "synthetic-web-token",
+    });
+    await expect(
+      client.send(
+        inbox.inbox_id,
+        { to: "recipient@example.test", text: "Synthetic" },
+        "paused-inbox",
+      ),
+    ).rejects.toMatchObject({
+      code: "inbox_paused",
+      fix: "Resume the inbox before enqueueing mail.",
+    });
+    expect(
+      await client.updateInbox(inbox.inbox_id, { display_name: "", status: "active" }),
+    ).toMatchObject({ display_name: "", status: "active" });
+    await client.deleteInbox(inbox.inbox_id);
+    expect((await client.inboxes(signal())).some((item) => item.inbox_id === inbox.inbox_id)).toBe(
+      false,
+    );
+    await expect(
+      client.thread(inbox.inbox_id, message.thread_id, null, signal()),
+    ).rejects.toMatchObject({ code: "not_found" });
+    await client.createInbox({ username: "browser+mail", domain: "example.test" });
+    expect((await client.threads(inbox.inbox_id, null, signal())).threads).toEqual([]);
+    await client.deleteInbox(inbox.inbox_id);
+  } finally {
+    await server?.close();
+    await rm(home, { recursive: true, force: true });
+  }
+});
+
 test("browser client uses real owner sessions for mail, keys, approvals, transport, and scheduled results", async () => {
   const home = await mkdtemp(join(tmpdir(), "inbot-web-client-"));
   let server: Awaited<ReturnType<typeof fixture>> | undefined;
