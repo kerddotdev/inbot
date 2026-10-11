@@ -3,7 +3,8 @@ import { useRef, useState, type FormEvent } from "react";
 import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import type { ThreadItem } from "@inbot/contracts/src/threads.js";
 import type { Message } from "@inbot/contracts/src/messages.js";
-import { Icon, type IconName } from "../icons";
+import { type IconName } from "../icons";
+import { AttachmentDownload } from "../components/AttachmentDownload";
 import { api } from "../api";
 import { links, navigate } from "../router";
 import { ErrorNotice, LoadError } from "../feedback";
@@ -137,13 +138,11 @@ function MessageView({ message }: { message: Message }) {
         </Disclosure>
       ) : null}
       {message.attachments?.map((attachment) => (
-        <div key={attachment.attachment_id} className="mt-3 flex items-center gap-2.5 py-1.5">
-          <Icon name="file" />
-          <span>
-            {attachment.filename ?? "Attachment"}{" "}
-            <small className="text-ink2">{Math.ceil(attachment.size / 1024)} KB</small>
-          </span>
-        </div>
+        <AttachmentDownload
+          key={attachment.attachment_id}
+          attachment={attachment}
+          download={() => api.messageAttachment(message, attachment.attachment_id)}
+        />
       ))}
       {status ? (
         <div className="mt-2.5 flex flex-wrap items-center gap-[18px] text-[12.5px]">

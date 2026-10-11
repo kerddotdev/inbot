@@ -26,6 +26,8 @@ Implemented screens:
   refreshes related lists, and selects a remaining inbox or returns to the empty view.
   Pending operations disable controls; validation and duplicate-address errors
   show the server's message and fix. These actions use the existing inbox endpoints.
+  Message and draft attachments download as files through signed download URLs;
+  they are never rendered inline.
 - API key listing, creation with inbox scope, explicit permissions and send policy,
   one-time secret display, and revocation. Key secrets are not cached or persisted.
 - Pending approval listing across all draft pages, draft review, approval, and
