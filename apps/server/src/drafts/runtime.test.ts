@@ -91,3 +91,51 @@ test("serve starts a scheduler alongside the outbox loop", async ({ api }) => {
   const exit = await api.run(Fiber.await(server.scheduler));
   expect(Exit.isFailure(exit) && Cause.hasInterrupts(exit.cause)).toBe(true);
 });
+
+test("new and updated schedules wake the scheduler and send at their due time", async ({ api }) => {
+  await api.run(api.transport.set({ account_id: "fake", api_token: "fake" }));
+  const clock = await api.run(TestClock.make());
+  await api.run(clock.setTime(Date.parse("2026-10-10T12:00:00Z")));
+  const sleeps = await api.run(Queue.unbounded<number>());
+  const observed: Clock.Clock = {
+    ...clock,
+    sleep: (duration) =>
+      Effect.andThen(Queue.offer(sleeps, Duration.toMillis(duration)), clock.sleep(duration)),
+  };
+  const run = <A, E>(effect: Effect.Effect<A, E>) =>
+    api.run(effect.pipe(Effect.provideService(Clock.Clock, observed)));
+  const sleep = () => api.run(Queue.take(sleeps).pipe(Effect.timeout("3 seconds")));
+  const server = await api.start(api.outbox, observed, true);
+  try {
+    expect(await sleep()).toBe(30_000);
+    expect(await sleep()).toBe(30_000);
+    const draft = await run(
+      api.drafts.create(
+        inboxId,
+        { to: ["alice@example.test"], text: "Prompt schedule", send_at: "2026-10-10T12:00:20Z" },
+        "synthetic-agent",
+        true,
+      ),
+    );
+    expect(await sleep()).toBe(30_000);
+    await run(api.drafts.approve(inboxId, draft.draft_id));
+    expect(await sleep()).toBe(20_000);
+    await run(
+      api.drafts.update(inboxId, draft.draft_id, { send_at: "2026-10-10T12:00:07Z" }, false),
+    );
+    expect(await sleep()).toBe(30_000);
+    await run(api.drafts.approve(inboxId, draft.draft_id));
+    expect(await sleep()).toBe(7000);
+    await run(clock.adjust("6 seconds"));
+    expect(api.sent).toHaveLength(0);
+    await run(clock.adjust("1 second"));
+    expect(await sleep()).toBe(2000);
+    expect(await sleep()).toBe(2000);
+    expect(api.sent).toHaveLength(1);
+    expect((await api.run(api.mailbox.listMessages(inboxId))).messages[0]?.send_status).toBe(
+      "sent",
+    );
+  } finally {
+    await server.close();
+  }
+});

@@ -70,7 +70,6 @@ test("starts with the HTTP server, backs off while idle and is interrupted befor
     await time.adjust("5 seconds");
     expect(cycles).toBe(2);
     const next = await api.run(api.outbox.enqueue(inboxId, send));
-    await time.adjust("25 seconds");
     expect(await time.sleep()).toBe(2000);
     expect((await api.run(api.outbox.get(inboxId, next.message_id))).state).toBe("sent");
     expect(api.sent).toHaveLength(2);
@@ -155,6 +154,32 @@ test("exposes a runner storage failure so serve can stop instead of leaving a br
     const result = await api.run(Effect.result(Fiber.join(server.runner)));
     expect(Result.isFailure(result) && result.failure instanceof DatabaseError).toBe(true);
     expect(api.sent).toHaveLength(0);
+  } finally {
+    await server.close();
+  }
+});
+
+test("approved drafts wake an idle outbox without advancing its recovery clock", async ({
+  api,
+}) => {
+  const time = await observedClock(api);
+  await api.run(api.transport.set({ account_id: "fake", api_token: "fake" }));
+  const server = await api.start(api.outbox, time.clock);
+  try {
+    expect(await time.sleep()).toBe(30_000);
+    const draft = await api.run(
+      api.drafts.create(
+        inboxId,
+        { to: ["alice@example.test"], text: "Approved runtime mail" },
+        "synthetic-agent",
+        true,
+      ),
+    );
+    const queued = await api.run(api.drafts.approve(inboxId, draft.draft_id));
+    if (!("message_id" in queued)) throw new Error("Expected a queued message");
+    expect(await time.sleep()).toBe(2000);
+    expect((await api.run(api.outbox.get(inboxId, queued.message_id))).state).toBe("sent");
+    expect(api.sent).toHaveLength(1);
   } finally {
     await server.close();
   }

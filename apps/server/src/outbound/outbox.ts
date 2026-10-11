@@ -1,7 +1,7 @@
 import { deliveryEvent, draftEvent, outboundEvent } from "../events/log.js";
 import { createHash, randomUUID } from "node:crypto";
 import type Database from "better-sqlite3-multiple-ciphers";
-import { Clock, Context, Effect, Layer, Result, Schema } from "effect";
+import { Clock, Context, Effect, Layer, Queue, Result, Schema } from "effect";
 import { SendMessageResponse } from "../../../../packages/contracts/src/messages.js";
 import { CurrentPrincipal } from "../../../../packages/contracts/src/security.js";
 import { ResolveMessageRequest } from "../../../../packages/contracts/src/messages.js";
@@ -58,7 +58,14 @@ export function canonical(value: unknown): string {
   return JSON.stringify(value) ?? "null";
 }
 
-function makeOutbox(store: StoreService, provider: OutboundProviderService) {
+function makeOutbox(
+  store: StoreService,
+  provider: OutboundProviderService,
+  wakeup: Queue.Queue<void>,
+) {
+  const notify = Effect.asVoid(Queue.offer(wakeup, undefined));
+  const waitForWork = (delayMs: number) =>
+    Effect.asVoid(Effect.raceFirst(Queue.take(wakeup), Effect.sleep(delayMs)));
   function run<A>(operation: (db: Database.Database, now: number) => A, write = true) {
     return Effect.gen(function* () {
       const now = yield* Clock.currentTimeMillis;
@@ -106,6 +113,7 @@ function makeOutbox(store: StoreService, provider: OutboundProviderService) {
 
   const processDue = () =>
     Effect.gen(function* () {
+      yield* Queue.clear(wakeup);
       yield* run((db, now) => recoverExpired(db, now));
       const due = yield* run(
         (db, now) =>
@@ -488,12 +496,14 @@ function makeOutbox(store: StoreService, provider: OutboundProviderService) {
           response.thread_id,
         );
       return response;
-    });
+    }).pipe(Effect.tap((response) => ("message_id" in response ? notify : Effect.void)));
   }
 
   return {
     enqueue: (inboxId: string, input: OutboundRequest, idempotencyKey?: string) =>
-      run((db, now) => enqueue(db, now, inboxId, input, idempotencyKey)),
+      run((db, now) => enqueue(db, now, inboxId, input, idempotencyKey)).pipe(
+        Effect.tap(() => notify),
+      ),
     sendDraft,
     get: (inboxId: string, messageId: string) =>
       run((db) => {
@@ -549,6 +559,7 @@ function makeOutbox(store: StoreService, provider: OutboundProviderService) {
           return getMessage(db, inboxId, messageId);
         });
       }),
+    waitForWork,
     processDue,
     applyDeliveryEvent: (input: DeliveryEvent) =>
       run((db, now) => {
@@ -597,7 +608,7 @@ function makeOutbox(store: StoreService, provider: OutboundProviderService) {
         return yield* Effect.gen(function* () {
           while (true) {
             yield* processDue();
-            yield* Effect.sleep(intervalMs);
+            yield* waitForWork(intervalMs);
           }
         }).pipe(Effect.forkScoped);
       }),
@@ -609,7 +620,7 @@ export class Outbox extends Context.Service<Outbox, OutboxService>()("inbot/Outb
   static readonly Live = Layer.effect(
     Outbox,
     Effect.gen(function* () {
-      return makeOutbox(yield* Store, yield* OutboundProvider);
+      return makeOutbox(yield* Store, yield* OutboundProvider, yield* Queue.dropping<void>(1));
     }),
   );
 }

@@ -7,7 +7,7 @@ export function startDraftLoop() {
     return yield* Effect.gen(function* () {
       while (true) {
         const processed = yield* drafts.processDue();
-        yield* Effect.sleep(processed === 0 ? "30 seconds" : "2 seconds");
+        yield* drafts.waitForDue(processed === 0 ? 30_000 : 2000);
       }
     }).pipe(Effect.forkScoped);
   });
