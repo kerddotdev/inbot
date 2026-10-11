@@ -1011,3 +1011,31 @@ test("verified status and its durable event roll back together when event storag
   expect((await f.run(f.provisioner.verify(domain.domain_id))).status).toBe("VERIFIED");
   expect(await f.run(f.store.use((db) => readEvents(db, 0)))).toHaveLength(1);
 });
+
+test("DMARC preview matches onboarding and verification rejects a different published policy", async () => {
+  const f = await fixture();
+  const planned = await f.run(f.provisioner.plan(f.domain));
+  const expected = { type: "TXT", name: `_dmarc.${f.domain}`, value: "v=DMARC1; p=reject;" };
+  expect(planned.records.find((record) => record.name === expected.name)).toMatchObject(expected);
+  const registered = await f.run(f.provisioner.create({ domain: f.domain }));
+  const applied = await f.run(f.provisioner.apply(registered.domain_id));
+  expect(applied.records.find((record) => record.name === expected.name)).toMatchObject(expected);
+  f.dnsState.visible = true;
+  const after = await f.run(f.provisioner.plan(f.domain));
+  expect(after.records.find((record) => record.name === expected.name)).toMatchObject({
+    ...expected,
+    status: "VALID",
+  });
+  const index = f.cloud.dns.findIndex((record) => record.name === expected.name);
+  const record = f.cloud.dns[index];
+  if (record === undefined) throw new Error("Missing DMARC record");
+  f.cloud.dns[index] = { ...record, content: "v=DMARC1; p=none;" };
+  const invalid = await f.run(f.provisioner.verify(registered.domain_id));
+  expect(invalid.status).toBe("VERIFYING");
+  expect(invalid.records.find((record) => record.name === expected.name)).toMatchObject({
+    ...expected,
+    status: "INVALID",
+  });
+  f.cloud.dns[index] = record;
+  expect((await f.run(f.provisioner.verify(registered.domain_id))).status).toBe("VERIFIED");
+});
