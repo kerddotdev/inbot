@@ -247,6 +247,19 @@ including `null`, return 403. Requests without `Origin` and same-origin requests
 are allowed; protected endpoints still need authentication. Host must match the
 loopback URL, preventing browser DNS rebinding. API responses use `no-store`.
 
+## Owner rejected mail
+
+`GET /v0/owner/lists/rejections` lists receive-list rejection metadata with cursor
+pagination (`limit`, `page_token`) and optional `inbox_id`. Records include
+`rejection_id`, `received_at`, `inbox_id`, nullable `sender_address`, `reason_code`,
+and a `rules` snapshot. Block decisions retain a matching rule; allow denials
+retain applicable allow rules. Legacy metadata may be unavailable. No subjects,
+message bodies, or payload hashes are returned. `DELETE
+/v0/owner/lists/rejections/:rejection_id` deletes metadata, not the rejection
+decision or a mailbox message. Both routes require the local owner; browser
+mutations require CSRF. Agents, MCP, and tunnel traffic cannot access them.
+See [lists](../lists/README.md) for retention and replay behavior.
+
 ## Owner browser authentication
 
 The separate `OwnerApiGroup` in `packages/contracts/src/api/owner.ts` declares

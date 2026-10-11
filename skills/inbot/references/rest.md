@@ -103,3 +103,9 @@ Entries are exact addresses or domains. Entries normalize to lowercase (domains 
 ## Webhooks and events
 
 Webhook CRUD/header routes use `/webhooks` or `/inboxes/{id}/webhooks`, with `webhook_read/create/update/delete`. See [events](events.md) for payload scope and one-time secrets.
+
+Receive-list rejection records can be inspected and deleted by the local owner in
+Settings > Allow and block lists > Rejected mail, owner REST, or `inbot lists
+rejections`. `list_entry_read` does not authorize reading these mail metadata
+records. There are no rejection MCP tools or tunnel routes. Ask the owner to
+inspect a suspected receive-list rejection; the record does not retain a body.

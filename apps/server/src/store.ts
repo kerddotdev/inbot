@@ -12,7 +12,7 @@ import { outboxSchema, transportConfigSchema } from "./outbound/schema.js";
 import { oauthSchema } from "./oauth/schema.js";
 import { remoteSchema } from "./remote/schema.js";
 import { provisionSchema } from "./provision/schema.js";
-import { listsSchema } from "./lists/schema.js";
+import { listsSchema, rejectionMetadataSchema } from "./lists/schema.js";
 
 export class DatabaseKeyInvalid extends Schema.TaggedError<DatabaseKeyInvalid>()(
   "DatabaseKeyInvalid",
@@ -52,6 +52,7 @@ export const migrations: readonly Migration[] = [
   { version: 11, sql: eventsSchema },
   { version: 12, sql: remoteSchema },
   { version: 13, sql: oauthSchema },
+  { version: 14, sql: rejectionMetadataSchema },
 ];
 
 export function migrate(database: Database.Database, ordered: readonly Migration[] = migrations) {
