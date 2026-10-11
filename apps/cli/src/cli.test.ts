@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, rm, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Schema } from "effect";
@@ -919,4 +919,39 @@ test("lists and deletes owner rejection metadata and denies scoped agents", asyn
   ]);
   expect(removed.code).toBe(0);
   expect((await api.run(lists.rejections())).count).toBe(0);
+});
+
+base("prints the package version without connecting to a home", async () => {
+  const manifest: unknown = JSON.parse(
+    await readFile(new URL("../../../package.json", import.meta.url), "utf8"),
+  );
+  if (manifest === null || typeof manifest !== "object" || !("version" in manifest))
+    throw new Error("Missing version");
+  for (const args of [["--version"], ["version"], ["--version", "--flavor", "production"]]) {
+    let stdout = "";
+    let stderr = "";
+    expect(
+      await runCli(args, {
+        env: {},
+        stdout: (text) => {
+          stdout += text;
+        },
+        stderr: (text) => {
+          stderr += text;
+        },
+      }),
+    ).toBe(0);
+    expect(stdout).toBe(`${String(manifest.version)}\n`);
+    expect(stderr).toBe("");
+  }
+  let help = "";
+  await runCli(["--help"], {
+    env: {},
+    stdout: (text) => {
+      help += text;
+    },
+    stderr: () => {},
+  });
+  expect(help.split("\n")[0]).toContain("inbot --version");
+  expect(help).not.toMatch(/^  .*version/m);
 });
