@@ -115,6 +115,7 @@ The local `inbot serve` service owns the encrypted SQLite database and serves RE
 - `packages/contracts` - implemented Effect schemas and HTTP API declarations shared by every surface. No handlers or service runtime.
 - `packages/envelope` - implemented X25519 age streaming encryption, the inbound frame carrying the SMTP envelope, buffered decryption, and the Queue pointer schema shared by the Worker and the service consumer.
 - `packages/design` - implemented design tokens (colors, shadows, font stacks) shared by the owner UI and the documentation site.
+- `apps/docs` - implemented Blume documentation site that uses the shared tokens; its CLI reference is generated from the compiled CLI's help. Build with `pnpm docs:build`, preview with `pnpm docs:dev`.
 - `skills/inbot` - portable agent guidance for using Inbot.
 - `scripts` - cross-target release packaging (`package.mjs`), isolated archive smoke checks (`smoke-release.mjs`) for Unix and Windows ARM64/x64, and installer verification. The tag-only release workflow gates automatic publication on full Vectis CI, Linux and Windows smoke tests, Developer ID signing and notarization of every macOS Mach-O, signed macOS smoke, final checksums and provenance attestations. Root `install.sh` and `install.ps1` verify and install published release archives without installing services; Windows selects the OS architecture and supports `-NoPathUpdate` for isolated checks. Releases have not been published yet.
 

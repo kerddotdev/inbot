@@ -1,0 +1,17 @@
+{
+  "name": "@inbot/docs",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node generate-cli-reference.mjs && blume dev",
+    "build": "node generate-cli-reference.mjs && blume build",
+    "preview": "blume preview"
+  },
+  "dependencies": {
+    "@inbot/design": "workspace:*",
+    "blume": "2.0.3"
+  },
+  "devDependencies": {
+    "astro": "7.3.5"
+  }
+}

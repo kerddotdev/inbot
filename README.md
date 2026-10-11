@@ -156,6 +156,10 @@ self-test verification, exact teardown, and durable inbox routing jobs.
 `pnpm build` ships a single Worker bundle; real-account deployment is not part of
 build or tests.
 
+## Documentation
+
+The documentation site lives in `apps/docs`. Run `pnpm docs:dev` for a local preview or `pnpm docs:build` for a static build in `apps/docs/dist`.
+
 ## CLI
 
 After `pnpm build`, use `pnpm start:cli --help` in a source checkout. The root

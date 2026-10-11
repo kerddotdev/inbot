@@ -29,6 +29,8 @@
     "typecheck": "tsc --noEmit && tsc -p apps/worker/tsconfig.json && tsc -p apps/worker/tsconfig.test.json && pnpm --filter @inbot/web typecheck",
     "web:dev": "pnpm --filter @inbot/web dev",
     "web:build": "pnpm --filter @inbot/web build",
+    "docs:dev": "pnpm build && pnpm --filter @inbot/docs dev",
+    "docs:build": "pnpm build && pnpm --filter @inbot/docs build",
     "test": "vitest run",
     "lint": "oxlint --deny-warnings apps packages",
     "format": "oxfmt .",
