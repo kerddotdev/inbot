@@ -1,9 +1,9 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { domainToASCII } from "node:url";
 import type Database from "better-sqlite3-multiple-ciphers";
 import { Schema } from "effect";
 import { addressParser, type Address } from "postal-mime";
-import { Direction, EntryType, ListType } from "../../../../packages/contracts/src/lists.js";
+import { Direction, RejectionRule } from "../../../../packages/contracts/src/lists.js";
 import { validationError } from "../mailbox/errors.js";
 import { OutboundError } from "../outbound/errors.js";
 
@@ -42,7 +42,6 @@ export function normalizeEntry(input: string) {
   };
 }
 
-const Rule = Schema.Struct({ entry: Schema.String, entry_type: EntryType, list_type: ListType });
 const Rejection = Schema.Struct({
   reason_code: Schema.Literals(["blocked_sender", "sender_not_allowed"]),
 });
@@ -70,33 +69,56 @@ function identity(input: string) {
   }
 }
 
-export function evaluate(
+function decision(
   db: Database.Database,
   inboxId: string,
   direction: Direction,
   addresses: readonly string[],
 ) {
-  const rules = Schema.decodeUnknownSync(Schema.Array(Rule))(
+  const rules = Schema.decodeUnknownSync(Schema.Array(RejectionRule))(
     db
       .prepare(
-        "SELECT entry, entry_type, list_type FROM list_entries WHERE scope IN ('', ?) AND direction = ?",
+        "SELECT entry, entry_type, list_type, inbox_id FROM list_entries WHERE scope IN ('', ?) AND direction = ? ORDER BY scope, entry",
       )
       .all(inboxId, direction),
   );
   const allowed = rules.filter((rule) => rule.list_type === "allow");
   const blocked = rules.filter((rule) => rule.list_type === "block");
   const identities = addresses.map(identity);
-  const matches = (rule: typeof Rule.Type, value: NonNullable<ReturnType<typeof identity>>) =>
-    rule.entry === (rule.entry_type === "email" ? value.email : value.domain);
-  if (identities.some((value) => value && blocked.some((rule) => matches(rule, value))))
-    return "blocked_sender" as const;
-  if (
-    allowed.length > 0 &&
-    (identities.length === 0 ||
-      identities.some((value) => !value || !allowed.some((rule) => matches(rule, value))))
-  )
-    return "sender_not_allowed" as const;
+  const matches = (
+    rule: typeof RejectionRule.Type,
+    value: NonNullable<ReturnType<typeof identity>>,
+  ) => rule.entry === (rule.entry_type === "email" ? value.email : value.domain);
+  for (const value of identities) {
+    const rule = value && blocked.find((rule) => matches(rule, value));
+    if (rule)
+      return {
+        reason_code: "blocked_sender" as const,
+        sender_address: value?.email ?? null,
+        rules: [rule],
+      };
+  }
+  if (allowed.length > 0) {
+    const deniedIndex = identities.findIndex(
+      (value) => !value || !allowed.some((rule) => matches(rule, value)),
+    );
+    if (identities.length === 0 || deniedIndex !== -1)
+      return {
+        reason_code: "sender_not_allowed" as const,
+        sender_address: identities[deniedIndex]?.email ?? null,
+        rules: allowed,
+      };
+  }
   return undefined;
+}
+
+export function evaluate(
+  db: Database.Database,
+  inboxId: string,
+  direction: Direction,
+  addresses: readonly string[],
+) {
+  return decision(db, inboxId, direction, addresses)?.reason_code;
 }
 
 export function acceptInbound(
@@ -109,16 +131,24 @@ export function acceptInbound(
   const hash = createHash("sha256").update(raw).digest("hex");
   const existing = db
     .prepare(
-      "SELECT reason_code FROM inbound_list_rejections WHERE inbox_id = ? AND payload_hash = ?",
+      "SELECT reason_code FROM inbound_list_rejections WHERE inbox_id = ? AND payload_hash = ? UNION ALL SELECT reason_code FROM inbound_list_rejection_receipts WHERE inbox_id = ? AND payload_hash = ?",
     )
-    .get(inboxId, hash);
+    .get(inboxId, hash, inboxId, hash);
   if (existing !== undefined) return Schema.decodeUnknownSync(Rejection)(existing).reason_code;
-  const reason = evaluate(db, inboxId, "receive", senders);
-  if (reason !== undefined)
+  const rejected = decision(db, inboxId, "receive", senders);
+  if (rejected !== undefined)
     db.prepare(
-      "INSERT INTO inbound_list_rejections (inbox_id, payload_hash, reason_code, received_at) VALUES (?, ?, ?, ?)",
-    ).run(inboxId, hash, reason, receivedAt);
-  return reason;
+      "INSERT INTO inbound_list_rejections (rejection_id, inbox_id, payload_hash, reason_code, received_at, sender_address, rules) VALUES (?, ?, ?, ?, ?, ?, ?)",
+    ).run(
+      randomUUID(),
+      inboxId,
+      hash,
+      rejected.reason_code,
+      receivedAt,
+      rejected.sender_address,
+      JSON.stringify(rejected.rules),
+    );
+  return rejected?.reason_code;
 }
 
 export function assertOutbound(

@@ -50,6 +50,14 @@ export function humanOutput(value: unknown): string {
     drafts: ["draft_id", "inbox_id", "subject", "approval_state", "send_status"],
     grants: ["grant_id", "client_name", "redirect_host", "resource", "send_policy", "inbox_ids"],
     api_keys: ["api_key_id", "name", "send_policy", "inbox_id", "inbox_ids"],
+    rejections: [
+      "rejection_id",
+      "received_at",
+      "inbox_id",
+      "sender_address",
+      "reason_code",
+      "rules",
+    ],
     entries: ["entry", "entry_type", "direction", "list_type", "inbox_id", "reason"],
   };
   for (const [key, columns] of Object.entries(collections)) {

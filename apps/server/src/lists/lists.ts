@@ -3,6 +3,9 @@ import { Clock, Context, Effect, Layer, Result, Schema } from "effect";
 import { CursorQuery } from "../../../../packages/contracts/src/common.js";
 import {
   CreateListEntryRequest,
+  InboundListRejection,
+  ListRejectionsQuery,
+  RejectionRule,
   Direction,
   ListType,
   PodListEntry,
@@ -80,7 +83,48 @@ export function makeLists(store: StoreService) {
     if (row === undefined) throw notFound();
     return read(row);
   }
+  const rejectionRow = Schema.Struct({
+    ...InboundListRejection.fields,
+    rules: Schema.fromJsonString(Schema.Array(RejectionRule)),
+  });
   return {
+    rejections: (request: ListRejectionsQuery = {}) =>
+      run((db) => {
+        const query = validate(ListRejectionsQuery, request);
+        const where = new Where();
+        if (query.inbox_id !== undefined) {
+          getInbox(db, query.inbox_id);
+          where.add("inbox_id = ?", query.inbox_id);
+        }
+        const { limit, expected, cursor } = preparePage(query, {
+          resource: "list_rejections",
+          inboxId: query.inbox_id,
+        });
+        keysetWhere(where, cursor, "received_at", "rejection_id", false);
+        const rows = db
+          .prepare(
+            `SELECT *, received_at AS cursor_key, rejection_id AS cursor_id FROM inbound_list_rejections WHERE ${where.sql} ORDER BY received_at DESC, rejection_id DESC LIMIT ?`,
+          )
+          .all(...where.params, limit + 1);
+        const { items, ...fields } = page(
+          rows,
+          limit,
+          expected,
+          Schema.decodeUnknownSync(rejectionRow),
+        );
+        return { ...fields, rejections: items };
+      }),
+    deleteRejection: (id: string) =>
+      run((db) => {
+        const existing = db
+          .prepare("SELECT 1 FROM inbound_list_rejections WHERE rejection_id = ?")
+          .get(id);
+        if (existing === undefined) throw notFound();
+        db.prepare(
+          "INSERT INTO inbound_list_rejection_receipts (inbox_id, payload_hash, reason_code) SELECT inbox_id, payload_hash, reason_code FROM inbound_list_rejections WHERE rejection_id = ?",
+        ).run(id);
+        db.prepare("DELETE FROM inbound_list_rejections WHERE rejection_id = ?").run(id);
+      }, true),
     list: (
       inboxId: string | undefined,
       direction: Direction,

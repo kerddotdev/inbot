@@ -1,10 +1,25 @@
 import { Schema } from "effect";
 import { HttpApi, HttpApiEndpoint, HttpApiGroup, HttpApiSchema } from "effect/http-api";
+import { ListRejectionsQuery, ListRejectionsResponse } from "../lists.js";
 import * as Owner from "../owner.js";
 import { WriteErrors } from "../errors.js";
 import { BearerAuth, OwnerOnly } from "../security.js";
 
 export const OwnerApiGroup = HttpApiGroup.make("owner").add(
+  HttpApiEndpoint.get("owner_listRejections", "/v0/owner/lists/rejections", {
+    query: ListRejectionsQuery,
+    success: ListRejectionsResponse,
+    error: WriteErrors,
+  })
+    .middleware(OwnerOnly)
+    .middleware(BearerAuth),
+  HttpApiEndpoint.delete("owner_deleteRejection", "/v0/owner/lists/rejections/:rejection_id", {
+    params: { rejection_id: Schema.String },
+    success: HttpApiSchema.Empty(200),
+    error: WriteErrors,
+  })
+    .middleware(OwnerOnly)
+    .middleware(BearerAuth),
   HttpApiEndpoint.get("owner_transport", "/v0/owner/transport", {
     success: Owner.OwnerTransportStatus,
     error: WriteErrors,

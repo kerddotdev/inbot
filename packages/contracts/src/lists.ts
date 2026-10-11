@@ -1,5 +1,5 @@
 import { Schema } from "effect";
-import { PageFields, Timestamp } from "./common.js";
+import { CursorQuery, PageFields, Timestamp } from "./common.js";
 
 export const Direction = Schema.Literals(["send", "receive", "reply"]).annotate({
   identifier: "Direction",
@@ -48,3 +48,28 @@ export const CreateListEntryRequest = Schema.Struct({
   reason: Schema.optionalKey(Schema.String),
 }).annotate({ identifier: "CreateListEntryRequest" });
 export type CreateListEntryRequest = typeof CreateListEntryRequest.Type;
+
+export const RejectionRule = Schema.Struct({
+  entry: Schema.String,
+  entry_type: EntryType,
+  list_type: ListType,
+  inbox_id: Schema.NullOr(Schema.String),
+});
+export const InboundListRejection = Schema.Struct({
+  rejection_id: Schema.String,
+  inbox_id: Schema.String,
+  received_at: Timestamp,
+  sender_address: Schema.NullOr(Schema.String),
+  reason_code: Schema.Literals(["blocked_sender", "sender_not_allowed"]),
+  rules: Schema.Array(RejectionRule),
+});
+export type InboundListRejection = typeof InboundListRejection.Type;
+export const ListRejectionsQuery = Schema.Struct({
+  ...CursorQuery.fields,
+  inbox_id: Schema.optionalKey(Schema.String),
+});
+export type ListRejectionsQuery = typeof ListRejectionsQuery.Type;
+export const ListRejectionsResponse = Schema.Struct({
+  ...PageFields,
+  rejections: Schema.Array(InboundListRejection),
+});
