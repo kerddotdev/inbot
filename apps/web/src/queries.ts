@@ -42,6 +42,18 @@ export const domainsQuery = queryOptions({
   queryFn: ({ signal }) => api.domains(signal),
 });
 
+export const verifiedDomainsQuery = queryOptions({
+  queryKey: ["domains", { status: "VERIFIED" }],
+  queryFn: async ({ signal }) => {
+    const domains = await api.domains(signal);
+    const details = await Promise.all(
+      domains.map((domain) => api.domain(domain.domain_id, signal)),
+    );
+    return details.filter((domain) => domain.status === "VERIFIED");
+  },
+  staleTime: 0,
+});
+
 export const domainQuery = (id: string) =>
   queryOptions({
     queryKey: ["domains", id],

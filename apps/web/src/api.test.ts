@@ -14,6 +14,71 @@ const key = {
 };
 const json = (body: unknown, init?: ResponseInit) => Response.json(body, init);
 
+test("inbox mutations decode the shared contract, encode addresses, and use restored CSRF", async () => {
+  const inbox = {
+    pod_id: "local",
+    inbox_id: "agent+mail@example.test",
+    email: "agent+mail@example.test",
+    display_name: "Agent",
+    status: "active",
+    created_at: stamp,
+    updated_at: stamp,
+  };
+  const fetcher = vi
+    .fn<typeof fetch>()
+    .mockResolvedValueOnce(
+      json(
+        { setup_required: false, authenticated: true, locked: false },
+        { headers: { "X-Inbot-CSRF": "inbox-csrf" } },
+      ),
+    )
+    .mockResolvedValueOnce(json(inbox))
+    .mockResolvedValueOnce(json({ ...inbox, display_name: "", status: "paused" }))
+    .mockResolvedValueOnce(new Response(null, { status: 200 }))
+    .mockResolvedValueOnce(json({ ...inbox, status: "deleted" }));
+  const client = new ApiClient(fetcher);
+  await client.status();
+  const create = { username: "agent+mail", domain: "example.test", display_name: "Agent" };
+  expect(await client.createInbox(create)).toEqual(inbox);
+  const update = { display_name: "", status: "paused" } as const;
+  expect(await client.updateInbox(inbox.inbox_id, update)).toMatchObject(update);
+  await expect(client.deleteInbox(inbox.inbox_id)).resolves.toBeUndefined();
+  expect(
+    fetcher.mock.calls.slice(1, 4).map(([path, options]) => [path, options?.method, options?.body]),
+  ).toEqual([
+    ["/v0/inboxes", "POST", JSON.stringify(create)],
+    ["/v0/inboxes/agent%2Bmail%40example.test", "PATCH", JSON.stringify(update)],
+    ["/v0/inboxes/agent%2Bmail%40example.test", "DELETE", undefined],
+  ]);
+  for (const [, options] of fetcher.mock.calls.slice(1, 4)) {
+    expect(new Headers(options?.headers).get("X-Inbot-CSRF")).toBe("inbox-csrf");
+    expect(options?.credentials).toBe("same-origin");
+  }
+  await expect(client.updateInbox(inbox.inbox_id, update)).rejects.toMatchObject({
+    code: "service_unavailable",
+  });
+});
+
+test.each([
+  {
+    code: "already_exists",
+    message: "This inbox already exists.",
+    fix: "Choose another username.",
+  },
+  {
+    code: "validation_error",
+    message: "The domain is not verified.",
+    fix: "Verify the domain before retrying.",
+  },
+])("inbox creation preserves $code and its actionable fix", async (wire) => {
+  const client = new ApiClient(
+    vi.fn<typeof fetch>().mockResolvedValue(json({ name: "InbotError", ...wire }, { status: 400 })),
+  );
+  await expect(
+    client.createInbox({ username: "agent", domain: "example.test" }).catch(errorText),
+  ).resolves.toBe(`${wire.message} ${wire.fix}`);
+});
+
 test("restores CSRF from status, attaches it to unsafe requests, and clears it on logout", async () => {
   const fetcher = vi
     .fn<typeof fetch>()

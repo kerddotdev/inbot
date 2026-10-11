@@ -440,7 +440,15 @@ function Reader({
   );
 }
 
-function InboxMail({ inboxId, selectedId }: { inboxId: string; selectedId: string | undefined }) {
+function InboxMail({
+  inboxId,
+  selectedId,
+  onManageInbox,
+}: {
+  inboxId: string;
+  selectedId: string | undefined;
+  onManageInbox: () => void;
+}) {
   const [composing, setComposing] = useState(false);
   const [queued, setQueued] = useState(false);
   const threads = useInfiniteQuery({
@@ -468,8 +476,14 @@ function InboxMail({ inboxId, selectedId }: { inboxId: string; selectedId: strin
           className="flex min-h-0 min-w-0 flex-col border-r border-line bg-list"
         >
           <PaneBar>
-            <h2 className="text-[15px] font-[650] tracking-[-0.005em]">{inboxId}</h2>
+            <h2
+              className="min-w-0 truncate text-[15px] font-[650] tracking-[-0.005em]"
+              title={inboxId}
+            >
+              {inboxId}
+            </h2>
             <span className="flex-1" />
+            <IconButton icon="gear" label="Manage inbox" onClick={onManageInbox} />
             <IconButton icon="pencil" label="New message" onClick={() => setComposing(true)} />
             <IconButton
               icon="refresh"
@@ -546,9 +560,13 @@ function InboxMail({ inboxId, selectedId }: { inboxId: string; selectedId: strin
 export function Mail({
   inboxId,
   selectedId,
+  onManageInbox,
 }: {
   inboxId: string | undefined;
   selectedId: string | undefined;
+  onManageInbox: () => void;
 }) {
-  return inboxId ? <InboxMail inboxId={inboxId} selectedId={selectedId} /> : null;
+  return inboxId ? (
+    <InboxMail inboxId={inboxId} selectedId={selectedId} onManageInbox={onManageInbox} />
+  ) : null;
 }
