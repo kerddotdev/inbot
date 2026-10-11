@@ -35,6 +35,6 @@ The smoke test extracts the archive for your machine, checks the launcher and na
 
 ## Release workflow
 
-The GitHub release workflow runs on Vectis runners. A `v*` tag must match the version in `package.json`. It packages all targets, smoke-tests Linux x64 and macOS ARM64 (plus Linux x64 under emulation on ARM64), and creates a **draft** GitHub release with the archives and checksums. Publishing is a manual review step, and published versions are never modified.
+The GitHub release workflow runs on Vectis runners. A `v*` tag must match the version in `package.json`. It packages all targets, smoke-tests Linux ARM64 natively, Linux x64 under QEMU emulation on the ARM64 Ubuntu runner, and macOS ARM64, and creates a **draft** GitHub release with the archives and checksums. Publishing is a manual review step, and published versions are never modified.
 
 No release has been published yet.

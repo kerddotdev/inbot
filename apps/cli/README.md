@@ -154,7 +154,7 @@ intentional retry is a new send with a new idempotency key.
 
 `inbot --version` and `inbot version` print the package version without connecting to a server.
 
-Every command accepts `--help`; `inbot --help` lists all commands. Global options
+Resource commands accept `--help`; `inbot --help` lists commands in workflow order, and `inbot <resource> --help` lists that group. Version commands print the version even with `--help`. Global options
 are `--home <directory>`, `--flavor development|production`, and `--json`.
 Place the command first, or precede it with global options. Addresses and IDs are
 positional; quote IDs containing shell metacharacters.
@@ -240,8 +240,7 @@ positional; quote IDs containing shell metacharacters.
 | `remote disable`          | None                                                                                                      | POST `/v0/owner/remote/disable`                                                                                                  |
 
 `open` prints a single-use login URL and never opens a browser unless
-`--browser` is present. Password setup must already be complete; links expire
-after two minutes. Treat a login link as a credential.
+`--browser` is present. Links can be created before password setup and expire after two minutes or a service restart. Use the same home and flavor as the running service. Treat a login link as a credential.
 
 Common payload fields have kebab-case flags: `--display-name`, `--to`, `--text`,
 `--reply-all`, `--add-labels`, `--remove-labels`, and so on. Repeat array flags:
@@ -313,7 +312,7 @@ without credentials or payload contents. Exit codes are stable:
 
 `pnpm exec vitest run apps/cli/src/cli.test.ts` runs against the real in-process
 HTTP server with a temporary encrypted home, memory keychain, fixed clock, and
-fake provider. No real mail, infrastructure, or owner home is used. Service installation remains outside this CLI implementation. All declared REST resources are covered, except owner browser authentication/session/password routes. OAuth registration, token exchange, metadata, and consent are protocol/browser flows rather than resource commands. Quarantine commands belong to a separate change and no quarantine routes exist on this branch. Resource commands add no
+fake provider. No real mail, infrastructure, or owner home is used. All declared REST resources are covered, except owner browser authentication/session/password routes. OAuth registration, token exchange, metadata, and consent are protocol/browser flows rather than resource commands. Local owner quarantine commands list, retry, and delete durable inbound failures. Resource commands add no
 service behavior, permission, event, MCP tool, or remote route.
 
 ## Allow and block lists

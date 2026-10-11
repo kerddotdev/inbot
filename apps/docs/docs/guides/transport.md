@@ -61,7 +61,7 @@ curl -s http://127.0.0.1:8025/v0/owner/transport \
 ## Rotate or change accounts
 
 - **Rotate** by saving a new token for the same account. Changes take effect on the next loop cycle, without a restart.
-- **Change accounts** only after tearing down every domain and disabling remote access. Inbot refuses a token for a different account while either still belongs to the old one.
+- **Change accounts** only after tearing down and deleting every domain registration and disabling remote access. Inbot refuses a token for a different account while either still belongs to the old one.
 
 ## Clear it
 

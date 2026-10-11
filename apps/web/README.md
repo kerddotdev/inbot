@@ -35,7 +35,7 @@ Implemented screens:
   rejection with an optional reason. Scheduled approval is shown separately from
   immediate queueing. Failed operations show the server's message and fix.
 - Settings > Mail transport inspects safe configuration metadata, verifies and saves
-  Cloudflare credentials, and clears configuration after domain teardown. Token inputs
+  Cloudflare credentials, and clears configuration after domain teardown and remote disablement. Changing accounts also requires deleting domain registrations. Token inputs
   are password fields cleared on submission; tokens are never returned, displayed again,
   or stored in query/mutation variables. Account ID is optional: one accessible account is
   detected after token verification; multiple-account errors list names and IDs for an
@@ -71,7 +71,7 @@ Implemented screens:
 Registration requires a configured transport; without one the server's
 `validation_error` message and fix are shown as returned.
 
-Remote access uses the owner API with explicit download confirmation and observed connector state. Other Settings sections retain their existing mock data. Browser
+Remote access uses the owner API with explicit download confirmation and observed connector state. OAuth consent uses the shared grant editor, defaults to Full access with approval and explicit inbox selection, and redirects signed-out owners through sign-in before returning to the request. API keys lists and revokes authorized grants and purges unused OAuth registrations. Browser
 database unlock, detailed authentication results, per-inbox unread totals, and
 detailed event-history browsing is unavailable.
 The locked view directs the owner to unlock locally. Mail bodies and attachments

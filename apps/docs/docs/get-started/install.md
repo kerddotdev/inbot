@@ -67,11 +67,13 @@ Each archive is self-contained:
 
 Installed commands default to the production flavor: the home is `~/.inbot`, and `inbot serve` serves the bundled web app. See [Configuration](/operations/configuration) for overrides.
 
+Verify the installed version with `inbot --version` (or `inbot version`); neither command connects to the service.
+
 ## Upgrade, downgrade and remove
 
 - **Upgrade:** stop the running `inbot serve`, then run the installer again. Your home directory and database are not touched.
 - **Downgrade:** previous versions stay under `app/<version>`. Run the installer with `--version` (or `-Version`) to point the shim back at one.
-- **Repeat installs** of the same version and checksum do nothing. A different archive under an existing version number is refused.
+- **Repeat installs** of the same version and checksum reuse the installed archive and rewrite the shim. A different archive under an existing version number is refused.
 - **Remove:** delete the install root and the shim. Your mail lives in the home directory (`~/.inbot`), which you remove separately, together with its keychain entry, only if you want the data gone. See [Running the service](/operations/service#back-up-your-home) before deleting anything.
 
 There is no automatic update and no `inbot update` command.

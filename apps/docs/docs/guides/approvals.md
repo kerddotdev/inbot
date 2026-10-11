@@ -30,6 +30,8 @@ A draft that is `sending` cannot be edited, deleted or rejected; edits return `r
 
 Set `send_at` when creating or updating a draft to schedule it. Scheduling needs `draft_send` and a send policy other than `read_only`. Set `send_at` to `null`, or delete the draft, to cancel.
 
+Creation, editing and approval wake the scheduler; it waits until the next due time and wakes the outbox as soon as a send commits. Its 30-second idle and 2-second after-work checks are recovery caps.
+
 The scheduler only sends approved drafts, and only while the service is running. After downtime it sends overdue drafts as soon as it starts, and the message's timestamp is the time it was actually queued. `send_at` is the earliest time Inbot queues the message, not a delivery promise. `drafts send` sends immediately and overrides any schedule.
 
 ## Approval
@@ -40,7 +42,7 @@ A key with the `approval` send policy never sends on its own:
 - `send_message`, `reply_to_message`, `forward_message` and `send_draft` create or reuse a pending draft and return the error `approval_required`, with the draft's ID in `message` and `fix`. No message ID exists yet.
 - A `draft.approval_required` event fires, so you can be notified by webhook.
 
-Pending drafts appear on the **Approvals** page. Review the recipients and text, then:
+Pending drafts appear on the **Approvals** page. Review the recipients, text and attachment download buttons, then:
 
 - **Approve** queues the message, or keeps it scheduled if `send_at` is in the future. If the transport or composition fails, the draft stays pending.
 - **Reject**, with an optional reason, is final. The draft can no longer be sent or approved, and any schedule is cancelled. The agent sees `approval_state: "rejected"` and the reason.
@@ -49,6 +51,8 @@ Pending drafts appear on the **Approvals** page. Review the recipients and text,
 inbot drafts approve support@agents.example.com <draft_id>
 inbot drafts reject support@agents.example.com <draft_id> --reason "Wrong customer"
 ```
+
+Attachment buttons issue signed five-minute download capabilities. They require no bearer, recheck the issuer's current access, and must never be shared or logged.
 
 Approve and reject are owner-only. There is no MCP tool for them, and agent keys get `missing_permission`. An agent that retries a send with the same idempotency key gets the same `approval_required` answer for the same draft, even after you decide.
 

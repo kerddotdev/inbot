@@ -20,10 +20,11 @@ Sessions last 14 days from your last activity, and at most 30 days. Sign out fro
 
 ## Mail
 
-The sidebar lists your inboxes. Selecting one shows its threads, newest first, with unread threads marked.
+The sidebar lists your inboxes. **New inbox** creates an address; **Manage inbox** in the Mail header edits the display name and active/paused status or deletes the inbox after confirmation. Selecting an inbox shows its threads, newest first, with unread threads marked.
 
 - **Read** a thread in the reading column. Inbot shows the reply text with quoted history folded away; **Show quoted text** reveals the rest when there is any. HTML mail is shown as plain text, and **Show HTML source** displays the escaped source. Nothing in a message is ever executed.
 - **Mark read or unread**, and add or remove **labels** on the thread.
+- **Download attachments** with the buttons in Mail. Files use signed five-minute capabilities and are downloaded, never rendered inline. Treat the URLs as temporary credentials and never share them.
 - **Reply** to a message, or start a **New message** from the inbox.
 - **Sent mail** shows its real state: queued, sent, failed with a reason, or unknown. For an unknown outcome, use **Resolve outcome** after you have confirmed what happened; see [Drafts and approvals](/guides/approvals#resolve-an-unknown-send-outcome).
 
@@ -31,15 +32,15 @@ Sending from the app retries with the same idempotency key while you are retryin
 
 ## Approvals
 
-Lists every draft waiting for your decision, across all inboxes. Open one to review recipients and text, then approve or reject it with an optional reason. Approving a scheduled draft keeps it scheduled. See [Drafts and approvals](/guides/approvals).
+Lists every draft waiting for your decision, across all inboxes. Open one to review recipients, text and attachment download buttons, then approve or reject it with an optional reason. Approving a scheduled draft keeps it scheduled. See [Drafts and approvals](/guides/approvals).
 
 ## Domains
 
-Register a mail subdomain, preview the provisioning plan, apply it, watch DNS records and verification, export a BIND zone file, change domain features, tear down and delete. Teardown and deletion ask for confirmation. See [Domains](/guides/domains).
+Register a mail subdomain, preview the provisioning plan, apply it, watch DNS records and verification, export a BIND zone file, confirm supported domain features, tear down and delete. Teardown and deletion ask for confirmation. See [Domains](/guides/domains).
 
 ## API keys
 
-Create keys with an inbox scope, explicit permissions and a send policy; copy the secret, which is shown once; and revoke keys. The **Authorized OAuth clients** section lists OAuth grants, revokes them and purges unused client registrations. See [Inboxes and API keys](/guides/inboxes-and-keys).
+Create keys with an inbox scope, explicit permissions and a send policy; copy the secret, which is shown once; edit names, permissions and send policies without rotating the secret; and revoke keys. New key forms default to **Full access** with **Approval** and no selected inboxes. Expiry is set only at creation through CLI or REST. The **Authorized OAuth clients** section lists OAuth grants, revokes them and purges unused client registrations. See [Inboxes and API keys](/guides/inboxes-and-keys).
 
 ## Remote access
 
@@ -60,10 +61,9 @@ The app keeps a WebSocket open to the service. New mail, draft changes, approval
 
 ## OAuth consent
 
-When an MCP client starts OAuth, your browser opens the **Allow access to Inbot?** screen. It shows the client's self-declared name, where it will redirect, and which resource it wants. Choose the grant and approve or deny. If you are signed out, you sign in first and return to the request. See [OAuth for MCP clients](/agents/oauth).
+When an MCP client starts OAuth, your browser opens the **Allow access to Inbot?** screen. It shows the client's self-declared name, where it will redirect, and which resource it wants. New grants default to **Full access** with **Approval** and no inboxes selected. Choose the intended scope and grant, then approve or deny. If you are signed out, you sign in first and return to the request. See [OAuth for MCP clients](/agents/oauth).
 
 ## Not in the app yet
 
-- Creating, pausing and deleting inboxes: use `inbot inboxes` or `/v0/inboxes`.
 - Changing the password and listing or revoking owner sessions: use `/v0/owner/password` and `/v0/owner/sessions`.
 - Per-inbox unread totals, forwarding, and browsing event history.

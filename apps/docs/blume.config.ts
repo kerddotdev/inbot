@@ -43,6 +43,7 @@ export default defineConfig({
         label: "Agents",
         items: [
           { label: "Connect an agent", root: "agents/connect" },
+          { label: "Connect Claude Code", root: "agents/claude-code" },
           { label: "Reading and sending mail", root: "agents/mail" },
           { label: "OAuth for MCP clients", root: "agents/oauth" },
         ],

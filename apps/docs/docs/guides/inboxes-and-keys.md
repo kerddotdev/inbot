@@ -14,16 +14,16 @@ inbot inboxes get support@agents.example.com
 inbot inboxes delete support@agents.example.com
 ```
 
-The web app lists inboxes in its sidebar but does not create them yet. Use the CLI, `POST /v0/inboxes`, or an agent with `inbox_create`.
+In Mail, use **New inbox** in the sidebar to create an address and **Manage inbox** to edit the display name, pause, resume or delete it. The CLI supports create, list, get and delete; it has no inbox update command. Use the web app, REST `PATCH /v0/inboxes/{inbox_id}`, or MCP `update_inbox` for edits.
 
-| Field          | Rules                                                                                                                            |
-| -------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| `username`     | Lowercased local part, at most 64 characters, no leading, trailing or doubled dots. Omit it for 16 random hex characters.        |
-| `domain`       | Required. Use your [provisioned domain](/guides/domains); Inbot does not check this, but mail only arrives on a verified domain. |
-| `display_name` | Optional sender name                                                                                                             |
-| `status`       | `active` (default) or `paused`                                                                                                   |
-| `metadata`     | Optional object of up to 256 string, number or boolean values. On update, a `null` value removes a key.                          |
-| `client_id`    | Optional idempotency token. Creating again with the same `client_id` returns the existing inbox.                                 |
+| Field          | Rules                                                                                                                                                                          |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `username`     | Lowercased local part, at most 64 characters, no leading, trailing or doubled dots. Omit it for 16 random hex characters.                                                      |
+| `domain`       | Required. Use your [provisioned domain](/guides/domains); inbox creation does not validate provisioning. Receiving needs its Worker and routing rule; verify the domain first. |
+| `display_name` | Optional sender name                                                                                                                                                           |
+| `status`       | `active` (default) or `paused`                                                                                                                                                 |
+| `metadata`     | Optional object of up to 256 string, number or boolean values. On update, a `null` value removes a key; `metadata: null` clears all metadata.                                  |
+| `client_id`    | Optional idempotency token. Creating again with the same `client_id` returns the existing inbox.                                                                               |
 
 A duplicate address returns `already_exists`. `inbot-selftest` is reserved on registered domains.
 
@@ -43,6 +43,8 @@ inbot api-keys create --name triage --inbox-id support@agents.example.com \
 
 The secret (`inbot_<id>_<secret>`) is returned once. The CLI prints it only with `--show-secret`, and the web app shows it once after creation. Inbot stores only a hash, so a lost key cannot be recovered: revoke it and create a new one.
 
+Edit a key in the web app, with `PATCH /v0/api-keys/{api_key_id}`, or with `inbot api-keys update <api_key_id> --name triage --send-policy approval`. Editing changes its name, permissions or send policy without rotating the secret. Omitted fields stay unchanged; a supplied permissions object replaces the existing set.
+
 ### Choose the inbox scope
 
 | Grant                        | The key can use                              |
@@ -54,6 +56,10 @@ The secret (`inbot_<id>_<secret>`) is returned once. The CLI prints it only with
 Anything outside the scope returns `not_found`, exactly like something that does not exist, so an agent cannot discover other inboxes. Inbox scope and expiry are fixed when the key is created. You can later change only its name, permissions and send policy.
 
 ### Choose permissions
+
+New API key and OAuth consent forms default to **Full access** with **Approval**, with no inboxes selected. Full access grants inbox reading, mail reading/updating/replying/sending, and draft reading/creating/updating/deleting/sending; it does not grant owner administration, inbox management, hidden-label access, list or webhook management.
+
+**Read only** grants inbox, message and draft reads and selects the read-only policy. **Read and draft** adds draft create, update and delete. Expand **Choose individual permissions** for a custom set. These are web form defaults, not implicit API permissions: CLI and REST callers must supply their own permission set.
 
 Grant only what the agent needs. Common sets:
 
@@ -77,7 +83,7 @@ The policy is enforced by the service on every surface. An agent cannot talk its
 
 ### Expiry and revocation
 
-Set `expires_at` at creation for temporary access. Revoking a key (`inbot api-keys revoke <api_key_id>`) takes effect on the next request; open WebSocket streams close, and webhooks the key created are disabled with `credential_revoked`. The key list shows when each key was last used, updated at most once a minute.
+Set `expires_at` at creation for temporary access using CLI `--expires-at` or REST. The web key form has no expiry field. Expiry cannot be changed later. Revoking a key (`inbot api-keys revoke <api_key_id>`) takes effect on the next request; open WebSocket streams close, and webhooks the key created are disabled with `credential_revoked`. The key list shows when each key was last used, updated at most once a minute.
 
 ## OAuth grants
 

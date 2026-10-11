@@ -15,6 +15,8 @@ Inbot does not touch your apex mail. Before every step that can affect DNS, it s
 
 ## Register and review
 
+Select **Preview plan** to review, then **Apply automatically via Cloudflare** to provision. The screen distinguishes unprovisioned registrations, operations in progress, DNS propagation, the self-test and observed verification.
+
 Registering only records the domain; nothing changes in Cloudflare yet. The domain starts as `NOT_STARTED`.
 
 Review what will happen before applying:
@@ -38,7 +40,7 @@ Apply creates, in order:
 
 `<id>` is the domain's ID. Inbot also generates the instance's inbound key pair if it does not exist yet; the private key stays in your encrypted database.
 
-Cloudflare supplies the DNS records. For routing, that is MX and SPF on your subdomain. For sending, Cloudflare's bounce subdomain gets DKIM, MX and SPF records, and `_dmarc.<subdomain>` gets a strict DMARC policy (`p=reject`). If Cloudflare adds its routing DKIM record at the apex, Inbot only records it as its own when it did not exist before, and removes it only if no other Cloudflare-routed MX still needs it.
+Cloudflare supplies the DNS records. For routing, that is MX and SPF on your subdomain. For sending, Cloudflare's bounce subdomain gets DKIM, MX and SPF records, and `_dmarc.<subdomain>` gets a strict DMARC policy (`v=DMARC1; p=reject;`). If Cloudflare adds its routing DKIM record at the apex, Inbot only records it as its own when it did not exist before, and removes it only if no other Cloudflare-routed MX still needs it.
 
 Apply is resumable. Every created resource is written to a ledger first, so after a crash or timeout, running apply again reconciles instead of duplicating. Resources that existed before Inbot touched them are adopted and never deleted by teardown.
 
@@ -49,6 +51,8 @@ After apply, the domain is `VERIFYING`. The service checks every DNS record thro
 1. Adds a temporary routing rule for `inbot-selftest@<subdomain>`.
 2. Sends a message to that address with a random token.
 3. Waits for the encrypted message to arrive through the Worker, R2 and the Queue, and checks the token, sender and recipient.
+
+Verification can take about ten minutes or longer, depending on public DNS propagation and the encrypted test arrival.
 
 Only then does the domain become `VERIFIED` and emit a `domain.verified` event. Provider status alone is never enough. If nothing arrives, the self-test is retried after five minutes. The self-test message is not stored as mail, and `inbot-selftest` cannot be used as an inbox name.
 
@@ -68,7 +72,7 @@ Each inbox on the domain gets its own Email Routing rule that sends exactly that
 
 ## Update
 
-`PATCH /v0/domains/{id}` changes the domain's feature flags. Inbot rejects conflicting-provider mode, feedback, tracking and wildcard subdomains.
+`PATCH /v0/domains/{id}` changes the domain's feature flags within the supported combination. The web app offers **Confirm supported features**, which sets that combination; it has no independent feature toggles. Inbot rejects conflicting-provider mode, feedback, tracking and wildcard subdomains.
 
 ## Tear down
 
@@ -82,8 +86,8 @@ Your local mail and the inbound private key survive teardown. Applying again rec
 
 The web app asks for confirmation before teardown and deletion.
 
-## Validation status
+## Verification boundaries
 
-Provisioning is covered by tests against a fake Cloudflare API, with real encryption and a real encrypted database. Validation against real Cloudflare accounts, including DNS propagation, token scopes, delivery-event warm-up and real mail delivery, is still limited. Review the plan before applying to a zone that matters to you, and keep apex mail on a zone you can inspect.
+Automated tests cover provisioning against a fake Cloudflare API, with real encryption and a real encrypted database. Your domain is verified only after its public DNS records match and Inbot observes its encrypted self-test arrival. This verifies the inbound path, not delivery of every outbound message.
 
 Cloudflare's delivery event subscription needs a few minutes to warm up, so delivery reports for the very first messages can be missed.

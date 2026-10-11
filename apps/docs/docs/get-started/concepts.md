@@ -31,7 +31,7 @@ Resources outside a grant's inbox scope behave as if they do not exist: they ret
 
 **Draft.** An unsent message. Drafts can be scheduled with `send_at`, and drafts created under the `approval` policy wait for the owner to approve or reject them.
 
-**Label.** A free-form string on a message. Inbot sets some labels itself, such as `unread`, `sent`, `delivered` and `unauthenticated`; agents and the owner add their own. A thread's labels are the union of its messages' labels. See [Message states](/concepts/message-states).
+**Label.** A free-form string on a message. Inbot sets some labels itself, such as `unread`, `sent`, `delivered` and `unauthenticated`; agents and the owner add their own. System state labels including `received`, sending and delivery labels are protected; `unread` and custom labels remain editable. A thread's labels are the union of its messages' labels. See [Message states](/concepts/message-states).
 
 **Allow and block lists.** Exact addresses or domains that restrict who an inbox may receive from, send to, or reply to. See [Allow and block lists](/guides/lists).
 

@@ -3,7 +3,7 @@ title: Quickstart
 description: From the first start of the service to an agent reading and answering mail in its own inbox, with your approval before anything is sent.
 ---
 
-This walkthrough takes you from an empty machine to an agent with its own inbox. It assumes Inbot is [installed](/get-started/install); in a source checkout, replace `inbot` with `pnpm start:cli` after [building](/development/build). You need a Cloudflare account with an active zone for your domain.
+This walkthrough takes you from an empty machine to an agent with its own inbox. It assumes Inbot is [installed](/get-started/install). In a source checkout, [build the service and web app](/development/build), replace `inbot` with `pnpm start:cli`, and pass `--web-root "$PWD/apps/web/dist"` when serving. Source commands default to `~/.inbot-dev`; use an explicit `--home` for development. You need a Cloudflare account with an active zone for your domain.
 
 ## 1. Start the service
 
@@ -40,13 +40,13 @@ Go to **Settings > Mail transport**:
 
 ## 4. Provision your mail domain
 
-On the **Domains** page, register a dedicated subdomain such as `agents.example.com`, review the plan, and apply it. Inbot creates the Email Worker, the encrypted buffer, routing and sending configuration, then waits for public DNS and sends itself a test message. The domain becomes **Verified** only after that encrypted test message has actually arrived, which usually takes a few minutes.
+On the **Domains** page, register a dedicated subdomain such as `agents.example.com`, select **Preview plan**, then **Apply automatically via Cloudflare**. Inbot creates the Email Worker, the encrypted buffer, routing and sending configuration, then waits for public DNS and sends itself a test message. The domain becomes **Verified** only after that encrypted test message has actually arrived, which can take about ten minutes or longer. The self-test retries every five minutes while no arrival has been observed.
 
 Read [Domains](/guides/domains) before applying to an existing zone.
 
 ## 5. Create an inbox
 
-The web app does not create inboxes yet. Use the CLI on the same machine, which acts as the owner:
+In the Mail sidebar, select **New inbox**, choose your verified domain, enter `support` as the username, and create the inbox. **Manage inbox** in Mail lets you edit its display name, pause or resume it, and delete it. Alternatively, use the CLI on the same machine, which acts as the owner:
 
 ```sh
 inbot inboxes create --username support --domain agents.example.com
@@ -59,8 +59,10 @@ The inbox ID is the address, `support@agents.example.com`. Inbot adds the Email 
 On the **API keys** page, create a key:
 
 - **Inbox:** `support@agents.example.com`
-- **Permissions:** `inbox_read`, `message_read`, `message_reply`, `message_update`
-- **Send policy:** `approval`, so you approve each reply before it leaves
+- **Permissions:** **Full access**, the default preset, includes reading, drafting and sending. It does not grant every permission or owner administration. **Read only** and **Read and draft** are narrower presets; **Choose individual permissions** lets you customize them.
+- **Send policy:** **Approval**, the default, so you approve each reply before it leaves
+
+The form initially selects no inboxes. Select `support@agents.example.com`; choose **All current and future inboxes** only if that is the scope you intend.
 
 Copy the key now; it is shown only once. The same works from the CLI:
 
@@ -72,18 +74,24 @@ inbot api-keys create --name support-agent --inbox-id support@agents.example.com
 
 ## 7. Connect the agent
 
-For Claude Code:
+For Claude Code, paste the key at the hidden prompt so it stays out of shell history. Run this in Bash or Zsh:
 
 ```sh
-claude mcp add --transport http inbot http://127.0.0.1:8025/mcp \
+printf "Inbot API key: "
+read -rs INBOT_API_KEY
+printf "\n"
+claude mcp add -s user --transport http inbot http://127.0.0.1:8025/mcp \
   --header "Authorization: Bearer $INBOT_API_KEY"
+unset INBOT_API_KEY
 ```
+
+See [Connect Claude Code](/agents/claude-code) to install the Inbot skill and verify the connection.
 
 [Connect an agent](/agents/connect) covers other MCP clients, OAuth, the CLI and REST.
 
 ## 8. Try it
 
-Send an email from your personal address to `support@agents.example.com`, then ask your agent to check its inbox and reply. It will call `list_threads`, read the message, and call `reply_to_message`. Because the key uses the `approval` policy, the reply appears on the **Approvals** page instead of being sent. Approve it, and the message is queued and sent.
+Send an email from your personal address to `support@agents.example.com`, then ask your agent to check its inbox and reply. It will call `list_threads`, read the message, and call `reply_to_message`. Because the key uses the `approval` policy, the reply appears on the **Approvals** page instead of being sent. Approve it, and the message is queued. Committing the approval wakes the outbox immediately; inspect its state for provider acceptance and delivery.
 
 ## Next
 

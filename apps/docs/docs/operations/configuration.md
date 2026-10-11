@@ -25,7 +25,7 @@ The home is resolved in this order:
 2. The `INBOT_HOME` environment variable
 3. `~/.inbot` for the production flavor, or `~/.inbot-dev` for the development flavor
 
-Installed packages run as `production`. A source checkout runs as `development`, so experiments never touch an installed instance's mail. The flavor only changes defaults; it does not change behavior. Always pass an explicit `--home` when testing.
+Installed packages run as `production`. A source checkout runs as `development`, so experiments never touch an installed instance's mail. Flavor selects home and package defaults; the test-only memory keychain is refused in production flavor. Always pass an explicit `--home` when testing.
 
 ## Environment variables
 

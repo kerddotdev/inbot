@@ -2,7 +2,7 @@
 
 Self-hosted, privacy-first email for AI agents. Each agent gets its own inbox on your custom domain, mail is stored encrypted on your own machine, and agents reach it through MCP, a CLI, or a REST API. An optional Cloudflare Tunnel lets cloud-hosted agents reach your local instance with scoped credentials. The mail provider still sees plaintext in transit: Inbot is zero-knowledge at rest, not end-to-end encrypted.
 
-Status: early development. The encrypted storage foundation, mailbox service, [inbound ingestion and encrypted buffer pulling](apps/server/src/inbound/README.md), [authenticated loopback HTTP API](apps/server/src/http/README.md), [authenticated CLI](apps/cli/README.md), shared [age envelope package](packages/envelope/README.md), [inbound Email Worker handler](apps/worker/README.md), [owner browser authentication and static UI serving](apps/server/src/http/README.md#owner-browser-authentication), drafts with owner approval and scheduled sending, and [delivery Queue consumer](apps/server/src/outbound/README.md#delivery-queue-consumer) exist. The [owner UI](apps/web/README.md) connects authentication, mail, API keys, approvals, domains, mail transport settings, and allow/block lists to the local API. The [durable event log, signed webhooks and authenticated WebSocket](apps/server/src/events/README.md) provide live updates. Optional [remote access](apps/server/src/remote/README.md) connects cloud agents through a supervised, verified Cloudflare Tunnel. Other settings still use mock data. Installable archives and checksum-verifying installers are implemented. Releases have not been published yet; live mail validation remains planned.
+Status: early development. The encrypted storage foundation, mailbox service, [inbound ingestion and encrypted buffer pulling](apps/server/src/inbound/README.md), [authenticated loopback HTTP API](apps/server/src/http/README.md), [authenticated CLI](apps/cli/README.md), shared [age envelope package](packages/envelope/README.md), [inbound Email Worker handler](apps/worker/README.md), [owner browser authentication and static UI serving](apps/server/src/http/README.md#owner-browser-authentication), drafts with owner approval and scheduled sending, and [delivery Queue consumer](apps/server/src/outbound/README.md#delivery-queue-consumer) exist. The [owner UI](apps/web/README.md) connects authentication, mail, API keys, approvals, domains, mail transport settings, and allow/block lists to the local API. The [durable event log, signed webhooks and authenticated WebSocket](apps/server/src/events/README.md) provide live updates. Optional [remote access](apps/server/src/remote/README.md) connects cloud agents through a supervised, verified Cloudflare Tunnel. [OAuth authorization](apps/server/src/oauth/README.md) provides owner consent, scoped grants and audience-bound tokens. Mail supports inbox creation, editing and deletion, API key editing, and attachment downloads in Mail and Approvals. Rejected-mail metadata is available in Settings and the CLI. Installable archives and checksum-verifying installers are implemented. Releases have not been published yet. Domain verification requires public DNS and an observed encrypted self-test arrival before reporting success.
 
 ## Install
 
@@ -68,6 +68,30 @@ To select an earlier retained version, re-run with `--version` (or `-Version`).
 or a local `file://`/loopback HTTP fixture. On Unix, flags `--install-root` and
 `--bin-dir` are also supported. Windows accepts `-InstallRoot`, `-BinDir` and
 `-ReleaseBaseUrl`. Paths must be absolute.
+
+## First steps
+
+You need an OS credential store and a Cloudflare account with an active zone for your domain. On the first start, open the printed loopback URL, enter the one-time setup code and choose an owner password. Configure Settings > Mail transport, provision a dedicated mail subdomain from Domains, and wait for its encrypted self-test. Verification can take about ten minutes or longer; probes retry every five minutes. Then create an inbox from Mail > New inbox and a scoped API key. New web grants default to Full access with approval and no selected inboxes. See the [quickstart](apps/docs/docs/get-started/quickstart.md) and [agent connections](apps/docs/docs/agents/connect.md).
+
+Use a fixed `--port` for saved agent configurations. Otherwise `serve` chooses a random port on each start. Run `inbot --version` or `inbot version` to inspect the package version without connecting.
+
+## Platform coverage
+
+| Target              | Archive        | Release workflow smoke coverage           |
+| ------------------- | -------------- | ----------------------------------------- |
+| macOS ARM64         | `darwin-arm64` | Native                                    |
+| macOS Intel         | `darwin-x64`   | No dedicated smoke job                    |
+| Linux ARM64 (glibc) | `linux-arm64`  | Native on the ARM64 Ubuntu runner         |
+| Linux x64 (glibc)   | `linux-x64`    | QEMU emulation on the ARM64 Ubuntu runner |
+| Windows x64         | `win32-x64`    | No Windows smoke job yet                  |
+
+Archives include native addon prebuilds; archive availability does not establish mail delivery or keychain support on every platform. Linux requires a working Secret Service. musl distributions are unsupported.
+
+## Remove an installation
+
+Stop your Inbot process before removing installed files. On macOS and Linux, delete the install root (`~/.local/share/inbot` by default, including retained versions) and the shim (`~/.local/bin/inbot`). On Windows, remove `%LOCALAPPDATA%\Programs\inbot` and its `bin` entry from your user PATH. Custom install roots and bin directories must be removed at their actual locations.
+
+Installed files are separate from mail and keys. Removing them leaves the home (`~/.inbot` by default) and its OS keychain entry intact. Back up the complete home while the service is stopped before any data deletion. Do not remove `keys.json` or the keychain item if you want to retain access to the encrypted database; there is no passphrase startup or recovery command.
 
 ## Packaging
 
@@ -176,3 +200,17 @@ signed receivers; `inbot events --follow --json` tails authorized events.
 
 See the [CLI reference](apps/cli/README.md) for resource commands, payload flags,
 pagination, and stable exit codes, or the [agent CLI guidance](skills/inbot/references/cli.md).
+
+## Current limitations
+
+- Service installation and automatic updates are unavailable; `serve` runs in the foreground.
+- Unlock uses the OS keychain. No CLI, API or web passphrase unlock is available.
+- The owner app displays HTML as escaped source or plain text, without inline attachment rendering.
+- Quarantined inbound ciphertext has durable reason metadata but no review, retry or release screen or command.
+- CLI coverage is a subset of REST and MCP: inbox updates, thread updates/deletion, message listing/search, raw and attachment downloads, API key reads by ID, domain and transport management have no CLI commands.
+- Inbound ciphertext survives host downtime, but provider delivery reports have only five-minute Queue retention and unmatched reports are not reconciled.
+- There is no password reset, export or managed backup. See [service operations](apps/docs/docs/operations/service.md).
+
+## License
+
+The root package metadata declares MIT. A standalone license file is not yet included in the repository or release archives.
