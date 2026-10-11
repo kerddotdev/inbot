@@ -26,8 +26,8 @@ import { keysetWhere, messageWhere, normalizedMailQuery, page, preparePage } fro
 import { timestampKey } from "./pagination.js";
 import { preview, resolveThread, sortableId } from "./threading.js";
 import { InsertMessage } from "./types.js";
+import { systemMessageLabels } from "./labels.js";
 
-const managedSendLabels = new Set(["queued", "sent", "failed", "send_unknown"]);
 const MessageIdentity = Schema.Struct({ message_id: Schema.String, thread_id: Schema.String });
 
 export function insertMessage(
@@ -175,7 +175,7 @@ export function updateMessage(
   messageId: string,
   request: UpdateMessageRequest,
   now: string,
-  manageSendLabels = false,
+  manageSystemLabels = false,
 ): UpdateMessageResponse {
   const input = validate(UpdateMessageRequest, request);
   const identity = db
@@ -187,16 +187,19 @@ export function updateMessage(
     typeof input.add_labels === "string" ? [input.add_labels] : (input.add_labels ?? []);
   const removals =
     typeof input.remove_labels === "string" ? [input.remove_labels] : (input.remove_labels ?? []);
-  const managed =
-    !manageSendLabels &&
-    db
-      .prepare("SELECT 1 FROM outbox WHERE inbox_id = ? AND message_id = ?")
-      .get(inboxId, messageId) !== undefined;
-  for (const label of additions.filter((label) => !managed || !managedSendLabels.has(label)))
+  if (
+    !manageSystemLabels &&
+    [...additions, ...removals].some((label) => systemMessageLabels.has(label))
+  )
+    throw validationError(
+      "System message labels cannot be changed by callers.",
+      "Remove system state labels from add_labels and remove_labels; only edit custom labels or unread.",
+    );
+  for (const label of additions)
     db.prepare(
       "INSERT OR IGNORE INTO message_labels (inbox_id, message_id, label) VALUES (?, ?, ?)",
     ).run(inboxId, messageId, label);
-  for (const label of removals.filter((label) => !managed || !managedSendLabels.has(label)))
+  for (const label of removals)
     db.prepare(
       "DELETE FROM message_labels WHERE inbox_id = ? AND message_id = ? AND label = ?",
     ).run(inboxId, messageId, label);

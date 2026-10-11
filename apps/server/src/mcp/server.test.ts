@@ -496,3 +496,58 @@ test("MCP webhook operations share REST permissions, inbox isolation and one-tim
     (await mcp.call("delete_webhook", { inboxId, webhookId: created.webhook_id })).isError,
   ).not.toBe(true);
 });
+
+test("REST and MCP reject every system label edit on inbound and queued messages atomically", async ({
+  api,
+}) => {
+  const mcp = await client(api);
+  const sent = await api.run(
+    api.outbox.enqueue(inboxId, {
+      kind: "send",
+      request: { to: "alice@example.test", text: "Synthetic protected labels" },
+    }),
+  );
+  if (mcp.key === undefined) throw new Error("Expected an agent key");
+  const labels = [
+    "received",
+    "queued",
+    "sent",
+    "send_unknown",
+    "failed",
+    "delivered",
+    "bounced",
+    "complained",
+    "rejected",
+    "deferred",
+  ];
+  for (const id of [messageId, sent.message_id]) {
+    const before = await api.run(api.mailbox.getMessage(inboxId, id));
+    for (const label of labels) {
+      for (const remove of [false, true]) {
+        const response = await api.request(
+          `/v0/inboxes/${inboxId}/messages/${encodeURIComponent(id)}`,
+          {
+            token: mcp.key.api_key,
+            method: "PATCH",
+            body: remove
+              ? { add_labels: "custom", remove_labels: label }
+              : { add_labels: ["custom", label] },
+          },
+        );
+        expect(response.status).toBe(400);
+        const rest = Schema.decodeUnknownSync(ErrorResponse)(await response.json());
+        expect(rest.code).toBe("validation_error");
+        expect(rest.fix).toContain("Remove system state labels");
+        const result = await mcp.call("update_message", {
+          inboxId,
+          messageId: id,
+          ...(remove
+            ? { addLabels: ["custom"], removeLabels: [label] }
+            : { addLabels: ["custom", label] }),
+        });
+        expect(failure(result, "validation_error")).toEqual(rest);
+      }
+    }
+    expect(await api.run(api.mailbox.getMessage(inboxId, id))).toEqual(before);
+  }
+});

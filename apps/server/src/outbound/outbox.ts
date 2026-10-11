@@ -13,6 +13,7 @@ import {
 } from "../../../../packages/contracts/src/outbound.js";
 import { Store, type StoreService } from "../store.js";
 import { MailboxError, notFound, validate } from "../mailbox/errors.js";
+import { systemMessageLabels } from "../mailbox/labels.js";
 import { insertMessage, updateMessage } from "../mailbox/messages.js";
 import { getInbox, getMessage } from "../mailbox/rows.js";
 import { compose, decodeRequest, localMessageId } from "./compose.js";
@@ -28,17 +29,6 @@ const IDEMPOTENCY_TTL = 24 * 60 * 60 * 1000;
 export const SENDING_LEASE_MS = 5 * 60 * 1000;
 export const MAX_ATTEMPTS = 8;
 export const MAX_BACKOFF_MS = 60 * 60 * 1000;
-const managedLabels = new Set([
-  "queued",
-  "send_unknown",
-  "sent",
-  "failed",
-  "delivered",
-  "bounced",
-  "complained",
-  "rejected",
-  "deferred",
-]);
 const PendingRow = Schema.Struct({ ...OutboxEntry.fields, provider_message: Schema.String });
 const ReplayRow = Schema.Struct({
   ...SendMessageResponse.fields,
@@ -374,7 +364,7 @@ function makeOutbox(
         references: composed.references,
         headers: composed.provider.headers,
         labels: [
-          ...(request.request.labels ?? []).filter((label) => !managedLabels.has(label)),
+          ...(request.request.labels ?? []).filter((label) => !systemMessageLabels.has(label)),
           "queued",
         ],
         attachments: composed.provider.attachments.map((attachment) => ({

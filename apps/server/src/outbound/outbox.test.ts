@@ -127,7 +127,7 @@ test("enqueue stores queued replies atomically, acceptance adds an alias, and in
       const reply = yield* outbox.enqueue(inbox.inbox_id, {
         kind: "reply",
         message_id: original.message_id,
-        request: { text: "Reply", labels: ["custom", "sent", "delivered"] },
+        request: { text: "Reply", labels: ["custom", "sent", "delivered", "received"] },
       });
       expect(reply.message_id).toMatch(/^<[0-9a-f-]+@example\.test>$/);
       expect(reply.thread_id).toBe(original.thread_id);

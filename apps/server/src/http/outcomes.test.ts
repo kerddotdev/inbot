@@ -158,7 +158,7 @@ for (const mode of ["timeout", "lost_response"] as const) {
           body: { remove_labels: "send_unknown", add_labels: "sent" },
         })
       ).status,
-    ).toBe(200);
+    ).toBe(400);
     expect((await read(api, sent.message_id)).labels).toEqual(["send_unknown"]);
     await api.run(
       api.store.use((db) => {
