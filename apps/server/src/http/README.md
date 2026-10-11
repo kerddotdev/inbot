@@ -30,6 +30,31 @@ sets `INBOT_TEST_MEMORY_KEYCHAIN=1`; this switch requires an explicit `--home`,
 refuses the default homes, and refuses production flavor. Its keys disappear at
 process exit, so that test home cannot be reopened through a real keychain.
 
+## Startup failures
+
+Failed startup prints one `server.failed` JSON line to stderr and exits with code 1.
+Known failures preserve the key, keychain, home, connection, or database error's
+stable `code` and actionable `fix`. Diagnostics never include keys, credentials,
+raw error messages, or storage/provider details. Unrecognized errors use
+`service_unavailable`.
+
+| Code                                                                                                   | Meaning                                                                                                                    |
+| ------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------- |
+| `not_initialized`                                                                                      | The home has no keys; initialize it with `--init`.                                                                         |
+| `already_initialized`                                                                                  | Initialization would replace existing keys; unlock the existing home.                                                      |
+| `keychain_unavailable`                                                                                 | Unlock the OS credential store and allow access.                                                                           |
+| `keychain_entry_missing`                                                                               | Recover access with a configured passphrase, then enable keychain access again. Passphrase startup is not yet implemented. |
+| `keys_file_corrupt`                                                                                    | Restore this home's keys from backup; do not initialize replacement keys.                                                  |
+| `key_storage_unavailable`, `home_unavailable`                                                          | Check the home's permissions and available space.                                                                          |
+| `database_key_invalid`                                                                                 | Use the original keys, or restore a damaged database from backup.                                                          |
+| `database_failed`                                                                                      | Check database permissions, disk space, and schema version.                                                                |
+| `key_crypto_failed`                                                                                    | Check Node.js version and available memory.                                                                                |
+| `method_not_configured`, `invalid_configuration`, `locked`, `last_unlock_method`, `invalid_passphrase` | Follow the key manager's returned `fix`.                                                                                   |
+
+`--init` on an existing valid home still unlocks it rather than replacing its keys.
+The `cause` field identifies a recognized error type; unknown failures use
+`UnexpectedError`.
+
 ## Implemented routes
 
 All declared `InbotApi` endpoints are registered with Effect v4

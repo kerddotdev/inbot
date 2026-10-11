@@ -23,6 +23,7 @@ import { startProvisionLoop } from "./provision/runtime.js";
 import { RemoteAccess } from "./remote/remote.js";
 import { startRemoteLoop } from "./remote/runtime.js";
 import { Store } from "./store.js";
+import { startupFailure } from "./startup-error.js";
 
 function options():
   | (HomeOptions & {
@@ -170,14 +171,6 @@ async function serve() {
 }
 
 void serve().catch((error: unknown) => {
-  const cause =
-    error !== null && typeof error === "object" && "_tag" in error && typeof error._tag === "string"
-      ? error._tag
-      : error instanceof Error
-        ? error.name
-        : "Unknown";
-  process.stderr.write(
-    `${JSON.stringify({ event: "server.failed", code: "service_unavailable", cause, message: "The server could not start or shut down cleanly.", fix: "Check command options, home permissions, and keychain access. A new home requires --init." })}\n`,
-  );
+  process.stderr.write(`${JSON.stringify(startupFailure(error))}\n`);
   process.exitCode = 1;
 });
