@@ -66,6 +66,9 @@ importers:
       '@inbot/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@inbot/design':
+        specifier: workspace:*
+        version: link:../../packages/design
       '@tanstack/react-query':
         specifier: 5.104.1
         version: 5.104.1(react@19.3.0)
@@ -104,6 +107,8 @@ importers:
   apps/worker: {}
 
   packages/contracts: {}
+
+  packages/design: {}
 
   packages/envelope: {}
 

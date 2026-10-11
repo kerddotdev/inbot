@@ -1,0 +1,8 @@
+{
+  "name": "@inbot/design",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./tokens.css": "./src/tokens.css"
+  }
+}
