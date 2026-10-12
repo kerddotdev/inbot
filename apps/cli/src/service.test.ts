@@ -8,6 +8,7 @@ import { runCli } from "./cli.js";
 import {
   renderService,
   serviceIdentity,
+  servicePlatform,
   windowsArgument,
   type ServicePlatform,
 } from "./service-definition.js";
@@ -23,6 +24,8 @@ const keys = JSON.stringify({
   version: 1,
   keychain: { nonce: "00".repeat(12), ciphertext: "00".repeat(32), tag: "00".repeat(16) },
 });
+
+const localPlatform = servicePlatform(process.platform);
 
 async function fixture(platform: ServicePlatform) {
   const root = await mkdtemp(join(tmpdir(), "inbot-service-"));
@@ -92,67 +95,73 @@ async function fixture(platform: ServicePlatform) {
 }
 
 for (const platform of ["darwin", "linux", "win32"] as const) {
-  test(`${platform} installation rewrites and restarts, observes status, and uninstall retains home data`, async () => {
-    const f = await fixture(platform);
-    try {
-      expect(await f.service.status()).toMatchObject({
-        installed: false,
-        running: false,
-        port: null,
-        http_healthy: false,
-      });
-      const installed = await f.service.install(9123);
-      expect(installed).toMatchObject({
-        installed: true,
-        registered: true,
-        running: true,
-        state: "running",
-        port: 9123,
-        http_healthy: true,
-      });
-      expect(await readFile(installed.unit_path, "utf8")).toContain("InbotPort: 9123");
-      expect((await stat(installed.stdout_log)).mode & 0o777).toBe(0o600);
-      const restarted = await f.service.install(8025);
-      expect(restarted).toMatchObject({ port: 8025, running: true, http_healthy: false });
-      const starts = f.calls.filter(
-        (call) =>
-          call.args.includes("bootstrap") ||
-          (call.args.includes("--now") && call.args.includes("enable")) ||
-          call.args.includes("/Run"),
-      );
-      expect(starts).toHaveLength(2);
-      expect(await f.service.uninstall()).toMatchObject({
-        installed: false,
-        running: false,
-        port: null,
-      });
-      expect(await readFile(join(f.home, "keys.json"), "utf8")).toBe(keys);
-      expect(await readFile(join(f.home, "mail.db"), "utf8")).toBe("Synthetic encrypted database");
-      expect(await readFile(installed.stdout_log, "utf8")).toBe("");
-      expect(await f.service.uninstall()).toMatchObject({ installed: false, running: false });
-      expect(f.calls.every((call) => !call.program.includes(" "))).toBe(true);
-      if (platform === "darwin")
-        expect(f.calls).toContainEqual({
-          program: "launchctl",
-          args: ["bootstrap", "gui/501", installed.unit_path],
+  test.runIf(platform === localPlatform)(
+    `${platform} installation rewrites and restarts, observes status, and uninstall retains home data`,
+    async () => {
+      const f = await fixture(platform);
+      try {
+        expect(await f.service.status()).toMatchObject({
+          installed: false,
+          running: false,
+          port: null,
+          http_healthy: false,
         });
-      if (platform === "win32") {
-        expect(f.calls).toContainEqual({
-          program: "schtasks.exe",
-          args: ["/Create", "/TN", installed.name, "/XML", installed.unit_path, "/F"],
+        const installed = await f.service.install(9123);
+        expect(installed).toMatchObject({
+          installed: true,
+          registered: true,
+          running: true,
+          state: "running",
+          port: 9123,
+          http_healthy: true,
         });
-        await expect(readFile(`${installed.unit_path}.ps1`)).rejects.toMatchObject({
-          code: "ENOENT",
+        expect(await readFile(installed.unit_path, "utf8")).toContain("InbotPort: 9123");
+        if (process.platform !== "win32")
+          expect((await stat(installed.stdout_log)).mode & 0o777).toBe(0o600);
+        const restarted = await f.service.install(8025);
+        expect(restarted).toMatchObject({ port: 8025, running: true, http_healthy: false });
+        const starts = f.calls.filter(
+          (call) =>
+            call.args.includes("bootstrap") ||
+            (call.args.includes("--now") && call.args.includes("enable")) ||
+            call.args.includes("/Run"),
+        );
+        expect(starts).toHaveLength(2);
+        expect(await f.service.uninstall()).toMatchObject({
+          installed: false,
+          running: false,
+          port: null,
         });
+        expect(await readFile(join(f.home, "keys.json"), "utf8")).toBe(keys);
+        expect(await readFile(join(f.home, "mail.db"), "utf8")).toBe(
+          "Synthetic encrypted database",
+        );
+        expect(await readFile(installed.stdout_log, "utf8")).toBe("");
+        expect(await f.service.uninstall()).toMatchObject({ installed: false, running: false });
+        expect(f.calls.every((call) => !call.program.includes(" "))).toBe(true);
+        if (platform === "darwin")
+          expect(f.calls).toContainEqual({
+            program: "launchctl",
+            args: ["bootstrap", "gui/501", installed.unit_path],
+          });
+        if (platform === "win32") {
+          expect(f.calls).toContainEqual({
+            program: "schtasks.exe",
+            args: ["/Create", "/TN", installed.name, "/XML", installed.unit_path, "/F"],
+          });
+          await expect(readFile(`${installed.unit_path}.ps1`)).rejects.toMatchObject({
+            code: "ENOENT",
+          });
+        }
+      } finally {
+        await f.close();
       }
-    } finally {
-      await f.close();
-    }
-  });
+    },
+  );
 }
 
 test("failed manager observations stay unknown and prevent destructive uninstall", async () => {
-  const f = await fixture("linux");
+  const f = await fixture(localPlatform);
   try {
     f.setStartRunning(false);
     const installed = await f.service.install(8025);
@@ -174,7 +183,7 @@ test("failed manager observations stay unknown and prevent destructive uninstall
 });
 
 test("install refuses uninitialized and passphrase-only homes or source checkouts without manager calls", async () => {
-  const f = await fixture("darwin");
+  const f = await fixture(localPlatform);
   try {
     await rm(join(f.home, "keys.json"));
     await expect(f.service.install(8025)).rejects.toMatchObject({
@@ -240,6 +249,29 @@ test("names distinguish development and custom homes while production gets the p
   }
 });
 
+test.each([
+  {
+    platform: "darwin",
+    home: "/users/owner/.inbot",
+    userHome: "/users/owner",
+    unitPath: "/users/owner/Library/LaunchAgents/dev.kerd.inbot.plist",
+  },
+  {
+    platform: "linux",
+    home: "/users/owner/.inbot",
+    userHome: "/users/owner",
+    unitPath: "/users/owner/.config/systemd/user/inbot.service",
+  },
+  {
+    platform: "win32",
+    home: "C:\\Users\\Owner\\.inbot",
+    userHome: "C:\\Users\\Owner",
+    unitPath: "C:\\Users\\Owner\\AppData\\Local\\Inbot\\services\\Inbot.xml",
+  },
+] as const)("$platform definition paths follow the target platform", ({ unitPath, ...input }) => {
+  expect(serviceIdentity(input).unitPath).toBe(unitPath);
+});
+
 test("definitions preserve spaces and special characters without shell expansion or credentials", () => {
   const input = {
     home: '/users/Owner/mail & <box> "quoted" %n $HOME',
@@ -279,6 +311,28 @@ test("definitions preserve spaces and special characters without shell expansion
   expect(() => renderService({ ...input, platform: "linux", home: "/bad\npath" })).toThrow();
   expect(() => renderService({ ...input, platform: "darwin", port: 0 })).toThrow();
 });
+
+test.each(["darwin", "linux", "win32"] as const)(
+  "%s definitions reject relative paths and control characters in every path field",
+  (platform) => {
+    const input = {
+      platform,
+      home: platform === "win32" ? "C:\\Users\\Owner\\.inbot" : "/users/owner/.inbot",
+      userHome: platform === "win32" ? "C:\\Users\\Owner" : "/users/owner",
+      executable: platform === "win32" ? "C:\\app\\node.exe" : "/app/node",
+      cli: platform === "win32" ? "C:\\app\\main.js" : "/app/main.js",
+      port: 8025,
+      username: "Owner",
+    };
+    for (const field of ["home", "userHome", "executable", "cli"] as const)
+      for (const value of ["relative/path", `${input[field]}\n`, `${input[field]}\0`])
+        expect(() => renderService({ ...input, [field]: value })).toThrowError(
+          expect.objectContaining({
+            detail: expect.objectContaining({ code: "validation_error" }),
+          }),
+        );
+  },
+);
 
 test.each([
   {
@@ -349,7 +403,7 @@ test("status parsers distinguish registered stopped tasks from actual running pr
 });
 
 test("CLI service commands validate flags, reject agent context, and use home precedence with JSON", async () => {
-  const f = await fixture("linux");
+  const f = await fixture(localPlatform);
   try {
     const invoke = async (
       args: string[],
@@ -385,7 +439,16 @@ test("CLI service commands validate flags, reject agent context, and use home pr
     ).toMatchObject({ home: f.home, port: 9123 });
     expect(
       JSON.parse((await invoke(["service", "status", "--json", "--flavor", "production"])).stdout),
-    ).toMatchObject({ home: join(f.root, ".inbot"), name: "inbot.service", installed: false });
+    ).toMatchObject({
+      home: join(f.root, ".inbot"),
+      name:
+        localPlatform === "darwin"
+          ? "dev.kerd.inbot"
+          : localPlatform === "linux"
+            ? "inbot.service"
+            : "Inbot",
+      installed: false,
+    });
     expect(JSON.parse((await invoke(["service", "status", "--json"])).stdout)).toMatchObject({
       home: join(f.root, ".inbot-dev"),
     });
