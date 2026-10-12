@@ -2,7 +2,6 @@ import { randomBytes } from "node:crypto";
 import type Database from "better-sqlite3-multiple-ciphers";
 import { Clock, Context, Effect, Layer, Result, Schema } from "effect";
 import { ErrorResponse } from "../../../../packages/contracts/src/errors.js";
-import { wireError } from "../http/errors.js";
 import { PaginationQuery } from "../../../../packages/contracts/src/common.js";
 import {
   CreateWebhookRequest,
@@ -90,15 +89,6 @@ function scopedIds(
   return result === undefined ? null : [...new Set(result)];
 }
 
-function checkPods(ids: readonly string[] | undefined) {
-  if (ids !== undefined)
-    throw wireError(
-      "not_supported",
-      "Pod webhook filters are not supported.",
-      "Use inbox_ids to scope local webhook delivery.",
-    );
-}
-
 const reservedHeaders = new Set([
   "host",
   "connection",
@@ -164,7 +154,6 @@ export function makeWebhooks(store: StoreService) {
     create: (request: CreateWebhookRequest, inboxId?: string) =>
       run("webhook_create", inboxId, (db, now, principal) => {
         const input = validate(CreateWebhookRequest, request);
-        checkPods(input.pod_ids);
         const { url } = webhookUrl(input.url, principal);
         const ids = scopedIds(db, principal, inboxId === undefined ? input.inbox_ids : [inboxId]);
         const headers = checkedHeaders(input.headers ?? {});
@@ -231,8 +220,6 @@ export function makeWebhooks(store: StoreService) {
     update: (id: string, request: UpdateWebhookRequest, inboxId?: string) =>
       run("webhook_update", inboxId, (db, now, principal) => {
         const input = validate(UpdateWebhookRequest, request);
-        checkPods(input.add_pod_ids);
-        checkPods(input.remove_pod_ids);
         const row = get(db, id, principal, inboxId);
         if (
           row.inbox_id !== null &&

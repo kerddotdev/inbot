@@ -8,7 +8,7 @@ import {
   RejectionRule,
   Direction,
   ListType,
-  PodListEntry,
+  InboxListEntry,
 } from "../../../../packages/contracts/src/lists.js";
 import {
   MailboxError,
@@ -23,7 +23,7 @@ import { Store, type StoreService } from "../store.js";
 import { normalizeEntry } from "./policy.js";
 
 const Row = Schema.Struct({
-  ...PodListEntry.fields,
+  ...InboxListEntry.fields,
   reason: Schema.NullOr(Schema.String),
   inbox_id: Schema.NullOr(Schema.String),
 });
@@ -35,7 +35,6 @@ function read(row: unknown) {
     ...(inbox_id === null ? {} : { inbox_id }),
   };
 }
-const columns = "*, 'local' AS organization_id, 'local' AS pod_id";
 
 export function makeLists(store: StoreService) {
   function run<A>(operation: (db: Database.Database, now: string) => A, write = false) {
@@ -77,9 +76,7 @@ export function makeLists(store: StoreService) {
     entry: string,
   ) {
     const where = scope(db, inboxId, direction, type).add("entry = ?", normalizeEntry(entry).entry);
-    const row = db
-      .prepare(`SELECT ${columns} FROM list_entries WHERE ${where.sql}`)
-      .get(...where.params);
+    const row = db.prepare(`SELECT * FROM list_entries WHERE ${where.sql}`).get(...where.params);
     if (row === undefined) throw notFound();
     return read(row);
   }
@@ -143,7 +140,7 @@ export function makeLists(store: StoreService) {
         keysetWhere(where, cursor, "entry", "entry", true);
         const rows = db
           .prepare(
-            `SELECT ${columns}, entry AS cursor_key, entry AS cursor_id FROM list_entries WHERE ${where.sql} ORDER BY entry ASC LIMIT ?`,
+            `SELECT *, entry AS cursor_key, entry AS cursor_id FROM list_entries WHERE ${where.sql} ORDER BY entry ASC LIMIT ?`,
           )
           .all(...where.params, limit + 1);
         const { items, ...fields } = page(rows, limit, expected, read);

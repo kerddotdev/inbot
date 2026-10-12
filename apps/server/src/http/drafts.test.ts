@@ -147,7 +147,7 @@ test("REST CRUD persists encrypted drafts, replays client_id, and clears fields 
   );
 });
 
-test("REST permissions and scopes constrain CRUD, organization lists, gets, downloads and pagination", async ({
+test("REST permissions and scopes constrain CRUD, global lists, gets, downloads and pagination", async ({
   api,
 }) => {
   const agent = await key(api);

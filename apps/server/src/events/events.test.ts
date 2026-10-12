@@ -309,6 +309,18 @@ test("webhook CRUD enforces permissions, creator and inbox scope and returns sec
   expect(created.inbox_ids).toEqual([inboxId]);
   expect(requiredSecret(created)).toMatch(/^whsec_/);
   const path = `/v0/webhooks/${created.webhook_id}`;
+  for (const [target, method, body] of [
+    [
+      "/v0/webhooks",
+      "POST",
+      { url: created.url, event_types: ["message.received"], unknown_filter: [] },
+    ],
+    [path, "PATCH", { unknown_filter: [] }],
+  ] as const) {
+    const response = await api.request(target, { method, body, token: key.api_key });
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({ code: "validation_error" });
+  }
   expect(await (await api.request(path, { token: key.api_key })).json()).not.toHaveProperty(
     "secret",
   );
@@ -845,6 +857,9 @@ test("pending events cannot reveal messages hidden or deleted after their origin
 test("WebSocket rejects unknown and repeated subscriptions and closes expired credentials", async ({
   api,
 }) => {
+  const unknown = await client(api);
+  unknown.subscribe({ unknown_filter: [inboxId] });
+  expect((await bounded(unknown.closed)).code).toBe(1008);
   const ws = await client(api);
   ws.subscribe({ last_event_id: "unknown-cursor" });
   expect((await bounded(ws.closed)).code).toBe(1008);

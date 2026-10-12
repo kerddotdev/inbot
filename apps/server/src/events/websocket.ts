@@ -139,11 +139,7 @@ export function websocket(origin: string) {
             const decoded = yield* Schema.decodeUnknownEffect(Subscribe, {
               onExcessProperty: "error",
             })(value).pipe(Effect.result);
-            if (
-              decoded._tag === "Failure" ||
-              decoded.success.pod_ids !== undefined ||
-              initialized
-            ) {
+            if (decoded._tag === "Failure" || initialized) {
               yield* close(1008, "Send one valid subscription per connection");
               return;
             }
