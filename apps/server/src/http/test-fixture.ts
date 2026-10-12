@@ -30,6 +30,7 @@ export async function fixture(
   home: string,
   options: {
     readonly webRoot?: string;
+    readonly zoneName?: string;
     readonly transportFetch?: typeof globalThis.fetch;
     readonly outboundSend?: OutboundProviderService["send"];
   } = {},
@@ -107,7 +108,7 @@ export async function fixture(
       ),
       Context.empty(),
     );
-    const cloud = fakeCloudflare();
+    const cloud = fakeCloudflare(options.zoneName);
     const provisioner = makeProvisioner({
       store: Context.get(baseServices, Store),
       api: cloud.service,

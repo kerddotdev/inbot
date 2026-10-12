@@ -17,11 +17,11 @@ import {
 } from "./cloudflare-api.js";
 import { missingPermission, ProvisionError, unavailable } from "./errors.js";
 
-export function fakeCloudflare() {
+export function fakeCloudflare(zoneName = "example.test") {
   let nextId = 0;
   const id = () => `fake-${++nextId}`;
   const account = { id: "fake-account" };
-  const zone: Zone = { id: "fake-zone", name: "example.test", account };
+  const zone: Zone = { id: "fake-zone", name: zoneName, account };
   const zones: Zone[] = [zone];
   type FakeDnsRecord = DnsRecord & {
     readonly meta?: { readonly email_routing?: boolean; readonly read_only: boolean };

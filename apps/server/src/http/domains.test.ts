@@ -12,6 +12,26 @@ import { ErrorResponse } from "../../../../packages/contracts/src/errors.js";
 import { fixture } from "./test-fixture.js";
 import { client } from "../mcp/test-client.js";
 
+test("provisions a subdomain in a custom fake zone", async () => {
+  const home = await mkdtemp(join(tmpdir(), "inbot-domains-custom-zone-"));
+  const api = await fixture(home, { zoneName: "example.com" });
+  try {
+    await api.run(api.transport.set({ account_id: "fake-account", api_token: "synthetic-token" }));
+    const domain = await api.run(api.provisioner.create({ domain: "agents.example.com" }));
+    const applied = await api.run(api.provisioner.apply(domain.domain_id));
+    expect(applied.status).toBe("VERIFYING");
+    expect(applied.records.some((record) => record.name === "agents.example.com")).toBe(true);
+    expect(api.cloud.zones[0]?.name).toBe("example.com");
+    expect(api.cloud.routed.has("agents.example.com")).toBe(true);
+    expect(api.cloud.dns.some((record) => record.name === "cf2024-1._domainkey.example.com")).toBe(
+      true,
+    );
+  } finally {
+    await api.close();
+    await rm(home, { recursive: true, force: true });
+  }
+});
+
 test("domain APIs are owner-only, expose plans and BIND text, apply and teardown, and never become MCP tools", async () => {
   const home = await mkdtemp(join(tmpdir(), "inbot-domains-http-"));
   const api = await fixture(home);
