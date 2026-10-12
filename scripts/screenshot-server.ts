@@ -12,6 +12,7 @@ import type { CreateWebhookRequest } from "../packages/contracts/src/webhooks.js
 import { presetPermissions } from "../apps/web/src/components/grant-presets.js";
 import { fixture } from "../apps/server/src/http/test-fixture.js";
 import { ingestInbound } from "../apps/server/src/inbound/ingest.js";
+import { bufferState } from "../apps/server/src/inbound/state.js";
 import { Mailbox } from "../apps/server/src/mailbox/mailbox.js";
 import { observeSelfTest } from "../apps/server/src/provision/selftest.js";
 
@@ -571,6 +572,23 @@ async function seed(demo: Demo) {
       },
     }),
   );
+
+  const inbound = await demo.run(demo.inbound.get());
+  if (!inbound) throw new Error("Missing synthetic inbound configuration");
+  const quarantine = bufferState(demo.store, inbound.account_id, inbound.bucket);
+  const failures = [
+    { id: "000000000001", reason: "invalid_mime", size: 48_213, age: 30 * hour },
+    { id: "000000000002", reason: "invalid_ciphertext", size: 12_880, age: 5 * hour },
+  ];
+  for (const failure of failures) {
+    const key = `inbound/01a1269c-73cc-7dd9-8d18-${failure.id}.age`;
+    demo.buffer.putObject(
+      key,
+      new Uint8Array(failure.size).fill(42),
+      new Date(now - failure.age).toISOString(),
+    );
+    await demo.run(quarantine.put(key, "quarantined", failure.reason));
+  }
 }
 
 async function main() {
