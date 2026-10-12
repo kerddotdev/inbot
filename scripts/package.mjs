@@ -16,6 +16,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
+import { stagePackageNotices } from "./package-notices.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const nodeVersion = "24.21.0";
@@ -174,6 +175,8 @@ try {
     const runtime = join(bundle, "runtime");
     await mkdir(runtime, { recursive: true });
     await mkdir(application);
+    for (const file of ["LICENSE", "THIRD_PARTY_NOTICES.md"])
+      await copyFile(join(root, file), join(bundle, file));
     await cp(join(root, "dist"), join(application, "dist"), { recursive: true });
     await cp(join(root, "apps/web/dist"), join(application, "web"), { recursive: true });
     await cp(modules, join(application, "node_modules"), { recursive: true });
@@ -184,6 +187,7 @@ try {
           name: "inbot",
           version,
           private: true,
+          license: "MIT",
           type: "module",
           dependencies: manifest.dependencies,
         },
@@ -211,6 +215,14 @@ try {
     const keyringDirectory = join(application, "node_modules", keyring);
     await mkdir(keyringDirectory);
     await run("tar", ["-xzf", keyringArchive, "-C", keyringDirectory, "--strip-components=1"]);
+    await stagePackageNotices(
+      [
+        { directory: application },
+        { directory: join(root, "apps/web") },
+        { directory: join(root, "apps/web/node_modules/tailwindcss"), include: true },
+      ],
+      join(bundle, "licenses"),
+    );
     if (windows) {
       await run("unzip", [
         "-q",

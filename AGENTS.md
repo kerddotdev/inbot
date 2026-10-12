@@ -136,6 +136,5 @@ The local `inbot serve` service owns the encrypted SQLite database and serves RE
 ## Language and documentation
 
 - Write all tracked content in English, including documentation, comments, test names, error messages, and commit messages.
-- An optional, locally excluded `internal` directory may contain private materials in another language. Never commit it, and remove this mention before the repository becomes public.
 - Do not use emojis, em dashes, or en dashes in code or documentation. Use ordinary hyphens.
 - Keep guidance focused on capabilities and commands that exist.

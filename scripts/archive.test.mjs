@@ -55,6 +55,17 @@ test(
         "inbot/application/dist/worker/inbound.js",
         "inbot/application/web/index.html",
         "inbot/runtime/LICENSE",
+        "inbot/LICENSE",
+        "inbot/THIRD_PARTY_NOTICES.md",
+        "inbot/licenses/INDEX.md",
+        "inbot/licenses/better-sqlite3-multiple-ciphers@13.0.3/LICENSE",
+        "inbot/licenses/better-sqlite3-multiple-ciphers@13.0.3/SQLite3MultipleCiphers-LICENSE",
+        "inbot/licenses/better-sqlite3-multiple-ciphers@13.0.3/SQLite3MultipleCiphers-NOTICES",
+        `inbot/licenses/@napi-rs/keyring-${keyringTarget}@2.1.0/LICENSE`,
+        "inbot/licenses/react@19.3.0/LICENSE",
+        "inbot/licenses/dompurify@3.4.16/LICENSE",
+        "inbot/licenses/unpdf@1.8.1/PDF.js-LICENSE",
+        "inbot/licenses/unzipper@0.12.5/LICENSE",
         `inbot/inbot${windows ? ".cmd" : ""}`,
       ])
         assert.ok(entries.includes(required), `Missing ${required}`);
@@ -69,7 +80,18 @@ test(
       const temporary = await mkdtemp(join(tmpdir(), "inbot-archive-"));
       try {
         const runtime = `inbot/runtime/${windows ? "node.exe" : "bin/node"}`;
-        const files = [runtime, sqlite, keyring, "inbot/BUILD.json"];
+        const legal = [
+          "inbot/LICENSE",
+          "inbot/THIRD_PARTY_NOTICES.md",
+          "inbot/licenses/INDEX.md",
+          "inbot/application/package.json",
+        ];
+        const manifests = entries.filter((entry) =>
+          /^inbot\/application\/node_modules\/(?:@[^/]+\/)?[^/]+(?:\/node_modules\/(?:@[^/]+\/)?[^/]+)*\/package\.json$/.test(
+            entry,
+          ),
+        );
+        const files = [runtime, sqlite, keyring, "inbot/BUILD.json", ...legal, ...manifests];
         if (windows)
           await exec("unzip", ["-q", join(directory, archive), ...files, "-d", temporary]);
         else await exec("tar", ["-xzf", join(directory, archive), "-C", temporary, ...files]);
@@ -78,6 +100,28 @@ test(
         const build = JSON.parse(await readFile(join(temporary, "inbot/BUILD.json")));
         assert.equal(build.target, target);
         assert.equal(build.node, "24.21.0");
+        assert.equal(
+          JSON.parse(await readFile(join(temporary, "inbot/application/package.json"))).license,
+          "MIT",
+        );
+        for (const file of ["LICENSE", "THIRD_PARTY_NOTICES.md"])
+          assert.equal(
+            await readFile(join(temporary, "inbot", file), "utf8"),
+            await readFile(new URL(`../${file}`, import.meta.url), "utf8"),
+          );
+        const notices = await readFile(join(temporary, "inbot/licenses/INDEX.md"), "utf8");
+        assert.match(notices, /## Publication blockers\n\nNone detected/);
+        assert.doesNotMatch(notices, /\| (?:binary|buffers|chainsaw)@/);
+        assert.ok(
+          entries.every((entry) => !/node_modules\/(?:binary|buffers|chainsaw)\//.test(entry)),
+        );
+        for (const file of manifests) {
+          const manifest = JSON.parse(await readFile(join(temporary, file), "utf8"));
+          assert.ok(
+            notices.includes(`| ${manifest.name}@${manifest.version} |`),
+            `Missing notice for ${file}`,
+          );
+        }
       } finally {
         await rm(temporary, { recursive: true, force: true });
       }

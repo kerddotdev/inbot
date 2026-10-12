@@ -81,6 +81,12 @@ SQLite and keyring prebuilds come from official npm tarballs verified against th
 lockfile's SHA-512 integrity. No native compilation or new dependency is required.
 `BUILD.json` records target, version and source integrity values.
 
+Archives include Inbot's `LICENSE`, `THIRD_PARTY_NOTICES.md`, Node's upstream
+license, and a generated `licenses/INDEX.md` with dependency license materials.
+Packaging rejects dependencies with missing license declarations or materials.
+See [RELEASING.md](RELEASING.md)
+for the maintainer checklist and generated GitHub release notes.
+
 `--skip-build` reuses an existing complete build; `--output` changes the release
 directory. Download caches are stored under the output's `.cache` directory and
 are excluded from release assets. For a local, keychain-free startup check:

@@ -1,0 +1,1330 @@
+SQLite3 Multiple Ciphers native source notices
+
+Source: better-sqlite3-multiple-ciphers 13.0.3 npm archive, deps/sqlite3/sqlite3.c
+SHA-256: ad84d2c24540cf62ea27ee414911a32963390769bd031f39a50aec0ad90614a0
+
+Unmodified license and copyright comment blocks from the bundled amalgamation.
+SQLite itself is public domain; see THIRD_PARTY_NOTICES.md.
+
+/*
+** Name:        sqlite3mc.c
+** Purpose:     Amalgamation of the SQLite3 Multiple Ciphers encryption extension for SQLite
+** Author:      Ulrich Telle
+** Created:     2020-02-28
+** Copyright:   (c) 2006-2025 Ulrich Telle
+** License:     MIT
+*/
+
+/*
+** Name:        sqlite3mc_config.h
+** Purpose:     Header file for SQLite3 Multiple Ciphers compile-time configuration
+** Author:      Ulrich Telle
+** Created:     2021-09-27
+** Copyright:   (c) 2019-2025 Ulrich Telle
+** License:     MIT
+*/
+
+/*
+** Name:        sqlite3mc.h
+** Purpose:     Header file for SQLite3 Multiple Ciphers support
+** Author:      Ulrich Telle
+** Created:     2020-03-01
+** Copyright:   (c) 2019-2026 Ulrich Telle
+** License:     MIT
+*/
+
+/*
+** Name:        sqlite3mc_version.h
+** Purpose:     SQLite3 Multiple Ciphers version numbers
+** Author:      Ulrich Telle
+** Created:     2020-08-05
+** Copyright:   (c) 2020-2026 Ulrich Telle
+** License:     MIT
+*/
+
+/*
+** Name:        sqlite3mc_vfs.h
+** Purpose:     Header file for VFS of SQLite3 Multiple Ciphers support
+** Author:      Ulrich Telle
+** Created:     2020-03-01
+** Copyright:   (c) 2020-2023 Ulrich Telle
+** License:     MIT
+*/
+
+/*
+ * This is an OpenSSL-compatible implementation of the RSA Data Security, Inc.
+ * MD5 Message-Digest Algorithm (RFC 1321).
+ *
+ * Homepage:
+ * http://openwall.info/wiki/people/solar/software/public-domain-source-code/md5
+ *
+ * Author:
+ * Alexander Peslyak, better known as Solar Designer <solar at openwall.com>
+ *
+ * This software was written by Alexander Peslyak in 2001.  No copyright is
+ * claimed, and the software is hereby placed in the public domain.
+ * In case this attempt to disclaim copyright and place the software in the
+ * public domain is deemed null and void, then the software is
+ * Copyright (c) 2001 Alexander Peslyak and it is hereby released to the
+ * general public under the following terms:
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted.
+ *
+ * There's ABSOLUTELY NO WARRANTY, express or implied.
+ *
+ * (This is a heavily cut-down "BSD license".)
+ *
+ * This differs from Colin Plumb's older public domain implementation in that
+ * no exactly 32-bit integer data type is required (any 32-bit or wider
+ * unsigned integer data type will do), there's no compile-time endianness
+ * configuration, and the function prototypes match OpenSSL's.  No code from
+ * Colin Plumb's implementation has been reused; this comment merely compares
+ * the properties of the two independent implementations.
+ *
+ * The primary goals of this implementation are portability and ease of use.
+ * It is meant to be fast, but not as fast as possible.  Some known
+ * optimizations are not included to reduce source code size and avoid
+ * compile-time configuration.
+ */
+
+/*
+ * FIPS 180-2 SHA-224/256/384/512 implementation
+ * Last update: 02/02/2007
+ * Issue date:  04/30/2005
+ *
+ * Copyright (C) 2005, 2007 Olivier Gay <olivier.gay@a3.epfl.ch>
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. Neither the name of the project nor the names of its contributors
+ *    may be used to endorse or promote products derived from this software
+ *    without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE PROJECT AND CONTRIBUTORS ``AS IS'' AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED.  IN NO EVENT SHALL THE PROJECT OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ * SUCH DAMAGE.
+ */
+
+/*
+ * fast-pbkdf2 - Optimal PBKDF2-HMAC calculation
+ * Written in 2015 by Joseph Birr-Pixton <jpixton@gmail.com>
+ *
+ * To the extent possible under law, the author(s) have dedicated all
+ * copyright and related and neighboring rights to this software to the
+ * public domain worldwide. This software is distributed without any
+ * warranty.
+ *
+ * You should have received a copy of the CC0 Public Domain Dedication
+ * along with this software. If not, see
+ * <http://creativecommons.org/publicdomain/zero/1.0/>.
+ */
+
+/*
+ * fastpbkdf2 - Faster PBKDF2-HMAC calculation
+ * Written in 2015 by Joseph Birr-Pixton <jpixton@gmail.com>
+ *
+ * To the extent possible under law, the author(s) have dedicated all
+ * copyright and related and neighboring rights to this software to the
+ * public domain worldwide. This software is distributed without any
+ * warranty.
+ *
+ * You should have received a copy of the CC0 Public Domain Dedication
+ * along with this software. If not, see
+ * <http://creativecommons.org/publicdomain/zero/1.0/>.
+ */
+
+/*
+** Name:        rijndael.c
+** Purpose:     Implementation of the Rijndael cipher
+** Author:      Ulrich Telle
+** Created:     2006-12-06
+** Copyright:   (c) 2006-2020 Ulrich Telle
+** License:     MIT
+**
+** Adjustments were made to make this code work with the wxSQLite3's
+** SQLite encryption extension.
+** The original code is public domain (see comments below).
+*/
+
+/*
+/// \file rijndael.cpp Implementation of the Rijndael cipher
+//
+// File : rijndael.cpp
+// Creation date : Sun Nov 5 2000 03:22:10 CEST
+// Author : Szymon Stefanek (stefanek@tin.it)
+//
+// Another implementation of the Rijndael cipher.
+// This is intended to be an easily usable library file.
+// This code is public domain.
+// Based on the Vincent Rijmen and K.U.Leuven implementation 2.4.
+//
+// Original Copyright notice:
+//
+//    rijndael-alg-fst.c   v2.4   April '2000
+//    rijndael-alg-fst.h
+//    rijndael-api-fst.c
+//    rijndael-api-fst.h
+//
+//    Optimised ANSI C code
+//
+//    authors: v1.0: Antoon Bosselaers
+//             v2.0: Vincent Rijmen, K.U.Leuven
+//             v2.3: Paulo Barreto
+//             v2.4: Vincent Rijmen, K.U.Leuven
+//
+//    This code is placed in the public domain.
+//
+// This implementation works on 128 , 192 , 256 bit keys
+// and on 128 bit blocks
+*/
+
+/*
+** Name:        rijndael.h
+** Purpose:     Header file for the Rijndael cipher
+** Author:      Ulrich Telle
+** Created:     2006-12-06
+** Copyright:   (c) 2006-2020 Ulrich Telle
+** License:     MIT
+**
+** Adjustments were made to make this code work with the wxSQLite3's
+** SQLite encryption extension.
+** The original code is public domain (see comments below).
+*/
+
+/*
+// File : rijndael.h
+// Creation date : Sun Nov 5 2000 03:21:05 CEST
+// Author : Szymon Stefanek (stefanek@tin.it)
+//
+// Another implementation of the Rijndael cipher.
+// This is intended to be an easily usable library file.
+// This code is public domain.
+// Based on the Vincent Rijmen and K.U.Leuven implementation 2.4.
+//
+// Original Copyright notice:
+//
+//    rijndael-alg-fst.c   v2.4   April '2000
+//    rijndael-alg-fst.h
+//    rijndael-api-fst.c
+//    rijndael-api-fst.h
+//
+//    Optimised ANSI C code
+//
+//    authors: v1.0: Antoon Bosselaers
+//             v2.0: Vincent Rijmen, K.U.Leuven
+//             v2.3: Paulo Barreto
+//             v2.4: Vincent Rijmen, K.U.Leuven
+//
+//    This code is placed in the public domain.
+//
+
+//
+// This implementation works on 128 , 192 , 256 bit keys
+// and on 128 bit blocks
+//
+
+//
+// Example of usage:
+//
+//  // Input data
+//  unsigned char key[32];                       // The key
+//  initializeYour256BitKey();                   // Obviously initialized with sth
+//  const unsigned char * plainText = getYourPlainText(); // Your plain text
+//  int plainTextLen = strlen(plainText);        // Plain text length
+//
+//  // Encrypting
+//  Rijndael rin;
+//  unsigned char output[plainTextLen + 16];
+//
+//  rin.init(Rijndael::CBC,Rijndael::Encrypt,key,Rijndael::Key32Bytes);
+//  // It is a good idea to check the error code
+//  int len = rin.padEncrypt(plainText,len,output);
+//  if(len >= 0)useYourEncryptedText();
+//  else encryptError(len);
+//
+//  // Decrypting: we can reuse the same object
+//  unsigned char output2[len];
+//  rin.init(Rijndael::CBC,Rijndael::Decrypt,key,Rijndael::Key32Bytes));
+//  len = rin.padDecrypt(output,len,output2);
+//  if(len >= 0)useYourDecryptedText();
+//  else decryptError(len);
+//
+*/
+
+/*
+** Name:        aes_hardware.c
+** Purpose:     AES algorithms based on AES NI
+** Author:      Ulrich Telle
+** Created:     2020-12-01
+** Copyright:   (c) 2020 Ulrich Telle
+** License:     MIT
+*/
+
+/*
+** Name:        libaegis.c
+** Purpose:     Amalgamation of the AEGIS library
+** Copyright:   (c) 2024-2026 Ulrich Telle
+** SPDX-License-Identifier: MIT
+*/
+
+/*
+** Name:        cpu.h
+** Purpose:     Header for CPU identification and AES hardware support detection
+** Copyright:   (c) 2023-2024 Frank Denis
+** SPDX-License-Identifier: MIT
+*/
+
+/*
+** Name:        aeshardware.h
+** Purpose:     Header for AES hardware support detection
+** Copyright:   (c) 2023-2024 Frank Denis
+** SPDX-License-Identifier: MIT
+*/
+
+/*
+** Name:        common.c
+** Purpose:     Implementation of common utility functions
+** Copyright:   (c) 2023-2024 Frank Denis
+** SPDX-License-Identifier: MIT
+*/
+
+/*
+** Name:        common.h
+** Purpose:     Common header for AEGIS implementations
+** Copyright:   (c) 2023-2024 Frank Denis
+** SPDX-License-Identifier: MIT
+*/
+
+/*
+** Name:        aegis.h
+** Purpose:     Header for AEGIS API
+** Copyright:   (c) 2023-2024 Frank Denis
+** SPDX-License-Identifier: MIT
+*/
+
+/*
+** Name:        aegis128l.h
+** Purpose:     Header for AEGIS-128L API
+** Copyright:   (c) 2023-2024 Frank Denis
+** SPDX-License-Identifier: MIT
+*/
+
+/*
+** Name:        aegis128x2.h
+** Purpose:     Header for AEGIS-128x2 API
+** Copyright:   (c) 2023-2024 Frank Denis
+** SPDX-License-Identifier: MIT
+*/
+
+/*
+** Name:        aegis128x4.h
+** Purpose:     Header for AEGIS-128x4 API
+** Copyright:   (c) 2023-2024 Frank Denis
+** SPDX-License-Identifier: MIT
+*/
+
+/*
+** Name:        aegis256.h
+** Purpose:     Header for AEGIS-256 API
+** Copyright:   (c) 2023-2024 Frank Denis
+** SPDX-License-Identifier: MIT
+*/
+
+/*
+** Name:        aegis256x2.h
+** Purpose:     Header for AEGIS-256x2 API
+** Copyright:   (c) 2023-2024 Frank Denis
+** SPDX-License-Identifier: MIT
+*/
+
+/*
+** Name:        aegis256x4.h
+** Purpose:     Header for AEGIS-256x4 API
+** Copyright:   (c) 2023-2024 Frank Denis
+** SPDX-License-Identifier: MIT
+*/
+
+/*
+** Name:        cpu.c
+** Purpose:     Implementation of CPU feature identification
+** Copyright:   (c) 2023-2024 Frank Denis
+** SPDX-License-Identifier: MIT
+*/
+
+/*
+** Name:        softaes.c
+** Purpose:     Implementation of AES via software
+** Copyright:   (c) 2023-2024 Frank Denis
+** SPDX-License-Identifier: MIT
+*/
+
+/*
+** Name:        softaes.h
+** Purpose:     Header for API of AES software implementation
+** Copyright:   (c) 2023-2024 Frank Denis
+** SPDX-License-Identifier: MIT
+*/
+
+/*
+** Name:        implementations.h
+** Purpose:     Header for implementation structure of AEGIS-128L
+** Copyright:   (c) 2023-2024 Frank Denis
+** SPDX-License-Identifier: MIT
+*/
+
+/*
+** Name:        implementations.h
+** Purpose:     Header for implementation structure of AEGIS-128x2
+** Copyright:   (c) 2023-2024 Frank Denis
+** SPDX-License-Identifier: MIT
+*/
+
+/*
+** Name:        implementations.h
+** Purpose:     Header for implementation structure of AEGIS-128x4
+** Copyright:   (c) 2023-2024 Frank Denis
+** SPDX-License-Identifier: MIT
+*/
+
+/*
+** Name:        implementations.h
+** Purpose:     Header for implementation structure of AEGIS-256
+** Copyright:   (c) 2023-2024 Frank Denis
+** SPDX-License-Identifier: MIT
+*/
+
+/*
+** Name:        implementations.h
+** Purpose:     Header for implementation structure of AEGIS-256x2
+** Copyright:   (c) 2023-2024 Frank Denis
+** SPDX-License-Identifier: MIT
+*/
+
+/*
+** Name:        implementations.h
+** Purpose:     Header for implementation structure of AEGIS-256x4
+** Copyright:   (c) 2023-2024 Frank Denis
+** SPDX-License-Identifier: MIT
+*/
+
+/*
+** Name:        aegis128l_soft.c
+** Purpose:     Implementation of AEGIS-128L - Software
+** Copyright:   (c) 2023-2024 Frank Denis
+** SPDX-License-Identifier: MIT
+*/
+
+/*
+** Name:        aegis128l_soft.h
+** Purpose:     Header for implementation structure of AEGIS-128L - Software
+** Copyright:   (c) 2023-2024 Frank Denis
+** SPDX-License-Identifier: MIT
+*/
+
+/*
+** Name:        func_names_define.h
+** Purpose:     Defines for AEGIS function names
+** Copyright:   (c) 2023-2024 Frank Denis
+** SPDX-License-Identifier: MIT
+*/
+
+/*
+** Name:        aegis128l_common.h
+** Purpose:     Common implementation for AEGIS-128L
+** Copyright:   (c) 2023-2024 Frank Denis
+** SPDX-License-Identifier: MIT
+*/
+
+/*
+** Name:        func_table.h
+** Purpose:     Table of AEGIS API function implementations
+** Copyright:   (c) 2023-2024 Frank Denis
+** SPDX-License-Identifier: MIT
+*/
+
+/*
+** Name:        type_names_undefine.h
+** Purpose:     Undefines for AEGIS type names
+** Copyright:   (c) 2023-2024 Frank Denis
+** SPDX-License-Identifier: MIT
+*/
+
+/*
+** Name:        func_names_undefine.h
+** Purpose:     Undefines for AEGIS function names
+** Copyright:   (c) 2023-2024 Frank Denis
+** SPDX-License-Identifier: MIT
+*/
+
+/*
+** Name:        aegis128x2_soft.c
+** Purpose:     Implementation of AEGIS-128x2 - Software
+** Copyright:   (c) 2023-2024 Frank Denis
+** SPDX-License-Identifier: MIT
+*/
+
+/*
+** Name:        aegis128x2_soft.h
+** Purpose:     Header for implementation structure of AEGIS-128x2 - Software
+** Copyright:   (c) 2023-2024 Frank Denis
+** SPDX-License-Identifier: MIT
+*/
+
+/*
+** Name:        aegis128x2_common.h
+** Purpose:     Common implementation for AEGIS-128x2
+** Copyright:   (c) 2023-2024 Frank Denis
+** SPDX-License-Identifier: MIT
+*/
+
+/*
+** Name:        aegis128x4_soft.c
+** Purpose:     Implementation of AEGIS-128x4 - Software
+** Copyright:   (c) 2023-2024 Frank Denis
+** SPDX-License-Identifier: MIT
+*/
+
+/*
+** Name:        aegis128x4_soft.h
+** Purpose:     Header for implementation structure of AEGIS-128x4 - Software
+** Copyright:   (c) 2023-2024 Frank Denis
+** SPDX-License-Identifier: MIT
+*/
+
+/*
+** Name:        aegis128x4_common.h
+** Purpose:     Common implementation for AEGIS-128x4
+** Copyright:   (c) 2023-2024 Frank Denis
+** SPDX-License-Identifier: MIT
+*/
+
+/*
+** Name:        aegis256_soft.c
+** Purpose:     Implementation of AEGIS-256 - Software
+** Copyright:   (c) 2023-2024 Frank Denis
+** SPDX-License-Identifier: MIT
+*/
+
+/*
+** Name:        aegis256_soft.h
+** Purpose:     Header for implementation structure of AEGIS-256 - Software
+** Copyright:   (c) 2023-2024 Frank Denis
+** SPDX-License-Identifier: MIT
+*/
+
+/*
+** Name:        aegis256_common.h
+** Purpose:     Common implementation for AEGIS-256
+** Copyright:   (c) 2023-2024 Frank Denis
+** SPDX-License-Identifier: MIT
+*/
+
+/*
+** Name:        aegis256x2_soft.c
+** Purpose:     Implementation of AEGIS-256x2 - Software
+** Copyright:   (c) 2023-2024 Frank Denis
+** SPDX-License-Identifier: MIT
+*/
+
+/*
+** Name:        aegis256x2_soft.h
+** Purpose:     Header for implementation structure of AEGIS-256x2 - Software
+** Copyright:   (c) 2023-2024 Frank Denis
+** SPDX-License-Identifier: MIT
+*/
+
+/*
+** Name:        aegis256x2_common.h
+** Purpose:     Common implementation for AEGIS-256x2
+** Copyright:   (c) 2023-2024 Frank Denis
+** SPDX-License-Identifier: MIT
+*/
+
+/*
+** Name:        aegis256x4_soft.c
+** Purpose:     Implementation of AEGIS-256x4 - Software
+** Copyright:   (c) 2023-2024 Frank Denis
+** SPDX-License-Identifier: MIT
+*/
+
+/*
+** Name:        aegis256x4_soft.h
+** Purpose:     Header for implementation structure of AEGIS-256x4 - Software
+** Copyright:   (c) 2023-2024 Frank Denis
+** SPDX-License-Identifier: MIT
+*/
+
+/*
+** Name:        aegis256x4_common.h
+** Purpose:     Common implementation for AEGIS-256
+** Copyright:   (c) 2023-2024 Frank Denis
+** SPDX-License-Identifier: MIT
+*/
+
+/*
+** Name:        aegis128l_aesni.c
+** Purpose:     Implementation of AEGIS-128L - AES-NI
+** Copyright:   (c) 2023-2024 Frank Denis
+** SPDX-License-Identifier: MIT
+*/
+
+/*
+** Name:        aegis128l_aesni.h
+** Purpose:     Header for implementation structure of AEGIS-128L - AES-NI
+** Copyright:   (c) 2023-2024 Frank Denis
+** SPDX-License-Identifier: MIT
+*/
+
+/*
+** Name:        aegis128x2_aesni.c
+** Purpose:     Implementation of AEGIS-128x2 - AES-NI
+** Copyright:   (c) 2023-2024 Frank Denis
+** SPDX-License-Identifier: MIT
+*/
+
+/*
+** Name:        aegis128x2_aesni.h
+** Purpose:     Header for implementation structure of AEGIS-128x2 - AES-NI
+** Copyright:   (c) 2023-2024 Frank Denis
+** SPDX-License-Identifier: MIT
+*/
+
+/*
+** Name:        aegis128x4_aesni.c
+** Purpose:     Implementation of AEGIS-128x4 - AES-NI
+** Copyright:   (c) 2023-2024 Frank Denis
+** SPDX-License-Identifier: MIT
+*/
+
+/*
+** Name:        aegis128x4_aesni.h
+** Purpose:     Header for implementation structure of AEGIS-128x4 - AES-NI
+** Copyright:   (c) 2023-2024 Frank Denis
+** SPDX-License-Identifier: MIT
+*/
+
+/*
+** Name:        aegis256_aesni.c
+** Purpose:     Implementation of AEGIS-256 - AES-NI
+** Copyright:   (c) 2023-2024 Frank Denis
+** SPDX-License-Identifier: MIT
+*/
+
+/*
+** Name:        aegis256_aesni.h
+** Purpose:     Header for implementation structure of AEGIS-256 - AES-NI
+** Copyright:   (c) 2023-2024 Frank Denis
+** SPDX-License-Identifier: MIT
+*/
+
+/*
+** Name:        aegis256x2_aesni.c
+** Purpose:     Implementation of AEGIS-256x2 - AES-NI
+** Copyright:   (c) 2023-2024 Frank Denis
+** SPDX-License-Identifier: MIT
+*/
+
+/*
+** Name:        aegis256x2_aesni.h
+** Purpose:     Header for implementation structure of AEGIS-256x2 - AES-NI
+** Copyright:   (c) 2023-2024 Frank Denis
+** SPDX-License-Identifier: MIT
+*/
+
+/*
+** Name:        aegis256x4_aesni.c
+** Purpose:     Implementation of AEGIS-256x4 - AES-NI
+** Copyright:   (c) 2023-2024 Frank Denis
+** SPDX-License-Identifier: MIT
+*/
+
+/*
+** Name:        aegis256x4_aesni.h
+** Purpose:     Header for implementation structure of AEGIS-256x4 - AES-NI
+** Copyright:   (c) 2023-2024 Frank Denis
+** SPDX-License-Identifier: MIT
+*/
+
+/*
+** Name:        aegis128x2_avx2.c
+** Purpose:     Implementation of AEGIS-128x2 - AES-NI AVX2
+** Copyright:   (c) 2023-2024 Frank Denis
+** SPDX-License-Identifier: MIT
+*/
+
+/*
+** Name:        aegis128x2_avx2.h
+** Purpose:     Header for implementation structure of AEGIS-128x2 - AES-NI AVX2
+** Copyright:   (c) 2023-2024 Frank Denis
+** SPDX-License-Identifier: MIT
+*/
+
+/*
+** Name:        aegis128x4_avx2.c
+** Purpose:     Implementation of AEGIS-128x4 - AES-NI AVX2
+** Copyright:   (c) 2023-2024 Frank Denis
+** SPDX-License-Identifier: MIT
+*/
+
+/*
+** Name:        aegis128x4_avx2.h
+** Purpose:     Header for implementation structure of AEGIS-128x4 - AES-NI AVX2
+** Copyright:   (c) 2023-2024 Frank Denis
+** SPDX-License-Identifier: MIT
+*/
+
+/*
+** Name:        aegis256x2_avx2.c
+** Purpose:     Implementation of AEGIS-256x2 - AES-NI AVX2
+** Copyright:   (c) 2023-2024 Frank Denis
+** SPDX-License-Identifier: MIT
+*/
+
+/*
+** Name:        aegis256x2_avx2.h
+** Purpose:     Header for implementation structure of AEGIS-256x2 - AES-NI AVX2
+** Copyright:   (c) 2023-2024 Frank Denis
+** SPDX-License-Identifier: MIT
+*/
+
+/*
+** Name:        aegis256x4_avx2.c
+** Purpose:     Implementation of AEGIS-256x4 - AES-NI AVX2
+** Copyright:   (c) 2023-2024 Frank Denis
+** SPDX-License-Identifier: MIT
+*/
+
+/*
+** Name:        aegis256x4_avx2.h
+** Purpose:     Header for implementation structure of AEGIS-256x4 - AES-NI AVX2
+** Copyright:   (c) 2023-2024 Frank Denis
+** SPDX-License-Identifier: MIT
+*/
+
+/*
+** Name:        aegis128x4_avx512.c
+** Purpose:     Implementation of AEGIS-128x4 - AES-NI AVX512
+** Copyright:   (c) 2023-2024 Frank Denis
+** SPDX-License-Identifier: MIT
+*/
+
+/*
+** Name:        aegis128x4_avx512.h
+** Purpose:     Header for implementation structure of AEGIS-128x4 - AES-NI AVX512
+** Copyright:   (c) 2023-2024 Frank Denis
+** SPDX-License-Identifier: MIT
+*/
+
+/*
+** Name:        aegis256x4_avx512.c
+** Purpose:     Implementation of AEGIS-256x4 - AES-NI AVX512
+** Copyright:   (c) 2023-2024 Frank Denis
+** SPDX-License-Identifier: MIT
+*/
+
+/*
+** Name:        aegis256x4_avx512.h
+** Purpose:     Header for implementation structure of AEGIS-256x4 - AES-NI AVX512
+** Copyright:   (c) 2023-2024 Frank Denis
+** SPDX-License-Identifier: MIT
+*/
+
+/*
+** Name:        aegis128l_altivec.c
+** Purpose:     Implementation of AEGIS-128L - AltiVec
+** Copyright:   (c) 2023-2024 Frank Denis
+** SPDX-License-Identifier: MIT
+*/
+
+/*
+** Name:        aegis128l_altivec.h
+** Purpose:     Header for implementation structure of AEGIS-128L - AltiVec
+** Copyright:   (c) 2023-2024 Frank Denis
+** SPDX-License-Identifier: MIT
+*/
+
+/*
+** Name:        aegis128x2_altivec.c
+** Purpose:     Implementation of AEGIS-128x2 - AltiVec
+** Copyright:   (c) 2023-2024 Frank Denis
+** SPDX-License-Identifier: MIT
+*/
+
+/*
+** Name:        aegis128x2_altivec.h
+** Purpose:     Header for implementation structure of AEGIS-128x2 - AltiVec
+** Copyright:   (c) 2023-2024 Frank Denis
+** SPDX-License-Identifier: MIT
+*/
+
+/*
+** Name:        aegis128x4_altivec.c
+** Purpose:     Implementation of AEGIS-128x4 - AltiVec
+** Copyright:   (c) 2023-2024 Frank Denis
+** SPDX-License-Identifier: MIT
+*/
+
+/*
+** Name:        aegis128x4_altivec.h
+** Purpose:     Header for implementation structure of AEGIS-128x4 - AltiVec
+** Copyright:   (c) 2023-2024 Frank Denis
+** SPDX-License-Identifier: MIT
+*/
+
+/*
+** Name:        aegis256_altivec.c
+** Purpose:     Implementation of AEGIS-256 - AltiVec
+** Copyright:   (c) 2023-2024 Frank Denis
+** SPDX-License-Identifier: MIT
+*/
+
+/*
+** Name:        aegis256_altivec.h
+** Purpose:     Header for implementation structure of AEGIS-256 - AltiVec
+** Copyright:   (c) 2023-2024 Frank Denis
+** SPDX-License-Identifier: MIT
+*/
+
+/*
+** Name:        aegis256x2_altivec.c
+** Purpose:     Implementation of AEGIS-256x2 - AltiVec
+** Copyright:   (c) 2023-2024 Frank Denis
+** SPDX-License-Identifier: MIT
+*/
+
+/*
+** Name:        aegis256x2_altivec.h
+** Purpose:     Header for implementation structure of AEGIS-256x2 - AltiVec
+** Copyright:   (c) 2023-2024 Frank Denis
+** SPDX-License-Identifier: MIT
+*/
+
+/*
+** Name:        aegis256x4_altivec.c
+** Purpose:     Implementation of AEGIS-256x4 - AltiVec
+** Copyright:   (c) 2023-2024 Frank Denis
+** SPDX-License-Identifier: MIT
+*/
+
+/*
+** Name:        aegis256x4_altivec.h
+** Purpose:     Header for implementation structure of AEGIS-256x4 - AltiVec
+** Copyright:   (c) 2023-2024 Frank Denis
+** SPDX-License-Identifier: MIT
+*/
+
+/*
+** Name:        aegis128l_armcrypto.c
+** Purpose:     Implementation of AEGIS-128L - ARM-Crypto
+** Copyright:   (c) 2023-2024 Frank Denis
+** SPDX-License-Identifier: MIT
+*/
+
+/*
+** Name:        aegis128l_armcrypto.h
+** Purpose:     Header for implementation structure of AEGIS-128L - ARM Crypto
+** Copyright:   (c) 2023-2024 Frank Denis
+** SPDX-License-Identifier: MIT
+*/
+
+/*
+** Name:        aegis128x2_armcrypto.c
+** Purpose:     Implementation of AEGIS-128x2 - ARM-Crypto
+** Copyright:   (c) 2023-2024 Frank Denis
+** SPDX-License-Identifier: MIT
+*/
+
+/*
+** Name:        aegis128x2_armcrypto.h
+** Purpose:     Header for implementation structure of AEGIS-128x2 - ARM Crypto
+** Copyright:   (c) 2023-2024 Frank Denis
+** SPDX-License-Identifier: MIT
+*/
+
+/*
+** Name:        aegis128x4_armcrypto.c
+** Purpose:     Implementation of AEGIS-128x4 - ARM-Crypto
+** Copyright:   (c) 2023-2024 Frank Denis
+** SPDX-License-Identifier: MIT
+*/
+
+/*
+** Name:        aegis128x4_armcrypto.h
+** Purpose:     Header for implementation structure of AEGIS-128x4 - ARM Crypto
+** Copyright:   (c) 2023-2024 Frank Denis
+** SPDX-License-Identifier: MIT
+*/
+
+/*
+** Name:        aegis256_armcrypto.c
+** Purpose:     Implementation of AEGIS-256 - ARM-Crypto
+** Copyright:   (c) 2023-2024 Frank Denis
+** SPDX-License-Identifier: MIT
+*/
+
+/*
+** Name:        aegis256_armcrypto.h
+** Purpose:     Header for implementation structure of AEGIS-256 - ARM Crypto
+** Copyright:   (c) 2023-2024 Frank Denis
+** SPDX-License-Identifier: MIT
+*/
+
+/*
+** Name:        aegis256x2_armcrypto.c
+** Purpose:     Implementation of AEGIS-256x2 - ARM-Crypto
+** Copyright:   (c) 2023-2024 Frank Denis
+** SPDX-License-Identifier: MIT
+*/
+
+/*
+** Name:        aegis256x2_armcrypto.h
+** Purpose:     Header for implementation structure of AEGIS-256x2 - ARM Crypto
+** Copyright:   (c) 2023-2024 Frank Denis
+** SPDX-License-Identifier: MIT
+*/
+
+/*
+** Name:        aegis256x4_armcrypto.c
+** Purpose:     Implementation of AEGIS-256x4 - ARM-Crypto
+** Copyright:   (c) 2023-2024 Frank Denis
+** SPDX-License-Identifier: MIT
+*/
+
+/*
+** Name:        aegis256x4_armcrypto.h
+** Purpose:     Header for implementation structure of AEGIS-256x4 - ARM Crypto
+** Copyright:   (c) 2023-2024 Frank Denis
+** SPDX-License-Identifier: MIT
+*/
+
+/*
+** Name:        aegis128l.c
+** Purpose:     Implementation of AEGIS-128L
+** Copyright:   (c) 2023-2024 Frank Denis
+** SPDX-License-Identifier: MIT
+*/
+
+/*
+** Name:        aegis128x2.c
+** Purpose:     Implementation of AEGIS-128x2
+** Copyright:   (c) 2023-2024 Frank Denis
+** SPDX-License-Identifier: MIT
+*/
+
+/*
+** Name:        aegis128x4.c
+** Purpose:     Implementation of AEGIS-128x4
+** Copyright:   (c) 2023-2024 Frank Denis
+** SPDX-License-Identifier: MIT
+*/
+
+/*
+** Name:        aegis256.c
+** Purpose:     Implementation of AEGIS-256
+** Copyright:   (c) 2023-2024 Frank Denis
+** SPDX-License-Identifier: MIT
+*/
+
+/*
+** Name:        aegis256x2.c
+** Purpose:     Implementation of AEGIS-256x2
+** Copyright:   (c) 2023-2024 Frank Denis
+** SPDX-License-Identifier: MIT
+*/
+
+/*
+** Name:        aegis256x4.c
+** Purpose:     Implementation of AEGIS-256x4
+** Copyright:   (c) 2023-2024 Frank Denis
+** SPDX-License-Identifier: MIT
+*/
+
+/*
+ * Argon2 reference source code package - reference C implementations
+ *
+ * Copyright 2015
+ * Daniel Dinu, Dmitry Khovratovich, Jean-Philippe Aumasson, and Samuel Neves
+ *
+ * You may use this work under the terms of a Creative Commons CC0 1.0
+ * License/Waiver or the Apache Public License 2.0, at your option. The terms of
+ * these licenses can be found at:
+ *
+ * - CC0 1.0 Universal : https://creativecommons.org/publicdomain/zero/1.0
+ * - Apache 2.0        : https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * You should have received a copy of both of these licenses along with this
+ * software. If not, they may be obtained at the above URLs.
+ */
+
+/*
+ * Example code for a decoder and encoder of "hash strings", with Argon2
+ * parameters.
+ *
+ * This code comprises three sections:
+ *
+ *   -- The first section contains generic Base64 encoding and decoding
+ *   functions. It is conceptually applicable to any hash function
+ *   implementation that uses Base64 to encode and decode parameters,
+ *   salts and outputs. It could be made into a library, provided that
+ *   the relevant functions are made public (non-static) and be given
+ *   reasonable names to avoid collisions with other functions.
+ *
+ *   -- The second section is specific to Argon2. It encodes and decodes
+ *   the parameters, salts and outputs. It does not compute the hash
+ *   itself.
+ *
+ * The code was originally written by Thomas Pornin <pornin@bolet.org>,
+ * to whom comments and remarks may be sent. It is released under what
+ * should amount to Public Domain or its closest equivalent; the
+ * following mantra is supposed to incarnate that fact with all the
+ * proper legal rituals:
+ *
+ * ---------------------------------------------------------------------
+ * This file is provided under the terms of Creative Commons CC0 1.0
+ * Public Domain Dedication. To the extent possible under law, the
+ * author (Thomas Pornin) has waived all copyright and related or
+ * neighboring rights to this file. This work is published from: Canada.
+ * ---------------------------------------------------------------------
+ *
+ * Copyright (c) 2015 Thomas Pornin
+ */
+
+/*
+** Name:        codec_algos.c
+** Purpose:     Implementation of SQLite codec algorithms
+** Author:      Ulrich Telle
+** Created:     2020-02-02
+** Copyright:   (c) 2006-2020 Ulrich Telle
+** License:     MIT
+*/
+
+/*
+** Name:        cipher_common.h
+** Purpose:     Header for the ciphers of SQLite3 Multiple Ciphers
+** Author:      Ulrich Telle
+** Created:     2020-02-02
+** Copyright:   (c) 2006-2026 Ulrich Telle
+** License:     MIT
+*/
+
+/*
+** Name:        cipher_wxaes128.c
+** Purpose:     Implementation of cipher wxSQLite3 AES 128-bit
+** Author:      Ulrich Telle
+** Created:     2020-02-02
+** Copyright:   (c) 2006-2024 Ulrich Telle
+** License:     MIT
+*/
+
+/*
+** Name:        cipher_wxaes256.c
+** Purpose:     Implementation of cipher wxSQLite3 AES 256-bit
+** Author:      Ulrich Telle
+** Created:     2020-02-02
+** Copyright:   (c) 2006-2024 Ulrich Telle
+** License:     MIT
+*/
+
+/*
+** Name:        cipher_chacha20.c
+** Purpose:     Implementation of cipher ChaCha20 - Poly1305
+** Author:      Ulrich Telle
+** Created:     2020-02-02
+** Copyright:   (c) 2006-2026 Ulrich Telle
+** License:     MIT
+*/
+
+/*
+** Name:        cipher_sqlcipher.c
+** Purpose:     Implementation of cipher SQLCipher (version 1 to 4)
+** Author:      Ulrich Telle
+** Created:     2020-02-02
+** Copyright:   (c) 2006-2026 Ulrich Telle
+** License:     MIT
+*/
+
+/*
+** Name:        cipher_sds_rc4.c
+** Purpose:     Implementation of cipher System.Data.SQLite3 RC4
+** Author:      Ulrich Telle
+** Created:     2020-02-02
+** Copyright:   (c) 2006-2024 Ulrich Telle
+** License:     MIT
+*/
+
+/*
+** Name:        cipher_ascon.c
+** Purpose:     Implementation of cipher Ascon
+** Author:      Ulrich Telle
+** Created:     2023-11-13
+** Copyright:   (c) 2023-2026 Ulrich Telle
+** License:     MIT
+*/
+
+/*
+** Name:        prolog.h
+** Purpose:     Include important header files, before
+** Based on:    Public domain Ascon reference implementation
+**              and optimized variants for 32- and 64-bit
+**              (see https://github.com/ascon/ascon-c)
+** Remarks:     API functions adapted for use in SQLite3 Multiple Ciphers
+** Modified by: Ulrich Telle
+** Copyright:   (c) 2023-2023 Ulrich Telle
+** License:     MIT
+*/
+
+/*
+** Name:        aead.c
+** Purpose:     Stream encryption/decryption with Ascon
+** Based on:    Public domain Ascon reference implementation
+**              and optimized variants for 32- and 64-bit
+**              (see https://github.com/ascon/ascon-c)
+** Remarks:     API functions adapted for use in SQLite3 Multiple Ciphers
+** Modified by: Ulrich Telle
+** Copyright:   (c) 2023-2023 Ulrich Telle
+** License:     MIT
+*/
+
+/*
+** Name:        api.h
+** Purpose:     Definition of preprocessor symbols
+** Based on:    Public domain Ascon reference implementation
+**              and optimized variants for 32- and 64-bit
+**              (see https://github.com/ascon/ascon-c)
+** Remarks:     API functions adapted for use in SQLite3 Multiple Ciphers
+**              Combined symbols from AEAD and HASH
+** Modified by: Ulrich Telle
+** Copyright:   (c) 2023-2023 Ulrich Telle
+** License:     MIT
+*/
+
+/*
+** Name:        hash.c
+** Purpose:     API definition for Hash algorithm with Ascon
+** Based on:    Public domain Ascon reference implementation
+**              and optimized variants for 32- and 64-bit
+**              (see https://github.com/ascon/ascon-c)
+** Remarks:     API functions adapted for use in SQLite3 Multiple Ciphers
+** Modified by: Ulrich Telle
+** Copyright:   (c) 2023-2023 Ulrich Telle
+** License:     MIT
+*/
+
+/*
+** Name:        round.h
+** Purpose:     Selector for Ascon implementation variant for 32- resp 64-bit
+** Based on:    Public domain Ascon reference implementation
+**              and optimized variants for 32- and 64-bit
+**              (see https://github.com/ascon/ascon-c)
+** Remarks:     API functions adapted for use in SQLite3 Multiple Ciphers
+** Modified by: Ulrich Telle
+** Copyright:   (c) 2023-2023 Ulrich Telle
+** License:     MIT
+*/
+
+/*
+** Name:        hash.c
+** Purpose:     Hash algorithm with Ascon
+** Based on:    Public domain Ascon reference implementation
+**              and optimized variants for 32- and 64-bit
+**              (see https://github.com/ascon/ascon-c)
+** Remarks:     API functions adapted for use in SQLite3 Multiple Ciphers
+** Modified by: Ulrich Telle
+** Copyright:   (c) 2023-2023 Ulrich Telle
+** License:     MIT
+*/
+
+/*
+** Name:        pbkdf2.c
+** Purpose:     Implementation of PBKDF2 algoritm with Ascon
+** Based on:    Public domain Ascon reference implementation
+**              and optimized variants for 32- and 64-bit
+**              (see https://github.com/ascon/ascon-c)
+**              and the paper "Additional Modes for ASCON Version 1.1"
+**              by Rhys Weatherley, Southern Storm Software, Pty Ltd.
+** Remarks:     API functions adapted for use in SQLite3 Multiple Ciphers
+** Created by:  Ulrich Telle
+** Copyright:   (c) 2023-2023 Ulrich Telle
+** License:     MIT
+*/
+
+/*
+** Name:        cipher_aegis.c
+** Purpose:     Implementation of cipher AEGIS
+** Author:      Ulrich Telle
+** Created:     2024-12-10
+** Copyright:   (c) 2024-2026 Ulrich Telle
+** License:     MIT
+*/
+
+/*
+** Name:        cipher_common.c
+** Purpose:     Implementation of SQLite codecs
+** Author:      Ulrich Telle
+** Created:     2020-02-02
+** Copyright:   (c) 2006-2026 Ulrich Telle
+** License:     MIT
+*/
+
+/*
+** Name:        cipher_config.c
+** Purpose:     Configuration of SQLite codecs
+** Author:      Ulrich Telle
+** Created:     2020-03-02
+** Copyright:   (c) 2006-2026 Ulrich Telle
+** License:     MIT
+*/
+
+/*
+** Name:        cipher_config.h
+** Purpose:     Header for the cipher configuration of SQLite3 Multiple Ciphers
+** Author:      Ulrich Telle
+** Created:     2020-03-10
+** Copyright:   (c) 2006-2020 Ulrich Telle
+** License:     MIT
+*/
+
+/*
+** Name:        codecext.c
+** Purpose:     Implementation of SQLite codec API
+** Author:      Ulrich Telle
+** Created:     2006-12-06
+** Copyright:   (c) 2006-2026 Ulrich Telle
+** License:     MIT
+*/
+
+/*
+** Name:        mem_secure.c
+** Purpose:     Memory manager for SQLite3 Multiple Ciphers
+** Author:      Ulrich Telle
+** Created:     2023-09-17
+** Copyright:   (c) 2023 Ulrich Telle
+** License:     MIT
+*/
+
+/**************************************************************************
+ *
+ * Copyright 2013-2014 RAD Game Tools and Valve Software
+ * Copyright 2010-2014 Rich Geldreich and Tenacious Software LLC
+ * All Rights Reserved.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ * THE SOFTWARE.
+ *
+ **************************************************************************/
+
+/*
+  This is free and unencumbered software released into the public domain.
+
+  Anyone is free to copy, modify, publish, use, compile, sell, or
+  distribute this software, either in source code form or as a compiled
+  binary, for any purpose, commercial or non-commercial, and by any
+  means.
+
+  In jurisdictions that recognize copyright laws, the author or authors
+  of this software dedicate any and all copyright interest in the
+  software to the public domain. We make this dedication for the benefit
+  of the public at large and to the detriment of our heirs and
+  successors. We intend this dedication to be an overt act of
+  relinquishment in perpetuity of all present and future rights to this
+  software under copyright law.
+
+  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+  EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+  MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+  IN NO EVENT SHALL THE AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+  OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+  ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+  OTHER DEALINGS IN THE SOFTWARE.
+
+  For more information, please refer to <http://unlicense.org/>
+*/
+
+/* Simple PNG writer function by Alex Evans, 2011. Released into the public domain: https://gist.github.com/908299, more context at
+ http://altdevblogaday.org/2011/04/06/a-smaller-jpg-encoder/.
+ This is actually a modification of Alex's original code so PNG files generated by this function pass pngcheck. */
+
+/**************************************************************************
+ *
+ * Copyright 2013-2014 RAD Game Tools and Valve Software
+ * Copyright 2010-2014 Rich Geldreich and Tenacious Software LLC
+ * Copyright 2016 Martin Raiber
+ * All Rights Reserved.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ * THE SOFTWARE.
+ *
+ **************************************************************************/
+
+/*
+** Name:        zlibwrap.h
+** Purpose:     Include wrapper for miniz.h
+** Author:      Ulrich Telle
+** Created:     2022-05-09
+** Copyright:   (c) 2022 Ulrich Telle
+** License:     MIT
+*/
+
+/*
+** Name:        sqlite3mc_vle.c
+** Purpose:     Value Level Encryption extension for SQLite
+** Author:      Ulrich Telle
+** Created:     2026-07-17
+** Copyright:   (c) 2026-2026 Ulrich Telle
+** License:     MIT
+*/
+
+/*
+** Name:        sqlite3mc_vfs.c
+** Purpose:     Implementation of SQLite VFS for Multiple Ciphers
+** Author:      Ulrich Telle
+** Created:     2020-02-28
+** Copyright:   (c) 2020-2023 Ulrich Telle
+** License:     MIT
+*/
