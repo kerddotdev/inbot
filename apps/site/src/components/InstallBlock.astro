@@ -1,0 +1,86 @@
+---
+const install = "curl -fsSL https://inbot.kerd.dev/install.sh | sh";
+---
+
+<div>
+  <div class="panel install">
+    <div class="panel-head">
+      <span>Terminal</span>
+      <button type="button" class="copy" data-copy={install} aria-label="Copy the install command">
+        <span class="idle">Copy</span>
+        <span class="done" aria-hidden="true">Copied</span>
+        <span class="failed" aria-hidden="true">Copy failed</span>
+      </button>
+      <span class="sr-only" role="status" data-copy-status></span>
+    </div>
+    <pre tabindex="0" aria-label="Install commands"><code><span class="p">$ </span>{install}
+<span class="p">$ </span>inbot serve --init --port 8025</code></pre>
+  </div>
+  <p class="alt">
+    Complete setup in the browser, stop the foreground process with Ctrl-C, then run <code>inbot service install</code>. Verify the installed version with <code>inbot --version</code>.
+  </p>
+  <p class="alt">
+    On Windows 11 x64 or ARM64, use the PowerShell command in the <a class="link" href="/docs/get-started/install#windows">install guide</a>.
+  </p>
+</div>
+
+<script is:inline>
+  for (const button of document.querySelectorAll("[data-copy]")) {
+    const status = button.parentElement.querySelector("[data-copy-status]");
+    button.addEventListener("click", async () => {
+      if (button.dataset.state) return;
+      let state = "done";
+      try {
+        await navigator.clipboard.writeText(button.dataset.copy);
+      } catch {
+        state = "failed";
+      }
+      button.dataset.state = state;
+      status.textContent = state === "done" ? "Copied to the clipboard" : "Copy failed";
+      setTimeout(() => {
+        delete button.dataset.state;
+        status.textContent = "";
+      }, 1800);
+    });
+  }
+</script>
+
+<style>
+  .install {
+    max-width: 38rem;
+  }
+  .copy {
+    display: inline-flex;
+    align-items: center;
+    min-height: 2rem;
+    margin-right: -0.5rem;
+    padding: 0 0.5rem;
+    border-radius: 6px;
+    font: inherit;
+    color: var(--accent);
+    cursor: pointer;
+  }
+  .copy .done,
+  .copy .failed,
+  .copy[data-state] .idle {
+    display: none;
+  }
+  .copy[data-state="done"] .done,
+  .copy[data-state="failed"] .failed {
+    display: inline;
+  }
+  .copy[data-state] {
+    cursor: default;
+  }
+  .copy:not([data-state]):hover {
+    background: var(--sel);
+  }
+  .alt {
+    margin-top: 0.9rem;
+    font-size: 0.92rem;
+    color: var(--text2);
+  }
+  .alt code {
+    font-size: 0.88em;
+  }
+</style>

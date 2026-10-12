@@ -1,0 +1,139 @@
+---
+const policies = [
+  {
+    value: "direct",
+    label: "direct",
+    steps: [
+      ["agent", "send_message"],
+      ["queued", "in the outbox"],
+      ["sent", "accepted by Cloudflare"],
+      ["delivered", "reported back"],
+    ],
+    note: "Mail is queued without owner approval. Sent means Cloudflare accepted it; delivered needs a separate report. Allow and block lists still apply.",
+  },
+  {
+    value: "approval",
+    label: "approval",
+    steps: [
+      ["agent", "send_message"],
+      ["403", "approval_required"],
+      ["you", "approve or reject"],
+      ["queued", "then sent"],
+    ],
+    note: "The send becomes a draft in your Approvals queue. Nothing leaves until you approve it.",
+  },
+  {
+    value: "read_only",
+    label: "read_only",
+    steps: [
+      ["agent", "send_message"],
+      ["403", "missing_permission"],
+    ],
+    note: "The agent can read its inbox but cannot send, reply or forward.",
+  },
+] as const;
+---
+
+<div class="policy">
+  <fieldset class="seg">
+    <legend class="sr-only">Send policy</legend>
+    {
+      policies.map((policy, index) => (
+        <label>
+          <input type="radio" name="policy" value={policy.value} checked={index === 1} />
+          {policy.label}
+        </label>
+      ))
+    }
+  </fieldset>
+  {
+    policies.map((policy) => (
+      <div class="chain" data-policy={policy.value}>
+        <ol>
+          {policy.steps.map(([state, detail], index) => (
+            <li style={`--i:${index}`} class:list={{ stop: state === "403" }}>
+              <code>{state}</code>
+              <span>{detail}</span>
+            </li>
+          ))}
+        </ol>
+        <p>{policy.note}</p>
+      </div>
+    ))
+  }
+</div>
+
+<style>
+  .chain {
+    display: none;
+  }
+  .policy:has([value="direct"]:checked) [data-policy="direct"],
+  .policy:has([value="approval"]:checked) [data-policy="approval"],
+  .policy:has([value="read_only"]:checked) [data-policy="read_only"] {
+    display: block;
+  }
+  ol {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem 0;
+  }
+  li {
+    display: grid;
+    gap: 0.3rem;
+    min-width: 8.5rem;
+    padding-right: 2.25rem;
+    position: relative;
+    animation: step 0.5s calc(var(--i) * 0.14s) var(--ease) both;
+  }
+  li:not(:last-child)::after {
+    content: "";
+    position: absolute;
+    right: 0.75rem;
+    top: 0.85rem;
+    width: 0.75rem;
+    border-top: 1.5px solid var(--text2);
+    opacity: 0.6;
+  }
+  li code {
+    justify-self: start;
+    padding: 0.2rem 0.55rem;
+    border-radius: 6px;
+    background: var(--sel);
+    color: var(--accent);
+    font-size: 0.86rem;
+  }
+  li.stop code {
+    background: color-mix(in srgb, var(--warn) 14%, transparent);
+    color: var(--warn);
+  }
+  li span {
+    font-size: 0.9rem;
+    color: var(--text2);
+  }
+  @media (max-width: 40rem) {
+    ol {
+      flex-direction: column;
+      gap: 0.9rem;
+    }
+    li {
+      grid-template-columns: 6.5rem minmax(0, 1fr);
+      align-items: center;
+      gap: 0.75rem;
+      padding-right: 0;
+    }
+    li:not(:last-child)::after {
+      display: none;
+    }
+  }
+  p {
+    margin-top: 1.5rem;
+    max-width: 34rem;
+    color: var(--text2);
+  }
+  @keyframes step {
+    from {
+      opacity: 0;
+      transform: translateX(-8px);
+    }
+  }
+</style>

@@ -18,6 +18,11 @@
     "rootDir": ".",
     "outDir": "dist"
   },
-  "include": ["apps/*/src/**/*.ts", "packages/*/src/**/*.ts", "vitest.config.ts"],
-  "exclude": ["node_modules", "dist", "apps/worker", "apps/web"]
+  "include": [
+    "apps/*/src/**/*.ts",
+    "packages/*/src/**/*.ts",
+    "scripts/screenshot-server.ts",
+    "vitest.config.ts"
+  ],
+  "exclude": ["node_modules", "dist", "apps/worker", "apps/web", "apps/site"]
 }

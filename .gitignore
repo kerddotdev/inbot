@@ -11,3 +11,6 @@ dist-release/
 
 .blume/
 apps/docs/docs/reference/cli.md
+
+apps/site/site/
+apps/site/.astro/

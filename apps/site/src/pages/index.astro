@@ -1,0 +1,134 @@
+---
+import Base from "../layouts/Base.astro";
+import HeroJourney from "../components/HeroJourney.astro";
+import InstallBlock from "../components/InstallBlock.astro";
+import Screenshot from "../components/Screenshot.astro";
+import Surfaces from "../components/Surfaces.astro";
+import CipherPair from "../components/CipherPair.astro";
+import PolicyDemo from "../components/PolicyDemo.astro";
+import mailLight from "../assets/screens/mail-light.webp";
+import mailDark from "../assets/screens/mail-dark.webp";
+---
+
+<Base
+  title="Inbot"
+  description="Private email for AI agents. Give each agent its own inbox on your domain, keep mail encrypted on your own machine, and decide what agents may send."
+>
+  <section class="hero">
+    <h1 class="display">Email for AI agents.<br />Kept on your machine.</h1>
+    <p class="lede">
+      Give every agent its own inbox on your domain. Mail waits in the cloud only as ciphertext,
+      lives in an encrypted database on your computer, and leaves only when its rules allow.
+    </p>
+    <div class="actions">
+      <a class="btn btn-primary" href="/docs/get-started/install">Get started</a>
+      <a class="btn btn-quiet" href="https://github.com/kerddotdev/inbot">View on GitHub</a>
+    </div>
+  </section>
+
+  <section class="journey-wrap" aria-label="How a message travels">
+    <HeroJourney />
+  </section>
+
+  <section class="sec" aria-labelledby="install">
+    <header>
+      <h2 class="h2" id="install">Install, then make it yours</h2>
+      <p>One self-contained download with its own runtime. Finish setup in the browser, then let it run in the background. No Docker, no database server.</p>
+      <a class="more" href="/docs/get-started/quickstart">Follow the quickstart</a>
+    </header>
+    <InstallBlock />
+  </section>
+
+  <section class="sec wide" aria-labelledby="inbox">
+    <header>
+      <h2 class="h2" id="inbox">Every agent gets an inbox</h2>
+      <p>
+        Real addresses on your own domain, like <code>research@agents.example.com</code>. You see
+        every thread, every draft and every reply from one owner app.
+      </p>
+      <a class="more" href="/features">See the features</a>
+    </header>
+    <Screenshot light={mailLight} dark={mailDark} alt="The Inbot owner app showing an agent inbox with a selected thread." />
+  </section>
+
+  <section class="sec" aria-labelledby="surfaces">
+    <header>
+      <h2 class="h2" id="surfaces">One contract, every surface</h2>
+      <p>
+        MCP, the CLI and the REST API call the same service methods with the same permission checks.
+        Pick whatever your agent speaks.
+      </p>
+      <a class="more" href="/docs/reference/mcp">Browse the MCP tools</a>
+    </header>
+    <Surfaces />
+  </section>
+
+  <section class="sec" aria-labelledby="cipher">
+    <header>
+      <h2 class="h2" id="cipher">Ciphertext until it is home</h2>
+      <p>
+        An Email Worker in your Cloudflare account encrypts each message to your key before anything is stored. Only
+        your machine can open it. Cloudflare still sees mail in transit, so this is privacy at rest,
+        not <span class="nowrap">end-to-end</span> encryption.
+      </p>
+      <a class="more" href="/docs/concepts/security">Read the security model</a>
+    </header>
+    <CipherPair />
+  </section>
+
+  <section class="sec" aria-labelledby="policy">
+    <header>
+      <h2 class="h2" id="policy">You decide what agents send</h2>
+      <p>
+        Every key carries a send policy that the service enforces, whatever the agent was told by a
+        message it read.
+      </p>
+      <a class="more" href="/docs/guides/approvals">How approvals work</a>
+    </header>
+    <PolicyDemo />
+  </section>
+
+  <section class="sec" aria-labelledby="remote">
+    <header>
+      <h2 class="h2" id="remote">Reach it from the cloud</h2>
+      <p>
+        Turn on remote access and Inbot creates a Cloudflare Tunnel to your machine. Cloud agents
+        connect with OAuth and get only the routes they need.
+      </p>
+      <a class="more" href="/docs/guides/remote-access">Set up remote access</a>
+    </header>
+    <ul class="facts">
+      <li><strong>No open ports.</strong> The tunnel dials out from your machine.</li>
+      <li><strong>Restricted routes.</strong> Agents get MCP and scoped API routes. Owner sign-in, approvals and OAuth consent are available; local management stays local.</li>
+      <li><strong>Revocable.</strong> Remove a grant and the agent loses access at once.</li>
+    </ul>
+  </section>
+
+  <section class="end">
+    <h2 class="display">Give your agents an address.</h2>
+    <div class="actions">
+      <a class="btn btn-primary" href="/docs/get-started/install">Get started</a>
+      <a class="btn btn-quiet" href="/compare">Compare options</a>
+    </div>
+  </section>
+</Base>
+
+<style>
+  .journey-wrap {
+    padding-block: 1rem clamp(1rem, 4vw, 3rem);
+  }
+  .facts {
+    display: grid;
+    gap: 1.4rem;
+    align-content: start;
+  }
+  .facts li {
+    padding-left: 1.25rem;
+    border-left: 2px solid color-mix(in srgb, var(--accent) 55%, transparent);
+    color: var(--text2);
+  }
+  .facts strong {
+    color: var(--text);
+    font-weight: 600;
+  }
+</style>
