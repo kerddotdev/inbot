@@ -5,6 +5,7 @@ import type { Message } from "@inbot/contracts/src/messages.js";
 import { type IconName } from "../icons";
 import { AttachmentDownload } from "../components/AttachmentDownload";
 import { MessageBody } from "../components/MessageBody";
+import { isEmbeddedImage } from "../mail-html";
 import { api } from "../api";
 import { links, navigate } from "../router";
 import { ErrorNotice, LoadError } from "../feedback";
@@ -39,6 +40,9 @@ function delivery(labels: readonly string[]) {
 
 function ThreadRow({ thread, selected }: { thread: ThreadItem; selected: boolean }) {
   const unread = thread.labels.includes("unread");
+  const attachmentCount = thread.attachments?.filter(
+    (attachment) => !isEmbeddedImage(attachment),
+  ).length;
   const tag = thread.labels.includes("send_unknown")
     ? delivery(thread.labels)
     : thread.labels.includes("unauthenticated")
@@ -80,10 +84,9 @@ function ThreadRow({ thread, selected }: { thread: ThreadItem; selected: boolean
           {tag.label}
         </Status>
       ) : null}
-      {!tag && thread.attachments?.length ? (
+      {!tag && attachmentCount ? (
         <Status tone="mute" icon="clip" className="mt-1 text-xs">
-          {thread.attachments.length}{" "}
-          {thread.attachments.length === 1 ? "attachment" : "attachments"}
+          {attachmentCount} {attachmentCount === 1 ? "attachment" : "attachments"}
         </Status>
       ) : null}
     </a>
@@ -128,13 +131,15 @@ function MessageView({ message }: { message: Message }) {
         </p>
       </Disclosure>
       <MessageBody message={message} />
-      {message.attachments?.map((attachment) => (
-        <AttachmentDownload
-          key={attachment.attachment_id}
-          attachment={attachment}
-          download={() => api.messageAttachment(message, attachment.attachment_id)}
-        />
-      ))}
+      {message.attachments
+        ?.filter((attachment) => !(message.html && isEmbeddedImage(attachment)))
+        .map((attachment) => (
+          <AttachmentDownload
+            key={attachment.attachment_id}
+            attachment={attachment}
+            download={() => api.messageAttachment(message, attachment.attachment_id)}
+          />
+        ))}
       {status ? (
         <div className="mt-2.5 flex flex-wrap items-center gap-[18px] text-[12.5px]">
           <Status tone={status.tone} icon={status.icon}>

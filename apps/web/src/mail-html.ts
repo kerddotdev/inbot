@@ -61,6 +61,14 @@ function hasExternalCss(value: string) {
   return sources.some((source) => source !== "" && !/^(?:data:|cid:)/i.test(source));
 }
 
+export function isEmbeddedImage(attachment: Attachment) {
+  return (
+    attachment.content_disposition !== "attachment" &&
+    Boolean(attachment.content_id) &&
+    rasterType.test(attachment.content_type ?? "")
+  );
+}
+
 export function inlineImageAttachments(attachments: readonly Attachment[]) {
   return attachments.filter(
     (attachment) => attachment.content_id && rasterType.test(attachment.content_type ?? ""),
