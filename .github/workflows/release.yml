@@ -97,7 +97,13 @@ jobs:
           printf %s "$CERTIFICATE_P12" | base64 --decode > "$RUNNER_TEMP/certificate.p12"
           security import "$RUNNER_TEMP/certificate.p12" -k "$keychain" -P "$CERTIFICATE_PASSWORD" -T /usr/bin/codesign >/dev/null
           rm "$RUNNER_TEMP/certificate.p12"
+          for intermediate in DeveloperIDCA DeveloperIDG2CA; do
+            curl -fsSL "https://www.apple.com/certificateauthority/$intermediate.cer" -o "$RUNNER_TEMP/$intermediate.cer"
+            security import "$RUNNER_TEMP/$intermediate.cer" -k "$keychain" >/dev/null
+          done
           security set-key-partition-list -S apple-tool:,apple: -k "$password" "$keychain" >/dev/null
+          security list-keychains -d user -s "$keychain" $(security list-keychains -d user | tr -d '"')
+          security find-identity -v -p codesigning "$keychain"
           printf %s "$APPLE_API_KEY_P8" > "$RUNNER_TEMP/AuthKey.p8"
           echo "APPLE_API_KEY=$RUNNER_TEMP/AuthKey.p8" >> "$GITHUB_ENV"
       - name: Sign and notarize both macOS archives
