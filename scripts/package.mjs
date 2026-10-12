@@ -16,18 +16,11 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
+import { releaseTargets as targets, writeReleaseChecksums } from "./release-checksum.mjs";
 import { stagePackageNotices } from "./package-notices.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const nodeVersion = "24.21.0";
-const targets = [
-  "darwin-arm64",
-  "darwin-x64",
-  "linux-x64",
-  "linux-arm64",
-  "win32-x64",
-  "win32-arm64",
-];
 const { values } = parseArgs({
   options: {
     target: { type: "string", multiple: true },
@@ -279,19 +272,7 @@ try {
     await rename(`${archive}.tmp`, archive);
     console.log(`Packaged ${archive}`);
   }
-  const archives = (await readdir(output))
-    .filter((name) =>
-      targets.some(
-        (target) =>
-          name === `inbot-${version}-${target}.${target.startsWith("win32-") ? "zip" : "tar.gz"}`,
-      ),
-    )
-    .sort();
-  const checksums = await Promise.all(
-    archives.map(async (name) => `${hash(await readFile(join(output, name)))}  ${name}\n`),
-  );
-  await writeFile(join(output, "SHA256SUMS.tmp"), checksums.join(""));
-  await rename(join(output, "SHA256SUMS.tmp"), join(output, "SHA256SUMS"));
+  await writeReleaseChecksums(output, version);
 } finally {
   await rm(temporary, { recursive: true, force: true });
 }
