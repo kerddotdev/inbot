@@ -74,13 +74,13 @@ export function Shell({
       <nav
         id="sidebar"
         aria-label="Sidebar"
-        className={`fixed inset-y-0 left-0 z-30 flex w-[232px] flex-col border-r border-line bg-side px-2.5 pb-3 shadow-sheet transition-[transform,visibility] duration-200 lg:static lg:visible lg:translate-x-0 lg:shadow-none ${navOpen ? "visible translate-x-0" : "invisible -translate-x-full"}`}
+        className={`fixed inset-y-0 left-0 z-30 flex w-[232px] flex-col border-r border-line bg-side px-2.5 shadow-sheet transition-[transform,visibility] duration-200 lg:static lg:visible lg:translate-x-0 lg:shadow-none ${navOpen ? "visible translate-x-0" : "invisible -translate-x-full"}`}
       >
-        <div className="flex h-[52px] items-center gap-2 px-2.5 font-semibold tracking-[-0.005em]">
-          <Mark />
+        <div className="flex items-center gap-2.5 px-2.5 pt-4 pb-3 text-[15px] font-semibold tracking-[-0.01em]">
+          <Mark className="size-[22px]" />
           Inbot
         </div>
-        <div className="mt-2.5">
+        <div>
           <h3 className="px-2.5 py-1 text-xs font-semibold text-ink2">Inboxes</h3>
           <Button
             variant="quiet"

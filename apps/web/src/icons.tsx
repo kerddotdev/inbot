@@ -149,9 +149,9 @@ export function Icon({ name, small = false, className = "", ...rest }: IconProps
   );
 }
 
-export function Mark({ className = "" }: { className?: string }) {
+export function Mark({ className = "size-[18px]" }: { className?: string }) {
   return (
-    <svg viewBox="0 0 64 64" aria-hidden="true" className={`size-[18px] flex-none ${className}`}>
+    <svg viewBox="0 0 64 64" aria-hidden="true" className={`flex-none ${className}`}>
       <circle cx="32" cy="13" r="5" className="fill-ink" />
       <rect x="27" y="24" width="10" height="14" rx="2" className="fill-ink" />
       <path
