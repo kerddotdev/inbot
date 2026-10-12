@@ -1,7 +1,7 @@
 name: PR size
 
 on:
-  pull_request_target:
+  pull_request:
     types: [opened, reopened, synchronize, ready_for_review]
 
 permissions:
@@ -14,17 +14,17 @@ concurrency:
 jobs:
   label:
     name: label
+    if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: vectis-ubuntu
     timeout-minutes: 10
     permissions:
       contents: read
       pull-requests: write
     steps:
-      # This job fetches pull request commits only as passive git data. Never install
-      # dependencies or run scripts from the pull request in a pull_request_target job.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+          persist-credentials: false
       - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
@@ -32,9 +32,8 @@ jobs:
             const git = (...args) => execFileSync("git", args, { encoding: "utf8" });
             const number = context.payload.pull_request.number;
             const base = context.payload.pull_request.base.sha;
-            git("fetch", "--no-tags", "origin", `+refs/pull/${number}/head:refs/remotes/pr/${number}`);
             const count = (...paths) =>
-              git("diff", "--numstat", "--ignore-all-space", "--ignore-blank-lines", `${base}...refs/remotes/pr/${number}`, "--", ...paths)
+              git("diff", "--numstat", "--ignore-all-space", "--ignore-blank-lines", `${base}...${context.payload.pull_request.head.sha}`, "--", ...paths)
                 .split("\n")
                 .filter(Boolean)
                 .reduce((total, line) => {
