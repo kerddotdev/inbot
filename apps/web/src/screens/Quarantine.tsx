@@ -5,10 +5,22 @@ import { Button, Status } from "../components/ui";
 import { ErrorNotice, LoadError } from "../feedback";
 import { quarantineQuery } from "../queries";
 
+function sentence(code: string) {
+  const text = code.replaceAll("_", " ");
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+function formatBytes(size: number) {
+  if (size < 1024) return `${size} B`;
+  if (size < 1024 * 1024) return `${Math.round(size / 1024)} KB`;
+  return `${(size / 1024 / 1024).toFixed(1)} MB`;
+}
+
 export function Quarantine() {
   const client = useQueryClient();
   const [pageToken, setPageToken] = useState<string | null>(null);
   const [notice, setNotice] = useState("");
+  const [confirming, setConfirming] = useState<string>();
   const query = useQuery(quarantineQuery(pageToken));
   const refresh = async () => {
     setPageToken(null);
@@ -41,9 +53,8 @@ export function Quarantine() {
         Quarantine
       </h2>
       <p className="mt-2 max-w-xl text-sm text-ink2">
-        Inbound items that could not be processed. Mail stays encrypted in the buffer. Retry buffer
-        objects after fixing the cause, or permanently delete them. Invalid Queue messages retain
-        metadata only.
+        Inbound mail that could not be processed stays here, still encrypted in the buffer. Fix the
+        cause, then retry it, or delete it permanently.
       </p>
       <Button
         icon="refresh"
@@ -66,88 +77,105 @@ export function Quarantine() {
       ) : query.data.items.length === 0 ? (
         <p className="mt-4 text-ink2">No quarantined items.</p>
       ) : (
-        <ul className="mt-4 divide-y divide-line">
-          {query.data.items.map((item) => (
-            <li
-              key={item.quarantine_id}
-              className="flex flex-wrap items-start justify-between gap-4 py-4"
-            >
-              <div className="min-w-0 space-y-2">
-                <Status tone="warn" icon="alert">
-                  {item.reason_code.replaceAll("_", " ")}
-                </Status>
-                <p className="text-sm text-ink2">
-                  {item.source_kind === "buffer_object"
-                    ? "Buffer object"
-                    : "Queue message metadata"}
-                </p>
-                <time className="block text-sm text-ink2" dateTime={item.first_seen}>
-                  {new Date(item.first_seen).toLocaleString()}
-                </time>
-                {item.size !== null ? (
-                  <p className="text-sm text-ink2">{item.size.toLocaleString()} bytes</p>
+        <ul className="mt-4 divide-y divide-line border-y border-line">
+          {query.data.items.map((item) => {
+            const details = [
+              item.source_kind === "buffer_object" ? "Encrypted buffer object" : "Queue message",
+              item.size !== null ? formatBytes(item.size) : null,
+              item.attempts !== null
+                ? `${item.attempts} ${item.attempts === 1 ? "attempt" : "attempts"}`
+                : null,
+            ].filter((value) => value !== null);
+            const start = () => {
+              retry.reset();
+              remove.reset();
+              setNotice("");
+            };
+            return (
+              <li key={item.quarantine_id} className="py-4">
+                <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
+                  <div className="min-w-0">
+                    <Status tone="warn" icon="alert" className="text-[13px]">
+                      {sentence(item.reason_code)}
+                    </Status>
+                    <p className="mt-1 text-xs text-ink2">
+                      {details.join(" · ")} ·{" "}
+                      <time dateTime={item.first_seen}>
+                        {new Date(item.first_seen).toLocaleString()}
+                      </time>
+                    </p>
+                    {item.status !== "quarantined" ? (
+                      <p role="status" className="mt-1 text-xs text-ink2">
+                        {item.status === "delete_pending"
+                          ? "Deleted locally. Waiting for buffer cleanup."
+                          : "Processed. Waiting for buffer cleanup."}
+                      </p>
+                    ) : item.source_kind === "queue_message" ? (
+                      <p className="mt-1 text-xs text-ink2">
+                        Only metadata remains. Retry its buffer object if one is listed.
+                      </p>
+                    ) : null}
+                  </div>
+                  {confirming === item.quarantine_id ? null : (
+                    <div className="flex gap-2">
+                      {item.source_kind === "buffer_object" && item.status !== "delete_pending" ? (
+                        <Button
+                          disabled={busy}
+                          aria-label={`Retry ${sentence(item.reason_code).toLowerCase()} item`}
+                          onClick={() => {
+                            start();
+                            retry.mutate(item.quarantine_id);
+                          }}
+                        >
+                          {retry.isPending && retry.variables === item.quarantine_id
+                            ? "Retrying..."
+                            : item.status === "release_pending"
+                              ? "Finish cleanup"
+                              : "Retry"}
+                        </Button>
+                      ) : null}
+                      <Button
+                        variant="danger"
+                        disabled={busy}
+                        onClick={() => {
+                          start();
+                          setConfirming(item.quarantine_id);
+                        }}
+                      >
+                        {remove.isPending && remove.variables === item.quarantine_id
+                          ? "Deleting..."
+                          : "Delete"}
+                      </Button>
+                    </div>
+                  )}
+                </div>
+                {confirming === item.quarantine_id ? (
+                  <div role="group" aria-label="Confirm deletion" className="mt-3">
+                    <p className="mb-3 text-sm text-ink2">
+                      {item.source_kind === "buffer_object"
+                        ? "This permanently deletes the encrypted message from the buffer. It cannot be recovered."
+                        : "This deletes the remaining metadata."}
+                    </p>
+                    <div className="flex gap-2">
+                      <Button
+                        variant="danger"
+                        disabled={busy}
+                        onClick={() => {
+                          setConfirming(undefined);
+                          remove.mutate(item.quarantine_id);
+                        }}
+                      >
+                        Delete permanently
+                      </Button>
+                      <Button disabled={busy} onClick={() => setConfirming(undefined)}>
+                        Cancel
+                      </Button>
+                    </div>
+                  </div>
                 ) : null}
-                {item.attempts !== null ? (
-                  <p className="text-sm text-ink2">Processing attempts: {item.attempts}</p>
-                ) : null}
-                {item.status !== "quarantined" ? (
-                  <p role="status" className="text-sm text-ink2">
-                    {item.status === "delete_pending"
-                      ? "Deletion awaiting buffer cleanup."
-                      : "Processed; buffer cleanup pending."}
-                  </p>
-                ) : null}
-                {item.source_kind === "queue_message" ? (
-                  <p className="text-sm text-ink2">
-                    Already acknowledged. Retry its buffer object if one is listed.
-                  </p>
-                ) : null}
-              </div>
-              <div className="flex gap-2">
-                {item.source_kind === "buffer_object" && item.status !== "delete_pending" ? (
-                  <Button
-                    disabled={busy}
-                    aria-label={`Retry quarantine item ${item.quarantine_id}`}
-                    onClick={() => {
-                      remove.reset();
-                      retry.reset();
-                      setNotice("");
-                      retry.mutate(item.quarantine_id);
-                    }}
-                  >
-                    {retry.isPending && retry.variables === item.quarantine_id
-                      ? "Retrying..."
-                      : item.status === "release_pending"
-                        ? "Finish cleanup"
-                        : "Retry"}
-                  </Button>
-                ) : null}
-                <Button
-                  variant="danger"
-                  disabled={busy}
-                  aria-label={`Delete quarantine item ${item.quarantine_id}`}
-                  onClick={() => {
-                    if (
-                      window.confirm(
-                        item.source_kind === "buffer_object"
-                          ? "Permanently delete this encrypted buffer object and its quarantine record? This cannot be undone."
-                          : "Delete this invalid Queue message metadata?",
-                      )
-                    ) {
-                      retry.reset();
-                      remove.reset();
-                      setNotice("");
-                      remove.mutate(item.quarantine_id);
-                    }
-                  }}
-                >
-                  {remove.isPending && remove.variables === item.quarantine_id
-                    ? "Deleting..."
-                    : "Delete"}
-                </Button>
-              </div>
-            </li>
-          ))}
+              </li>
+            );
+          })}
         </ul>
       )}
       {notice ? (
