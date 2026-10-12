@@ -373,7 +373,7 @@ test("downloads raw bytes to private files or binary stdout and keeps metadata i
   expect(file.code).toBe(0);
   expect(file.stdout).toBe("");
   expect(await readFile(output)).toEqual(api.raw);
-  expect((await stat(output)).mode & 0o777).toBe(0o600);
+  if (process.platform !== "win32") expect((await stat(output)).mode & 0o777).toBe(0o600);
   const existing = await invoke(api, [...args, "-o", output]);
   expect(existing.code).toBe(1);
   expect(existing.stderr).toContain("never overwritten");
