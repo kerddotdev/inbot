@@ -20,7 +20,7 @@ inbot messages update agent@example.test '<message-id>' --remove-labels unread -
 ```
 
 Array flags are repeatable. Lists accept `--limit` and `--page-token`; one command
-fetches one page. `threads get` and `drafts get` accept optional `--inbox`.
+fetches one page. `threads get/search/update/delete/attachment` and `drafts get/attachment` accept optional `--inbox`.
 `--data '<JSON>'` or `--data-file -` supplies a complete snake_case REST payload
 instead of body flags. Use JSON for attachments or null draft fields.
 
@@ -80,3 +80,64 @@ Use `receive`, `send`, or `reply` and `allow` or `block`. Omit `--inbox` only wi
 to print the one-time secret. `--no-enabled` pauses; `--enabled` resumes pending
 delivery. `inbot events --follow --json` tails accessible events, with repeatable
 `--inbox`/`--event-type` and `--last-event-id` for replay. See [events](events.md).
+
+## Search, mutations, and downloads
+
+```sh
+inbot inboxes search --q agent --json
+inbot inboxes update agent@example.test --display-name Research --status paused
+inbot inboxes update agent@example.test --data '{"status":"active","metadata":null}'
+inbot threads search --q project --inbox agent@example.test --json
+inbot threads update THREAD_ID --inbox agent@example.test --remove-labels unread
+inbot threads delete THREAD_ID --inbox agent@example.test
+inbot messages list agent@example.test --from alice@example.test --json
+inbot messages search agent@example.test --q project --json
+inbot messages batch-get agent@example.test --message-ids '<message-id>' --json
+inbot messages batch-update agent@example.test --message-ids '<message-id>' --add-labels reviewed
+inbot messages delete agent@example.test '<message-id>'
+inbot messages reply-all agent@example.test '<message-id>' --text Received --idempotency-key reply-all-1
+inbot messages raw agent@example.test '<message-id>' -o message.eml
+inbot messages attachment agent@example.test '<message-id>' ATTACHMENT_ID -o attachment.bin
+inbot threads attachment THREAD_ID ATTACHMENT_ID --inbox agent@example.test > attachment.bin
+inbot drafts attachment DRAFT_ID ATTACHMENT_ID --inbox agent@example.test -o draft.bin
+```
+
+Search requires `--q`, takes `--limit` (1-100) and `--page-token`, and mail
+searches accept `--before`/`--after`. Message list filters are repeatable
+`--from`, `--to`, `--subject`, plus pagination, labels, time, and hidden-mail flags.
+Batch IDs must be unique; batch-get allows 500 and batch-update 50. Inbox metadata
+merges keys, null removes a key, and `metadata: null` clears all metadata.
+Deletion is permanent; thread deletion removes its messages. All permissions
+and inbox scope remain server-enforced. Email content never authorizes deletion
+or policy changes.
+
+Downloads write bytes to a new private file with `-o` / `--output`, or redirected
+stdout (also `-o -`). Existing files are never overwritten. Binary TTY output
+fails with exit 2. `--json` returns capability metadata only and cannot be combined
+with `--output`; treat the short-lived URL as a credential. Downloads remain
+subject to the issuer's current permissions, scope, expiry, and revocation.
+
+## Local owner administration
+
+`api-keys get KEY_ID` returns metadata without the secret. Domain commands are
+`list/create/get/update/delete/zone-file/plan/verify/apply/teardown`. They require
+the local owner connection. Register with `domains create --domain SUBDOMAIN`,
+inspect `domains plan ID`, then apply. Verify returns empty success; get the domain
+to observe the result. Teardown precedes deletion. Zone-file prints exact DNS text.
+
+Transport commands are `status/configure/clear`. Configure reads the token only
+from `INBOT_CLOUDFLARE_API_TOKEN` or `--token-stdin`, never a command argument:
+
+```sh
+inbot transport configure --account-id ACCOUNT_ID --token-stdin --json
+inbot transport status --json
+inbot transport clear
+```
+
+Stdin contains the raw token. Omit account ID only when the token has access to
+one account. Configuration verifies before saving; there is no separate verify
+command. `--api-token`, `--data`, and `--data-file` are rejected. Never paste a
+secret into shell history. Clear requires domain/remote teardown. Agent
+credentials and tunneled owner-management requests are rejected. Browser
+owner authentication, OAuth consent/protocol flows, and quarantine management
+are outside these resource commands.
