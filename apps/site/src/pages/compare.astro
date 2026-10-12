@@ -1,0 +1,467 @@
+---
+import Base from "../layouts/Base.astro";
+
+const rows = [
+  { key: "runs", label: "Where it runs" },
+  { key: "source", label: "Source" },
+  { key: "storage", label: "Stored mail" },
+  { key: "domain", label: "Custom domain" },
+  { key: "mcp", label: "MCP" },
+  { key: "cli", label: "CLI" },
+  { key: "events", label: "Webhooks and live events" },
+  { key: "approval", label: "Approval before sending" },
+  { key: "auth", label: "Agent access" },
+  { key: "price", label: "Cost to start" },
+] as const;
+
+type Row = (typeof rows)[number]["key"];
+type Product = { name: string; kind: string; values: Record<Row, string>; sources: string[] };
+
+const products: Product[] = [
+  {
+    name: "Inbot",
+    kind: "Self-hosted",
+    values: {
+      runs: "Your own machine. macOS, Linux and Windows builds.",
+      source: "Open source, MIT",
+      storage: "Encrypted database on your machine. Mail waiting in Cloudflare is ciphertext only.",
+      domain: "Yes, on a Cloudflare zone",
+      mcp: "Local, and remote through your tunnel",
+      cli: "Yes",
+      events: "Signed webhooks and WebSocket",
+      approval: "Enforced per key: direct, approval or read_only",
+      auth: "Scoped API keys and OAuth",
+      price: "Free software. Cloudflare Workers Paid, $5 a month.",
+    },
+    sources: [],
+  },
+  {
+    name: "AgentMail",
+    kind: "Hosted",
+    values: {
+      runs: "Vendor cloud. Enterprise can run in your AWS account.",
+      source: "Closed. MCP server is open source.",
+      storage: "Encrypted at rest by the vendor. Your own keys on Enterprise only.",
+      domain: "Yes, on paid plans",
+      mcp: "Hosted",
+      cli: "Yes",
+      events: "Webhooks and WebSocket",
+      approval: "Pattern with drafts and allowlists, not enforced",
+      auth: "API keys, OAuth for MCP",
+      price: "Free for 3 inboxes. Paid from $20 a month.",
+    },
+    sources: [
+      "https://www.agentmail.to/pricing",
+      "https://docs.agentmail.to/knowledge-base/human-in-the-loop.md",
+      "https://www.agentmail.to/legal/privacy",
+    ],
+  },
+  {
+    name: "Nylas",
+    kind: "Hosted",
+    values: {
+      runs: "Vendor cloud",
+      source: "Closed",
+      storage: "Hosted by the vendor, 30-day default retention",
+      domain: "Yes",
+      mcp: "Hosted",
+      cli: "Yes",
+      events: "Webhooks",
+      approval: "Rules and quotas, no approval step",
+      auth: "API keys",
+      price: "Free for 3 accounts. Paid from $15 a month.",
+    },
+    sources: ["https://developer.nylas.com/docs/v3/agent-accounts/", "https://www.nylas.com/pricing/"],
+  },
+  {
+    name: "Resend",
+    kind: "Hosted",
+    values: {
+      runs: "Vendor cloud",
+      source: "Closed. MCP server and CLI are open source.",
+      storage: "Hosted by the vendor, 30-day retention",
+      domain: "Yes",
+      mcp: "Hosted and local. Inboxes in beta.",
+      cli: "Yes",
+      events: "Webhooks",
+      approval: "Not documented",
+      auth: "API keys, OAuth for MCP",
+      price: "Free for 3,000 emails a month. Paid from $20 a month.",
+    },
+    sources: ["https://resend.com/pricing", "https://resend.com/docs/mcp-server"],
+  },
+  {
+    name: "OpenMail",
+    kind: "Hosted",
+    values: {
+      runs: "Vendor cloud in the EU",
+      source: "Closed. MCP server is open source.",
+      storage: "Hosted by the vendor in the EU",
+      domain: "Yes, on Pro",
+      mcp: "Hosted, with read-only and single-inbox URLs",
+      cli: "Yes",
+      events: "Webhooks and WebSocket",
+      approval: "Not documented",
+      auth: "API keys, OAuth for MCP",
+      price: "Free for 3 inboxes. Paid from 9 EUR a month plus usage.",
+    },
+    sources: ["https://openmail.sh/pricing", "https://docs.openmail.sh/integrations/mcp"],
+  },
+  {
+    name: "Cloudflare Agentic Inbox",
+    kind: "Self-deployed",
+    values: {
+      runs: "Your Cloudflare account",
+      source: "Open source, Apache-2.0",
+      storage: "Durable Objects and R2 in your account. No app-level encryption documented.",
+      domain: "Yes",
+      mcp: "Built in",
+      cli: "No dedicated CLI",
+      events: "Not documented",
+      approval: "Its built-in agent asks first. MCP agents create drafts.",
+      auth: "Cloudflare Access for the owner",
+      price: "Free software. Workers Paid for sending.",
+    },
+    sources: ["https://github.com/cloudflare/agentic-inbox", "https://blog.cloudflare.com/email-for-agents/"],
+  },
+  {
+    name: "openagentemail",
+    kind: "Self-hosted",
+    values: {
+      runs: "Your server, with Docker Compose",
+      source: "Open source, Apache-2.0",
+      storage: "Your server. No app-level encryption documented.",
+      domain: "Yes",
+      mcp: "Yes",
+      cli: "Not documented",
+      events: "Webhooks",
+      approval: "Listed as a feature",
+      auth: "Not documented",
+      price: "Free software, plus your server",
+    },
+    sources: ["https://github.com/openagentemail/openagentemail"],
+  },
+  {
+    name: "dearagent",
+    kind: "Self-deployed",
+    values: {
+      runs: "Your Cloudflare account",
+      source: "Open source, AGPL-3.0",
+      storage: "D1 and R2 in your account. No app-level encryption documented.",
+      domain: "Yes, apex domain only",
+      mcp: "Yes",
+      cli: "No",
+      events: "Signed webhooks",
+      approval: "Not built in",
+      auth: "Bearer key",
+      price: "Free software. Workers Paid for sending.",
+    },
+    sources: ["https://sandeep.dev/blog/open-source-agentmail-alternative-cloudflare-workers"],
+  },
+];
+const others = products.slice(1);
+const [inbot] = products;
+const groups = [
+  {
+    id: "hosted",
+    title: "Against hosted services",
+    intro: "Nothing to run, but your agents' mail lives on someone else's servers.",
+    products: [inbot, ...products.filter((product) => product.kind === "Hosted")],
+  },
+  {
+    id: "self-hosted",
+    title: "Against other self-hosted options",
+    intro: "Your infrastructure too. The difference is what protects mail at rest and what the service enforces.",
+    products: [inbot, ...products.filter((product) => product.kind !== "Hosted" && product.name !== "Inbot")],
+  },
+];
+---
+
+<Base
+  title="Compare"
+  current="/compare"
+  description="How Inbot compares with other email services for AI agents on hosting, encryption at rest, approvals, agent access and price."
+>
+  <section class="hero">
+    <h1 class="display">Where your agents' mail lives.</h1>
+    <p class="lede">
+      Most email for agents is a hosted service that keeps your mail on its servers. Inbot keeps it
+      on yours.
+    </p>
+  </section>
+
+  {
+    groups.map((group) => (
+      <section class="sec wide" aria-labelledby={group.id}>
+        <header>
+          <h2 class="h2" id={group.id}>{group.title}</h2>
+          <p>{group.intro}</p>
+        </header>
+
+        <div class="scroll" role="region" aria-labelledby={group.id} tabindex="0">
+          <table>
+            <thead>
+              <tr>
+                <td />
+                {group.products.map((product) => (
+                  <th scope="col" class:list={{ us: product === inbot }}>
+                    <span>{product.name}</span>
+                    <small>{product.kind}</small>
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row) => (
+                <tr>
+                  <th scope="row">{row.label}</th>
+                  {group.products.map((product) => (
+                    <td class:list={{ us: product === inbot }}>{product.values[row.key]}</td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        <div class="cards">
+          {group.products
+            .filter((product) => product !== inbot)
+            .map((product) => (
+              <section class="card" aria-label={product.name}>
+                <h3>
+                  {product.name} <small>{product.kind}</small>
+                </h3>
+                <dl>
+                  {rows.map((row) => (
+                    <div>
+                      <dt>{row.label}</dt>
+                      <dd>{product.values[row.key]}</dd>
+                      <dd class="ours"><span>Inbot</span> {inbot.values[row.key]}</dd>
+                    </div>
+                  ))}
+                </dl>
+              </section>
+            ))}
+        </div>
+      </section>
+    ))
+  }
+
+  <section class="sec" aria-labelledby="choose">
+    <header>
+      <h2 class="h2" id="choose">When Inbot fits</h2>
+    </header>
+    <div class="split">
+      <div>
+        <h3>Choose Inbot if</h3>
+        <ul>
+          <li>Mail your agents read should stay on hardware you control.</li>
+          <li>You want the service, not the prompt, to decide what an agent may send.</li>
+          <li>Your domain already runs on Cloudflare, or can.</li>
+        </ul>
+      </div>
+      <div>
+        <h3>Look elsewhere if</h3>
+        <ul>
+          <li>You want a hosted service with nothing to run.</li>
+          <li>Your machine cannot be online regularly. Mail waits safely, but agents only see it once Inbot collects it.</li>
+          <li>You need a free plan with no Cloudflare subscription.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section class="sec" aria-labelledby="sources">
+    <header>
+      <h2 class="h2" id="sources">Sources</h2>
+      <p>
+        Checked against each vendor's own pages on October 12, 2026. Prices and features change, so
+        if something here is out of date, open an issue.
+      </p>
+      <a class="more" href="https://github.com/kerddotdev/inbot/issues">Report a correction</a>
+    </header>
+    <dl class="sources">
+      {
+        others.map((product) => (
+          <div>
+            <dt>{product.name}</dt>
+            {product.sources.map((url) => (
+              <dd>
+                <a class="link" href={url} rel="nofollow noopener">
+                  {url.replace(/^https:\/\/(www\.)?/, "")}
+                </a>
+              </dd>
+            ))}
+          </div>
+        ))
+      }
+    </dl>
+  </section>
+
+  <section class="end">
+    <h2 class="display">Keep the mail. Share the inbox.</h2>
+    <div class="actions">
+      <a class="btn btn-primary" href="/docs/get-started/install">Get started</a>
+      <a class="btn btn-quiet" href="/features">See the features</a>
+    </div>
+  </section>
+</Base>
+
+<style>
+  .scroll {
+    overflow-x: auto;
+    margin-inline: calc(var(--gutter) * -1);
+    padding-inline: var(--gutter);
+    border-radius: 4px;
+  }
+  table {
+    width: 100%;
+    min-width: 52rem;
+    table-layout: fixed;
+    border-collapse: separate;
+    border-spacing: 0;
+    font-size: 0.9rem;
+    line-height: 1.45;
+  }
+  thead th {
+    vertical-align: bottom;
+    text-align: left;
+    padding: 0 1rem 1rem;
+    font-weight: 600;
+  }
+  thead th small {
+    display: block;
+    margin-top: 0.2rem;
+    font-weight: 400;
+    color: var(--text2);
+  }
+  tbody th {
+    position: sticky;
+    left: calc(var(--gutter) * -1);
+    z-index: 1;
+    width: 9.5rem;
+    padding: 1rem 1rem 1rem 0;
+    text-align: left;
+    font-weight: 500;
+    background: var(--bg);
+    vertical-align: top;
+  }
+  td {
+    padding: 1rem;
+    vertical-align: top;
+    color: var(--text2);
+  }
+  tbody tr + tr > * {
+    border-top: 1px solid var(--line);
+  }
+  .us {
+    background: color-mix(in srgb, var(--accent) 7%, var(--bg));
+    color: var(--text);
+  }
+  thead .us {
+    border-radius: 12px 12px 0 0;
+    padding-top: 1rem;
+    color: var(--accent);
+  }
+  tbody tr:last-child .us {
+    border-radius: 0 0 12px 12px;
+  }
+
+  .cards {
+    display: none;
+  }
+  @media (max-width: 48rem) {
+    .scroll {
+      display: none;
+    }
+    .cards {
+      display: grid;
+      gap: 2.5rem;
+    }
+  }
+  .card h3 {
+    font-family: var(--display);
+    font-size: 1.3rem;
+    font-weight: 600;
+    letter-spacing: -0.015em;
+  }
+  .card h3 small {
+    margin-left: 0.4rem;
+    font-family: var(--sans);
+    font-size: 0.85rem;
+    font-weight: 400;
+    color: var(--text2);
+  }
+  .card dd.ours {
+    margin-top: 0.2rem;
+    color: var(--text);
+    font-size: 0.88rem;
+  }
+  .card dd.ours span {
+    margin-right: 0.35rem;
+    color: var(--accent);
+    font-weight: 600;
+  }
+  .card dl {
+    display: grid;
+    margin-top: 0.9rem;
+  }
+  .card dl > div {
+    display: grid;
+    gap: 0.15rem;
+    padding-block: 0.7rem;
+    border-top: 1px solid var(--line);
+  }
+  .card dt {
+    font-size: 0.85rem;
+    font-weight: 500;
+  }
+  .card dd {
+    color: var(--text2);
+    font-size: 0.92rem;
+  }
+
+  .split {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 2.5rem;
+  }
+  @media (max-width: 40rem) {
+    .split {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+  .split h3 {
+    font-weight: 600;
+    margin-bottom: 0.9rem;
+  }
+  .split ul {
+    display: grid;
+    gap: 0.8rem;
+  }
+  .split li {
+    padding-left: 1.1rem;
+    border-left: 2px solid var(--line);
+    color: var(--text2);
+  }
+  .split > div:first-child li {
+    border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+  }
+
+  .sources {
+    display: grid;
+    gap: 1.1rem;
+    font-size: 0.9rem;
+  }
+  .sources dt {
+    font-weight: 500;
+  }
+  .sources dd {
+    overflow-wrap: anywhere;
+  }
+  .sources a {
+    display: inline-block;
+    padding-block: 0.3rem;
+  }
+</style>

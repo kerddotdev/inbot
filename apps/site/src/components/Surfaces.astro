@@ -1,0 +1,102 @@
+---
+const inbox = "research@agents.example.com";
+const message = "<CAF7k2@mail.example.org>";
+const text = "Thanks, the quote works for us.";
+const esc = (value: string) => value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
+const k = (value: string) => `<span class="tok-k">${esc(value)}</span>`;
+const str = (value: string) => `<span class="tok-s">${esc(value)}</span>`;
+const prompt = `<span class="p">$ </span>`;
+const code = {
+  mcp: [
+    `${k("reply_to_message")}({`,
+    `  inboxId: ${str(`"${inbox}"`)},`,
+    `  messageId: ${str(`"${message}"`)},`,
+    `  text: ${str(`"${text}"`)},`,
+    `  idempotencyKey: ${str('"reply-quote-1"')}`,
+    `})`,
+  ],
+  cli: [
+    `${prompt}${k("inbot messages reply")} ${esc(inbox)} \\`,
+    `    ${str(`'${message}'`)} \\`,
+    `    --text ${str(`'${text}'`)} \\`,
+    `    --idempotency-key reply-quote-1`,
+  ],
+  rest: [
+    `${k("POST")} /v0/inboxes/${esc(inbox)}/messages/${esc(encodeURIComponent(message))}/reply`,
+    `Authorization: Bearer inbot_...`,
+    `Idempotency-Key: reply-quote-1`,
+    ``,
+    `{ ${str('"text"')}: ${str(`"${text}"`)} }`,
+  ],
+};
+---
+
+
+<div class="surfaces">
+  <fieldset class="seg">
+    <legend class="sr-only">Show the same reply from</legend>
+    <label><input type="radio" name="surface" value="mcp" checked />MCP</label>
+    <label><input type="radio" name="surface" value="cli" />CLI</label>
+    <label><input type="radio" name="surface" value="rest" />REST</label>
+  </fieldset>
+
+  <div class="panel">
+    <div class="panel-head">
+      <span class="file" data-for="mcp">tool call</span>
+      <span class="file" data-for="cli">zsh</span>
+      <span class="file" data-for="rest">http</span>
+      <span>reply to a message</span>
+    </div>
+    <pre data-for="mcp" tabindex="0" aria-label="MCP tool call"><code set:html={code.mcp.join("\n")} /></pre>
+    <pre data-for="cli" tabindex="0" aria-label="CLI command"><code set:html={code.cli.join("\n")} /></pre>
+    <pre data-for="rest" tabindex="0" aria-label="REST request"><code set:html={code.rest.join("\n")} /></pre>
+    <div class="result">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8.5l3.2 3L13 4.5"></path></svg>
+      <code>{"{ message_id, thread_id }"}</code>
+      <span>same result, same permission check, queued in the same outbox</span>
+    </div>
+  </div>
+</div>
+
+<style>
+  [data-for] {
+    display: none;
+  }
+  .surfaces:has([value="mcp"]:checked) [data-for="mcp"],
+  .surfaces:has([value="cli"]:checked) [data-for="cli"],
+  .surfaces:has([value="rest"]:checked) [data-for="rest"] {
+    display: block;
+    animation: fade 0.35s var(--ease);
+  }
+  .panel-head span.file {
+    color: var(--text);
+  }
+  pre {
+    min-height: 11.5rem;
+  }
+  .result {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.4rem 0.6rem;
+    padding: 0.85rem 1.25rem;
+    border-top: 1px solid var(--line);
+    font-size: 0.88rem;
+    color: var(--text2);
+  }
+  .result svg {
+    width: 1rem;
+    height: 1rem;
+    color: var(--ok);
+  }
+  .result code {
+    color: var(--text);
+    font-size: 0.84rem;
+  }
+  @keyframes fade {
+    from {
+      opacity: 0;
+      transform: translateY(4px);
+    }
+  }
+</style>

@@ -1,0 +1,359 @@
+---
+const steps = [
+  ["Mail arrives", "Cloudflare receives it for your domain."],
+  ["Sealed at the edge", "An Email Worker encrypts it to your key with age."],
+  ["Waits as ciphertext", "R2 holds it until your machine is online."],
+  ["Opened at home", "Inbot decrypts it into an encrypted local database."],
+  ["Read by your agent", "Through MCP, the CLI or REST, within its grant."],
+  ["Reply, with approval", "If the grant asks for approval, you decide before it leaves."],
+] as const;
+---
+
+<figure class="journey" data-play>
+  <svg
+    viewBox="0 0 1040 320"
+    role="img"
+    aria-label="Incoming mail is encrypted to your key at Cloudflare, waits there only as ciphertext, and is decrypted on your machine, where your agent reads it. The agent's reply passes your approval before Cloudflare sends it."
+  >
+
+    <rect class="zone" x="220" y="44" width="330" height="236" rx="20"></rect>
+    <rect class="zone home" x="596" y="44" width="276" height="236" rx="20"></rect>
+    <text class="zone-label" x="240" y="30">Cloudflare</text>
+    <text class="zone-label strong" x="616" y="30">Your machine</text>
+
+    <path class="rail" d="M40 100H990"></path>
+    <path class="rail" d="M990 224H40"></path>
+    <path class="hot in" pathLength="1" d="M40 100H990"></path>
+    <path class="hot out" pathLength="1" d="M990 224H40"></path>
+
+    <circle class="node" cx="40" cy="100" r="5"></circle>
+    <circle class="node" cx="40" cy="224" r="5"></circle>
+    <path class="node" d="M291 100l9-9 9 9-9 9Z"></path>
+    <rect class="node" x="461" y="92" width="18" height="16" rx="3"></rect>
+    <rect class="node accent" x="719" y="90" width="22" height="20" rx="5"></rect>
+    <circle class="node" cx="385" cy="224" r="5"></circle>
+    <path class="gate" d="M690 210v28M702 210v28"></path>
+    <circle class="node" cx="990" cy="100" r="5"></circle>
+    <circle class="node" cx="990" cy="224" r="5"></circle>
+
+    <g class="labels">
+      <text class="strong" x="40" y="72" text-anchor="middle">sender</text>
+      <text class="strong" x="300" y="72" text-anchor="middle">encrypt</text>
+      <text x="300" y="136" text-anchor="middle">age, to your key</text>
+      <text class="strong" x="470" y="72" text-anchor="middle">buffer</text>
+      <text x="470" y="136" text-anchor="middle">ciphertext only</text>
+      <text class="strong" x="730" y="72" text-anchor="middle">Inbot</text>
+      <text x="730" y="136" text-anchor="middle">encrypted database</text>
+      <text class="strong" x="990" y="72" text-anchor="middle">agent</text>
+      <text x="990" y="136" text-anchor="middle">MCP, CLI, REST</text>
+      <text class="strong" x="385" y="196" text-anchor="middle">send</text>
+      <text class="strong" x="696" y="196" text-anchor="middle">approval</text>
+      <text x="696" y="262" text-anchor="middle">you decide</text>
+      <text class="strong" x="40" y="262" text-anchor="middle">recipient</text>
+    </g>
+
+    <g class="stamp">
+      <circle cx="696" cy="168" r="11"></circle>
+      <path d="M690.5 168.5l3.8 3.6 7-7.4"></path>
+    </g>
+
+    <g class="env env-in">
+      <g class="plain">
+        <rect x="-16" y="-11" width="32" height="22" rx="3"></rect>
+        <path d="M-16 -9l16 11 16-11"></path>
+      </g>
+      <g class="sealed">
+        <rect x="-16" y="-11" width="32" height="22" rx="3"></rect>
+        <rect class="lock" x="-5" y="-3" width="10" height="8" rx="1.5"></rect>
+        <path class="shackle" d="M-3 -3v-2.5a3 3 0 0 1 6 0V-3"></path>
+      </g>
+    </g>
+
+    <g class="env env-out">
+      <rect x="-16" y="-11" width="32" height="22" rx="3"></rect>
+      <path d="M-16 -9l16 11 16-11"></path>
+    </g>
+  </svg>
+
+  <ol class="steps">
+    {
+      steps.map(([title, detail]) => (
+        <li data-reveal>
+          <strong>{title}</strong>
+          <span>{detail}</span>
+        </li>
+      ))
+    }
+  </ol>
+</figure>
+
+<style>
+  .journey {
+    margin: 0;
+  }
+  svg {
+    display: block;
+    width: 100%;
+    height: auto;
+    overflow: visible;
+  }
+  text {
+    font-family: var(--mono);
+    font-size: 13px;
+    fill: var(--text2);
+  }
+  .strong {
+    fill: var(--text);
+  }
+  .zone {
+    fill: none;
+    stroke: var(--line);
+    stroke-dasharray: 4 5;
+  }
+  .zone.home {
+    fill: color-mix(in srgb, var(--accent) 5%, transparent);
+    stroke: color-mix(in srgb, var(--accent) 45%, transparent);
+    stroke-dasharray: none;
+  }
+  .zone-label {
+    font-family: var(--sans);
+    font-size: 14px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+  .rail {
+    fill: none;
+    stroke: var(--line);
+    stroke-width: 1.25;
+  }
+  .hot {
+    fill: none;
+    stroke: var(--accent);
+    stroke-width: 1.5;
+    stroke-dasharray: 1;
+    stroke-dashoffset: 0;
+  }
+  .node {
+    fill: var(--bg);
+    stroke: var(--text2);
+    stroke-width: 1.25;
+  }
+  .node.accent {
+    fill: var(--accent);
+    stroke: none;
+  }
+  .gate {
+    stroke: var(--accent);
+    stroke-width: 2;
+    stroke-linecap: round;
+  }
+  .stamp circle {
+    fill: var(--accent);
+  }
+  .stamp path {
+    fill: none;
+    stroke: var(--accent-ink);
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+  .stamp {
+    transform-box: fill-box;
+    transform-origin: center;
+  }
+
+  .env rect,
+  .env path {
+    stroke-width: 1.5;
+    stroke-linejoin: round;
+  }
+  .env .plain rect,
+  .env-out rect {
+    fill: var(--bg);
+    stroke: var(--text);
+  }
+  .env .plain path,
+  .env-out path {
+    fill: none;
+    stroke: var(--text);
+  }
+  .env .sealed rect {
+    fill: var(--accent);
+    stroke: var(--accent);
+  }
+  .env .sealed .lock {
+    fill: var(--accent-ink);
+    stroke: none;
+  }
+  .env .sealed .shackle {
+    fill: none;
+    stroke: var(--accent-ink);
+  }
+  .env-in {
+    transform: translate(990px, 100px);
+  }
+  .env-out {
+    transform: translate(40px, 224px);
+  }
+  .sealed {
+    opacity: 0;
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .hot.in {
+      animation: draw-in 2.8s 0.35s cubic-bezier(0.45, 0, 0.3, 1) both;
+    }
+    .hot.out {
+      animation: draw-out 2.4s 3.35s cubic-bezier(0.45, 0, 0.3, 1) both;
+    }
+    .env-in {
+      animation: in-move 2.8s 0.35s cubic-bezier(0.45, 0, 0.3, 1) both;
+    }
+    .env-in .sealed {
+      animation: sealed 2.8s 0.35s linear both;
+    }
+    .env-out {
+      animation: out-move 2.4s 3.35s cubic-bezier(0.45, 0, 0.3, 1) both;
+    }
+    .stamp {
+      animation: stamp 2.4s 3.35s var(--ease) both;
+    }
+  }
+
+  :global(.js) .journey:not(.in) * {
+    animation-play-state: paused;
+  }
+  @keyframes draw-in {
+    0%,
+    6% {
+      stroke-dashoffset: 1;
+    }
+    28%,
+    40% {
+      stroke-dashoffset: 0.726;
+    }
+    70%,
+    78% {
+      stroke-dashoffset: 0.274;
+    }
+    100% {
+      stroke-dashoffset: 0;
+    }
+  }
+  @keyframes draw-out {
+    0%,
+    8% {
+      stroke-dashoffset: 1;
+    }
+    38%,
+    60% {
+      stroke-dashoffset: 0.69;
+    }
+    100% {
+      stroke-dashoffset: 0;
+    }
+  }
+  @keyframes in-move {
+    0% {
+      opacity: 0;
+      transform: translate(40px, 100px);
+    }
+    6% {
+      opacity: 1;
+      transform: translate(40px, 100px);
+    }
+    28%,
+    40% {
+      transform: translate(300px, 100px);
+    }
+    70%,
+    78% {
+      transform: translate(730px, 100px);
+    }
+    100% {
+      opacity: 1;
+      transform: translate(990px, 100px);
+    }
+  }
+  @keyframes sealed {
+    0%,
+    27% {
+      opacity: 0;
+    }
+    33%,
+    72% {
+      opacity: 1;
+    }
+    78%,
+    100% {
+      opacity: 0;
+    }
+  }
+  @keyframes out-move {
+    0% {
+      opacity: 0;
+      transform: translate(990px, 224px);
+    }
+    8% {
+      opacity: 1;
+      transform: translate(990px, 224px);
+    }
+    38%,
+    60% {
+      transform: translate(696px, 224px);
+    }
+    100% {
+      opacity: 1;
+      transform: translate(40px, 224px);
+    }
+  }
+  @keyframes stamp {
+    0%,
+    44% {
+      opacity: 0;
+      transform: scale(0.4);
+    }
+    54% {
+      opacity: 1;
+      transform: scale(1.12);
+    }
+    62%,
+    100% {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+
+  .steps {
+    display: none;
+  }
+  @media (max-width: 60rem) {
+    svg {
+      display: none;
+    }
+    .steps {
+      display: grid;
+      gap: 1.4rem;
+      padding-left: 1.4rem;
+      border-left: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+    }
+    .steps li {
+      position: relative;
+      display: grid;
+      gap: 0.15rem;
+    }
+    .steps li::before {
+      content: "";
+      position: absolute;
+      left: calc(-1.4rem - 4.5px);
+      top: 0.55rem;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--accent);
+    }
+    .steps span {
+      color: var(--text2);
+    }
+  }
+</style>

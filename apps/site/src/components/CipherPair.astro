@@ -1,0 +1,117 @@
+---
+const cipher = [
+  "age-encryption.org/v1",
+  "-> X25519 tC4r1yQ0m2aV8nEw5Lz",
+  "Kp3ZfQ0uVd7sHnXc2RbW9eGmTq",
+  "--- 8VbEo1sJxKwq4ZyD",
+  "u9F2c#qL0v>e7Wm!rA4tZp1Ks8",
+  "nG3x/Q6hY0b+Jd5wR9mVc2Ee7T",
+  "Lq4@zF8sN1oX3kP6yH0aU5gMi9",
+];
+---
+
+<div class="pair" data-reveal>
+  <figure>
+    <figcaption>In Cloudflare R2</figcaption>
+    <pre class="panel" tabindex="0" aria-label="Encrypted message as stored in R2">{cipher.join("\n")}</pre>
+  </figure>
+  <figure>
+    <figcaption>On your machine</figcaption>
+    <div class="panel plain">
+      <dl>
+        <dt>From</dt>
+        <dd>Maya Chen &lt;maya@example.org&gt;</dd>
+        <dt>To</dt>
+        <dd>research@agents.example.com</dd>
+        <dt>Subject</dt>
+        <dd>Quote for the October batch</dd>
+      </dl>
+      <p>Hi, attached is our quote for the October batch. Prices hold until the 24th.</p>
+      <pre class="veil" aria-hidden="true">{cipher.join("\n")}</pre>
+    </div>
+  </figure>
+</div>
+
+<style>
+  .pair {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1.25rem;
+  }
+  @media (max-width: 40rem) {
+    .pair {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+  figure {
+    display: flex;
+    flex-direction: column;
+    margin: 0;
+  }
+  figure > .panel {
+    flex: 1;
+  }
+  figcaption {
+    margin-bottom: 0.65rem;
+    font-size: 0.88rem;
+    font-weight: 500;
+  }
+  pre.panel,
+  .veil {
+    margin: 0;
+    padding: 1.1rem 1.2rem;
+    font-size: 0.8rem;
+    line-height: 1.75;
+    color: var(--text2);
+    white-space: pre;
+    overflow: hidden;
+  }
+  .plain {
+    position: relative;
+    padding: 1.1rem 1.2rem;
+  }
+  dl {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 0.2rem 0.9rem;
+    font-size: 0.88rem;
+  }
+  dt {
+    color: var(--text2);
+  }
+  dd {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .plain p {
+    margin-top: 0.9rem;
+    padding-top: 0.9rem;
+    border-top: 1px solid var(--line);
+    font-size: 0.92rem;
+  }
+  .veil {
+    position: absolute;
+    inset: 0;
+    background: var(--panel);
+    transform-origin: right;
+    transition:
+      transform 1.1s 0.35s var(--ease),
+      opacity 1.1s 0.35s var(--ease);
+  }
+  :global(.js) .pair:not(.in) .veil {
+    transform: none;
+  }
+  .pair.in .veil {
+    transform: translateX(102%);
+    opacity: 0;
+  }
+  :global(html:not(.js)) .veil {
+    display: none;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .veil {
+      display: none;
+    }
+  }
+</style>

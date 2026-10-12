@@ -1,0 +1,52 @@
+---
+import Mark from "./Mark.astro";
+
+const repo = "https://github.com/kerddotdev/inbot";
+const columns = [
+  {
+    title: "Product",
+    links: [
+      { href: "/features", label: "Features" },
+      { href: "/compare", label: "Compare" },
+      { href: "/docs/concepts/security", label: "Security model" },
+    ],
+  },
+  {
+    title: "Docs",
+    links: [
+      { href: "/docs/get-started/install", label: "Install" },
+      { href: "/docs/get-started/quickstart", label: "Quickstart" },
+      { href: "/docs/reference/mcp", label: "MCP reference" },
+    ],
+  },
+  {
+    title: "Project",
+    links: [
+      { href: repo, label: "GitHub" },
+      { href: `${repo}/releases`, label: "Releases" },
+      { href: `${repo}/blob/main/LICENSE`, label: "MIT license" },
+    ],
+  },
+];
+---
+
+<footer class="site-footer">
+  <div>
+    <a class="wordmark" href="/" aria-label="Inbot home"><Mark />Inbot</a>
+    <p>Private email for AI agents, on your own machine.</p>
+  </div>
+  {
+    columns.map((column) => (
+      <nav aria-label={column.title}>
+        <p class="title">{column.title}</p>
+        <ul>
+          {column.links.map((link) => (
+            <li>
+              <a href={link.href}>{link.label}</a>
+            </li>
+          ))}
+        </ul>
+      </nav>
+    ))
+  }
+</footer>

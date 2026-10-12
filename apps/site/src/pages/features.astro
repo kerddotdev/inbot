@@ -1,0 +1,153 @@
+---
+import type { ImageMetadata } from "astro";
+import Base from "../layouts/Base.astro";
+import Screenshot from "../components/Screenshot.astro";
+
+const screens = import.meta.glob<{ default: ImageMetadata }>("../assets/screens/*.webp", {
+  eager: true,
+});
+const shot = (name: string, theme: "light" | "dark") => {
+  const image = screens[`../assets/screens/${name}-${theme}.webp`];
+  if (!image) throw new Error(`Missing screenshot ${name}-${theme}.webp`);
+  return image.default;
+};
+
+const features = [
+  {
+    id: "mail",
+    title: "Mail and threads",
+    body: "Each agent has a real address on your domain. Threads follow Message-ID and References, attachments download through short-lived signed links, and every message shows its honest state: queued, sent, delivered, bounced or failed.",
+    link: { href: "/docs/guides/owner-app", label: "Tour the owner app" },
+    alt: "A thread in an agent inbox with an attachment and a delivered reply.",
+  },
+  {
+    id: "approvals",
+    title: "Approvals",
+    body: "Keys with the approval policy turn every send into a draft that waits for you. Read it, check the attachments, then approve or reject with a reason the agent can see.",
+    link: { href: "/docs/guides/approvals", label: "How approvals work" },
+    alt: "The approvals queue with a pending draft from an agent key.",
+  },
+  {
+    id: "keys",
+    title: "Keys with scoped grants",
+    body: "Every API key and OAuth connection carries a grant: which inboxes, which permissions, which send policy. Change it later and the next request follows. Owner-only actions never reach an agent.",
+    link: { href: "/docs/guides/inboxes-and-keys", label: "Inboxes and keys" },
+    alt: "API keys with their inbox scopes, permissions and send policies.",
+  },
+  {
+    id: "domains",
+    title: "Domains, set up for you",
+    body: "Paste a Cloudflare token and Inbot provisions a subdomain for receiving and sending: routing, DKIM, SPF and DMARC. Each record shows its real status, and teardown removes what Inbot created.",
+    link: { href: "/docs/guides/domains", label: "Add a domain" },
+    alt: "A verified domain with its DNS records and their status.",
+  },
+  {
+    id: "remote",
+    title: "Remote access and OAuth",
+    body: "One switch creates a Cloudflare Tunnel and a hostname for your instance. Cloud agents such as claude.ai connect with OAuth, and you approve each connection with the same grant editor.",
+    link: { href: "/docs/guides/remote-access", label: "Set up remote access" },
+    alt: "Remote access enabled with a public hostname and a connected tunnel.",
+  },
+  {
+    id: "lists",
+    title: "Allow and block lists",
+    body: "Decide who may write to an agent and whom it may write to, globally or per inbox. Rejected mail is recorded with its sender and reason, so nothing disappears without a trace.",
+    link: { href: "/docs/guides/lists", label: "Lists and rejected mail" },
+    alt: "Allow and block lists with a rejected message.",
+  },
+  {
+    id: "webhooks",
+    title: "Webhooks",
+    body: "Get signed webhook calls when mail arrives, sends, delivers or bounces. Failed deliveries retry with backoff from a durable event log, scoped to the inboxes you choose.",
+    link: { href: "/docs/guides/webhooks", label: "Configure webhooks" },
+    alt: "Webhook endpoints with their subscribed events.",
+  },
+];
+---
+
+<Base
+  title="Features"
+  current="/features"
+  description="What Inbot gives agents and owners: inboxes on your domain, approvals, scoped keys, automatic Cloudflare setup, remote access with OAuth, lists, webhooks and MCP, CLI and REST access."
+>
+  <section class="hero">
+    <h1 class="display">Everything an agent needs.<br />Nothing it should not have.</h1>
+    <p class="lede">
+      An owner app for you, three ways in for your agents, and one set of rules enforced in between.
+    </p>
+  </section>
+
+  {
+    features.map((feature, index) => (
+      <section class="sec feature" aria-labelledby={feature.id}>
+        <header>
+          <h2 class="h2" id={feature.id}>{feature.title}</h2>
+          <p>{feature.body}</p>
+          <a class="more" href={feature.link.href}>{feature.link.label}</a>
+        </header>
+        <Screenshot
+          light={shot(feature.id, "light")}
+          dark={shot(feature.id, "dark")}
+          alt={feature.alt}
+          eager={index === 0}
+        />
+      </section>
+    ))
+  }
+
+  <section class="sec" aria-labelledby="agents">
+    <header>
+      <h2 class="h2" id="agents">Agent surfaces</h2>
+      <p>
+        MCP over streamable HTTP, the <code>inbot</code> CLI and a versioned REST API share one typed
+        contract. A portable skill teaches agents to use it well.
+      </p>
+      <a class="more" href="/docs/agents/connect">Connect an agent</a>
+    </header>
+    <div class="panel">
+      <div class="panel-head"><span>Claude Code</span><span>zsh</span></div>
+      <pre tabindex="0" aria-label="Add Inbot to Claude Code"><code><span class="p">$ </span>claude mcp add -s user --transport http inbot \
+    http://127.0.0.1:8025/mcp \
+    --header <span class="tok-s">"Authorization: Bearer $INBOT_API_KEY"</span></code></pre>
+    </div>
+  </section>
+
+  <section class="sec" aria-labelledby="events">
+    <header>
+      <h2 class="h2" id="events">Live events</h2>
+      <p>
+        An authenticated WebSocket streams the same events as webhooks, with replay from where you
+        left off.
+      </p>
+      <a class="more" href="/docs/reference/events">Event reference</a>
+    </header>
+    <div class="panel">
+      <div class="panel-head"><span>Terminal</span><span>zsh</span></div>
+      <pre tabindex="0" aria-label="Event stream"><code><span class="p">$ </span>inbot events --follow --json
+{"{"}<span class="tok-s">"event_type"</span>: <span class="tok-s">"message.received"</span>, ...{"}"}
+{"{"}<span class="tok-s">"event_type"</span>: <span class="tok-s">"draft.approval_required"</span>, ...{"}"}
+{"{"}<span class="tok-s">"event_type"</span>: <span class="tok-s">"draft.approved"</span>, ...{"}"}
+{"{"}<span class="tok-s">"event_type"</span>: <span class="tok-s">"message.sent"</span>, ...{"}"}
+{"{"}<span class="tok-s">"event_type"</span>: <span class="tok-s">"message.delivered"</span>, ...{"}"}</code></pre>
+    </div>
+  </section>
+
+  <section class="end">
+    <h2 class="display">See how it compares.</h2>
+    <div class="actions">
+      <a class="btn btn-primary" href="/compare">Compare options</a>
+      <a class="btn btn-quiet" href="/docs/get-started/install">Get started</a>
+    </div>
+  </section>
+</Base>
+
+<style>
+  .feature {
+    grid-template-columns: minmax(0, 17rem) minmax(0, 1fr);
+  }
+  @media (max-width: 56rem) {
+    .feature {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+</style>

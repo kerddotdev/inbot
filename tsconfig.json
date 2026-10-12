@@ -24,5 +24,5 @@
     "scripts/screenshot-server.ts",
     "vitest.config.ts"
   ],
-  "exclude": ["node_modules", "dist", "apps/worker", "apps/web"]
+  "exclude": ["node_modules", "dist", "apps/worker", "apps/web", "apps/site"]
 }

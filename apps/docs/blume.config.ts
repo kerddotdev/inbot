@@ -6,6 +6,10 @@ export default defineConfig({
   logo: "/icon.svg",
   content: { root: "docs" },
   feedback: false,
+  deployment: {
+    site: "https://inbot.kerd.dev",
+    base: "/docs",
+  },
   github: { owner: "kerddotdev", repo: "inbot", branch: "main", dir: "apps/docs" },
   theme: {
     mode: "system",
