@@ -1,5 +1,5 @@
 import { readFile, realpath, stat } from "node:fs/promises";
-import { extname, isAbsolute, relative, resolve } from "node:path";
+import { extname, isAbsolute, relative, resolve, sep } from "node:path";
 import { Effect } from "effect";
 import { HttpServerResponse } from "effect/http";
 import { errorResponse, wireError } from "./errors.js";
@@ -57,7 +57,7 @@ const reserved = (path: string) =>
   );
 const inside = (root: string, path: string) => {
   const suffix = relative(root, path);
-  return suffix !== ".." && !suffix.startsWith("../") && !isAbsolute(suffix);
+  return suffix !== ".." && !suffix.startsWith(`..${sep}`) && !isAbsolute(suffix);
 };
 export function staticWeb(root: string | undefined) {
   return Effect.tryPromise({
