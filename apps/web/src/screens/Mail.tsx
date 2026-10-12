@@ -1,10 +1,10 @@
-import { hasQuotedText } from "../mail-text";
 import { useRef, useState, type FormEvent } from "react";
 import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import type { ThreadItem } from "@inbot/contracts/src/threads.js";
 import type { Message } from "@inbot/contracts/src/messages.js";
 import { type IconName } from "../icons";
 import { AttachmentDownload } from "../components/AttachmentDownload";
+import { MessageBody } from "../components/MessageBody";
 import { api } from "../api";
 import { links, navigate } from "../router";
 import { ErrorNotice, LoadError } from "../feedback";
@@ -109,7 +109,6 @@ function MessageView({ message }: { message: Message }) {
         void client.invalidateQueries({ queryKey: [key] });
     },
   });
-  const body = message.extracted_text ?? message.text;
   return (
     <article className="border-t border-line py-5 first:border-t-0 first:pt-0">
       <header className="mb-2 flex items-baseline gap-2">
@@ -128,16 +127,7 @@ function MessageView({ message }: { message: Message }) {
           {message.bcc?.length ? `; Bcc: ${message.bcc.join(", ")}` : ""}
         </p>
       </Disclosure>
-      <div className="font-serif text-[17px] leading-[1.6]">
-        <p className="mb-[.7em] whitespace-pre-wrap last:mb-0">
-          {body ?? "This message has no plain-text body."}
-        </p>
-      </div>
-      {body === undefined && message.html ? (
-        <Disclosure label="Show HTML source">
-          <pre className="mt-2 whitespace-pre-wrap break-words text-xs">{message.html}</pre>
-        </Disclosure>
-      ) : null}
+      <MessageBody message={message} />
       {message.attachments?.map((attachment) => (
         <AttachmentDownload
           key={attachment.attachment_id}
@@ -193,13 +183,6 @@ function MessageView({ message }: { message: Message }) {
           Not sent.{" "}
           {message.send_reason ? `Reason: ${message.send_reason}.` : "The send permanently failed."}
         </p>
-      ) : null}
-      {hasQuotedText(message.text, message.extracted_text) ? (
-        <Disclosure label="Show quoted text">
-          <blockquote className="mt-2 whitespace-pre-wrap border-l border-line pl-3.5 font-serif text-[15px] leading-[1.55] text-ink2">
-            {message.text}
-          </blockquote>
-        </Disclosure>
       ) : null}
     </article>
   );
