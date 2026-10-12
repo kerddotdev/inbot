@@ -82,7 +82,8 @@ function ThreadRow({ thread, selected }: { thread: ThreadItem; selected: boolean
       ) : null}
       {!tag && thread.attachments?.length ? (
         <Status tone="mute" icon="clip" className="mt-1 text-xs">
-          {thread.attachments.length} attachments
+          {thread.attachments.length}{" "}
+          {thread.attachments.length === 1 ? "attachment" : "attachments"}
         </Status>
       ) : null}
     </a>
