@@ -141,3 +141,5 @@ secret into shell history. Clear requires domain/remote teardown. Agent
 credentials and tunneled owner-management requests are rejected. Browser
 owner authentication, OAuth consent/protocol flows, and quarantine management
 are outside these resource commands.
+
+Owner-only local commands: `inbot quarantine list [--limit 20] [--page-token <token>] --json`, `inbot quarantine retry <quarantine_id> --json`, and `inbot quarantine delete <quarantine_id> --json`. Agent keys cannot use them. Queue metadata cannot be retried (`not_supported`); ask the owner to inspect the separately listed encrypted buffer object. Retry distinguishes `released` from another `quarantined` result; deletion is permanent and idempotent.

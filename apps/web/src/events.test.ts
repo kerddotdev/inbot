@@ -8,6 +8,15 @@ const cases: readonly { event: Event; changed: readonly string[] }[] = [
   {
     event: {
       type: "event",
+      event_type: "inbound.quarantined",
+      event_id: "quarantine",
+      quarantine: { quarantine_id: "item", reason_code: "invalid_ciphertext", timestamp },
+    },
+    changed: ["quarantine"],
+  },
+  {
+    event: {
+      type: "event",
       event_type: "oauth.revoked",
       event_id: "oauth",
       oauth: { grant_id: "grant", client_id: "client", timestamp },
@@ -86,6 +95,7 @@ test.each(cases)("$event.event_type invalidates affected query caches", ({ event
     "domains",
     "keys",
     "transport",
+    "quarantine",
   ];
   for (const key of keys) client.setQueryData([key, "synthetic"], { value: "cached" });
   invalidateEvent(client, event);

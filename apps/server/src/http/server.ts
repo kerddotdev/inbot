@@ -1,3 +1,6 @@
+import { Quarantine } from "../inbound/quarantine.js";
+import { InboundBuffer } from "../inbound/cloudflare.js";
+import { QuarantineHandlers } from "./quarantine.js";
 import { EventLog } from "../events/log.js";
 import { Webhooks } from "../events/webhooks.js";
 import { websocket } from "../events/websocket.js";
@@ -77,6 +80,8 @@ export function startHttpServer(
     const keys = yield* ApiKeys;
     const outbox = yield* Outbox;
     const config = yield* TransportConfig;
+    const inbound = yield* InboundConfig;
+    const buffer = yield* Effect.serviceOption(InboundBuffer);
     const drafts = yield* Drafts;
     const supplied = yield* Effect.serviceOption(Provisioner);
     const provisioner = Option.isSome(supplied)
@@ -141,6 +146,17 @@ export function startHttpServer(
     const services = Layer.mergeAll(
       Lists.Live.pipe(Layer.provide(Layer.succeed(Store, store))),
       ownerTransport,
+      Quarantine.Live.pipe(
+        Layer.provide(
+          Layer.mergeAll(
+            Layer.succeed(Store, store),
+            Layer.succeed(InboundConfig, inbound),
+            Layer.succeed(TransportConfig, config),
+            Layer.succeed(Mailbox, mailbox),
+            Option.isSome(buffer) ? Layer.succeed(InboundBuffer, buffer.value) : Layer.empty,
+          ),
+        ),
+      ),
       EventLog.Live.pipe(Layer.provide(Layer.succeed(Store, store))),
       Webhooks.Live.pipe(Layer.provide(Layer.succeed(Store, store))),
       Layer.succeed(RemoteAccess, remote),
@@ -163,6 +179,7 @@ export function startHttpServer(
     const shared = AgentOperations.Live.pipe(Layer.provideMerge(Layer.succeedContext(context)));
     const handlers = Layer.mergeAll(
       HandlersLive,
+      QuarantineHandlers,
       ownerHandlers(url),
       RemoteHandlers,
       OAuthHandlers,

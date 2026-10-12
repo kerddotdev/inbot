@@ -135,3 +135,5 @@ Sanitization is a browser presentation step. REST, MCP and CLI still receive raw
 `html` and `extracted_html` as untrusted data. There are no new routes, permissions,
 events or tunnel exposures. Sanitizer tests cover active content, URLs, external
 images, consent, CID scope, CSS and image sets without asserting static UI markup.
+
+Settings includes Quarantine beside receive-list rejection history. It loads paginated owner metadata with reason, source kind, first-seen time, known size, and tracked attempt count. Buffer objects support Retry; pending release shows Finish cleanup. Delete asks for confirmation and permanently removes ciphertext before the visible record. Queue items explain that they retain metadata only and cannot be retried. Loading, empty, locked, and request failure states are explicit. Mutations disable concurrent controls, refresh metadata after success or failure, and report another permanent failure as still quarantined. Owner `inbound.*` WebSocket events invalidate quarantine queries, including after reconnect.

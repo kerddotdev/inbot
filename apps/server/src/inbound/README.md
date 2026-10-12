@@ -128,8 +128,7 @@ invalid frames/MIME, and size mismatches first record `key`, fixed `reason_code`
 and `first_seen` in the encrypted DB, then ack while retaining R2 ciphertext.
 Malformed pointers also retain only queue/message ids and any valid referenced
 key. `bufferState(...).listQuarantine()` and `listMessageQuarantine()` supply owner
-metadata; `releaseQuarantine(key)` enables deliberate reconciliation without
-deleting ciphertext. Quarantine never stores payloads, credentials, or error text.
+metadata. Owner actions use the quarantine service described below. Quarantine never stores payloads, credentials, or error text.
 
 `reconcileInbound()` paginates objects under `inbound/`, processing those at least
 ten minutes old while skipping quarantined keys and known unexpired pending
@@ -165,10 +164,47 @@ extra S3 credentials. Sources: [pull consumers](https://developers.cloudflare.co
 [R2 list](https://developers.cloudflare.com/api/resources/r2/subresources/buckets/subresources/objects/methods/list/),
 [R2 delete](https://developers.cloudflare.com/api/resources/r2/subresources/buckets/subresources/objects/methods/delete/).
 
-Service, delivery events, reverse states, and docs apply. Existing contracts and
-mailbox semantics are reused; REST, MCP, CLI, web, grants, and remote allowlists
-have no new public surface. Agent guidance lives in `skills/inbot`.
+Owner quarantine management adds contracts, service methods, local REST, CLI,
+Settings, and owner events. It adds no MCP tool or agent permission. Agent
+guidance lives in `skills/inbot`.
 
 ## Receive lists
 
 Ingestion evaluates global and inbox `receive` lists against both From and the non-empty envelope sender. Blocked recipients return `skipped_blocked`, with a durable `blocked_sender` or `sender_not_allowed` trace in the encrypted Store. Allowed recipients are still ingested independently. The buffer receipt records `message_rejected` before deleting ciphertext; storage failure retains it for retry. See [list policy](../lists/README.md).
+
+## Owner quarantine management
+
+`Quarantine` lists both buffer objects and acknowledged invalid Queue messages.
+IDs are stable hashes of source kind, account, bucket/queue, and source ID.
+Listing reads encrypted local metadata without decrypting mail or calling the
+provider. Legacy size and attempts are null; inbox is null because the old
+quarantine receipts did not record recipients. New processing attempts record
+ciphertext size, attempt count, last attempt time, and the original receipt time.
+
+Retry uses the same fetch, decrypt, frame parsing, self-test, ingest, receipt, and
+R2 cleanup path as normal ingestion. It uses the fetched ciphertext's size rather
+than trusting a malformed Queue pointer. Permanent failure updates the reason
+and retains ciphertext; the response is `quarantined`, not success. After an
+observed commit, cleanup skips ingestion. Legacy retries use first-seen time
+when no original receipt time is recorded. Receive-list policy still applies;
+`released` means processing and cleanup completed, including policy rejection or
+self-test consumption, and does not promise a mailbox message.
+
+A Store-scoped semaphore serializes pull batches, reconciliation, retries, and
+deletions. Deletion first saves an intent and committed receipt, deletes the R2
+object, then clears the visible quarantine record. The receipt remains to prevent
+late pointers from accepting deleted mail. Missing R2 objects count as already
+deleted. Delete is idempotent. `release_pending` and `delete_pending` remain
+visible while cleanup is incomplete. Reconciliation finishes committed intents
+even when R2 no longer lists the object. Repeated retry cannot repeat ingestion
+after commit, and cannot override an outstanding deletion.
+
+Acknowledged invalid Queue bodies were never retained and cannot be retried:
+`not_supported` explains how to retry a separately listed object or delete only
+the Queue metadata. Original account/bucket configuration is required for R2
+actions; missing or mismatched configuration returns `action_required` without
+provider calls. Metadata remains listable without buffer configuration.
+
+Migration 15 adds an encrypted metadata/intent table and preserves legacy rows.
+State transactions emit owner-only `inbound.quarantined`, `inbound.released`, and
+`inbound.deleted` events. Release/deletion events follow observed R2 cleanup.

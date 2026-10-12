@@ -1,6 +1,13 @@
 import { queryOptions } from "@tanstack/react-query";
 import { api, type ListSelection } from "./api";
 
+export const quarantineQuery = (pageToken: string | null) =>
+  queryOptions({
+    queryKey: ["quarantine", pageToken],
+    queryFn: ({ signal }) => api.quarantine(pageToken, signal),
+    staleTime: 0,
+  });
+
 export const rejectionsQuery = (inboxId: string | undefined, pageToken: string | null) =>
   queryOptions({
     queryKey: ["rejections", inboxId, pageToken],

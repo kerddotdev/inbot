@@ -503,3 +503,14 @@ OAuth protocol/consent internals and quarantine are intentionally outside this
 work. The HTTP capability download route is consumed by attachment/raw commands;
 `/v0/ws` is covered by `events --follow`. There is no CLI-reference generator in
 this branch; help derives from the command table.
+
+## Owner quarantine
+
+```sh
+inbot quarantine list --limit 20 --json
+inbot quarantine list --page-token <token> --json
+inbot quarantine retry <quarantine_id> --json
+inbot quarantine delete <quarantine_id> --json
+```
+
+Use the local owner connection with `--home <directory>` or `INBOT_HOME`; scoped agent keys and OAuth tokens cannot use these commands. List prints a table by default or the unchanged paginated REST response with `--json`. Retry JSON distinguishes `released` from another permanent `quarantined` result. Delete permanently removes ciphertext and metadata, is idempotent, and prints `null` with `--json`. Queue items contain metadata only and retry returns `not_supported` (exit 9). Missing/mismatched buffer configuration and pending deletion return `action_required` (exit 6); forbidden credentials exit 4. Cleanup may remain pending after provider/storage failure: inspect the list before retrying. No extra CLI confirmation is requested.
