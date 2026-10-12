@@ -6,7 +6,7 @@ import { ErrorNotice, LoadError } from "../feedback";
 import { quarantineQuery } from "../queries";
 
 function sentence(code: string) {
-  const text = code.replaceAll("_", " ");
+  const text = code.replaceAll("_", " ").replace(/\bmime\b/, "MIME");
   return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
@@ -77,7 +77,7 @@ export function Quarantine() {
       ) : query.data.items.length === 0 ? (
         <p className="mt-4 text-ink2">No quarantined items.</p>
       ) : (
-        <ul className="mt-4 divide-y divide-line border-y border-line">
+        <ul className="mt-4 divide-y divide-line border-t border-line">
           {query.data.items.map((item) => {
             const details = [
               item.source_kind === "buffer_object" ? "Encrypted buffer object" : "Queue message",
