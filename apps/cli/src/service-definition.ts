@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { join, posix, win32 } from "node:path";
+import { posix, win32 } from "node:path";
 import { CliError, usage } from "./errors.js";
 
 export type ServicePlatform = "darwin" | "linux" | "win32";
@@ -42,10 +42,10 @@ export function serviceIdentity(input: Pick<ServiceDefinition, "platform" | "hom
         : `Inbot${suffix}`;
   const unitPath =
     input.platform === "darwin"
-      ? join(input.userHome, "Library", "LaunchAgents", `${name}.plist`)
+      ? path.join(input.userHome, "Library", "LaunchAgents", `${name}.plist`)
       : input.platform === "linux"
-        ? join(input.userHome, ".config", "systemd", "user", name)
-        : join(input.userHome, "AppData", "Local", "Inbot", "services", `${name}.xml`);
+        ? path.join(input.userHome, ".config", "systemd", "user", name)
+        : path.join(input.userHome, "AppData", "Local", "Inbot", "services", `${name}.xml`);
   return { name, unitPath };
 }
 
