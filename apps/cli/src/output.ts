@@ -45,6 +45,7 @@ export function humanOutput(value: unknown): string {
   const collections: Record<string, readonly string[]> = {
     webhooks: ["webhook_id", "url", "enabled", "failure_count", "disabled_reason"],
     inboxes: ["inbox_id", "display_name", "status"],
+    domains: ["domain_id", "domain", "inbound_enabled"],
     threads: ["thread_id", "inbox_id", "subject", "labels"],
     messages: ["message_id", "inbox_id", "subject", "send_status", "send_reason", "labels"],
     drafts: ["draft_id", "inbox_id", "subject", "approval_state", "send_status"],

@@ -20,7 +20,12 @@ original offset and fractional precision. Message list items exclude bodies;
 batch-get returns full messages. Raw-message and attachment endpoints return
 download metadata, while domain zone files use `text/plain`. Deletions and
 domain verification return empty HTTP 200 responses; webhook header updates
-return HTTP 204.
+return HTTP 204. The CLI consumes the same declarations for mail searches,
+updates, batches, downloads, API key reads, every domain operation, and owner
+transport status/configure/clear. It follows capability downloads rather than
+interpreting metadata as bytes, and preserves zone-file text. Owner browser
+authentication and OAuth protocol/consent flows remain outside resource commands;
+CLI additions change no schemas, permissions, events, or REST paths.
 
 `Draft` and `DraftItem` add optional `pending_approval`, `created_by`,
 `approval_state`, and `rejection_reason` fields. They retain the `scheduled`, `sending`, and `failed` send statuses. Creating a draft

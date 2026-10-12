@@ -8,6 +8,7 @@ import { OAuthOwnerApi } from "../../../packages/contracts/src/api/oauth.js";
 import { ApiKeysApi } from "../../../packages/contracts/src/api/api-keys.js";
 import { RemoteApiGroup } from "../../../packages/contracts/src/api/remote.js";
 import { OwnerApiGroup } from "../../../packages/contracts/src/api/owner.js";
+import { DomainsApi } from "../../../packages/contracts/src/api/domains.js";
 import { ListsApi } from "../../../packages/contracts/src/api/lists.js";
 
 export type Endpoint = Pick<HttpApiEndpoint.Top, "path" | "method" | "payload" | "success">;
@@ -23,6 +24,9 @@ export interface Command {
   readonly idempotent?: boolean;
   readonly browser?: boolean;
   readonly secret?: boolean;
+  readonly download?: boolean;
+  readonly response?: "text";
+  readonly tokenInput?: boolean;
 }
 const pagination = { limit: "number", page_token: "string", ascending: "boolean" } as const;
 const cursor = { limit: "number", page_token: "string" } as const;
@@ -38,6 +42,27 @@ const mailQuery = {
   senders: "array",
   recipients: "array",
   subject: "array",
+} as const;
+const cursorSearch = { ...cursor, q: "string" } as const;
+const search = { ...cursor, q: "string", before: "string", after: "string" } as const;
+const messageQuery = {
+  ...pagination,
+  before: "string",
+  after: "string",
+  labels: "array",
+  include_spam: "boolean",
+  include_blocked: "boolean",
+  include_unauthenticated: "boolean",
+  include_trash: "boolean",
+  from: "array",
+  to: "array",
+  subject: "array",
+} as const;
+const domainOptions = {
+  feedback_enabled: "boolean",
+  inbound_enabled: "boolean",
+  subdomains_enabled: "boolean",
+  tracking_enabled: "boolean",
 } as const;
 const composition = {
   to: "array",
@@ -82,10 +107,24 @@ export const commands: readonly Command[] = [
     },
   },
   {
+    name: "inboxes search",
+    description: "Search accessible inboxes with --q.",
+    endpoint: InboxesApi.endpoints.inboxes_search,
+    query: cursorSearch,
+  },
+  {
     name: "inboxes get",
     description: "Get an inbox.",
     endpoint: InboxesApi.endpoints.inboxes_get,
     params: inbox,
+  },
+  {
+    name: "inboxes update",
+    description:
+      "Update display name, active/paused status, or metadata; use JSON to clear metadata.",
+    endpoint: InboxesApi.endpoints.inboxes_update,
+    params: inbox,
+    body: { display_name: "string", status: "string", metadata: "object" },
   },
   {
     name: "inboxes delete",
@@ -107,6 +146,50 @@ export const commands: readonly Command[] = [
     scopedEndpoint: ThreadsApi.endpoints.inboxes_threads_get,
     params: ["thread_id"],
     query: cursor,
+  },
+  {
+    name: "threads search",
+    description: "Search accessible threads with --q, optionally within --inbox.",
+    endpoint: ThreadsApi.endpoints.threads_search,
+    scopedEndpoint: ThreadsApi.endpoints.inboxes_threads_search,
+    query: search,
+  },
+  {
+    name: "threads update",
+    description: "Add or remove thread labels, optionally within --inbox.",
+    endpoint: ThreadsApi.endpoints.threads_update,
+    scopedEndpoint: ThreadsApi.endpoints.inboxes_threads_update,
+    params: ["thread_id"],
+    body: labels,
+  },
+  {
+    name: "threads delete",
+    description: "Delete a thread and its messages, optionally within --inbox.",
+    endpoint: ThreadsApi.endpoints.threads_delete,
+    scopedEndpoint: ThreadsApi.endpoints.inboxes_threads_delete,
+    params: ["thread_id"],
+  },
+  {
+    name: "threads attachment",
+    description: "Download a thread attachment; use -o <path> or redirected stdout.",
+    endpoint: ThreadsApi.endpoints.threads_getAttachment,
+    scopedEndpoint: ThreadsApi.endpoints.inboxes_threads_getAttachment,
+    params: ["thread_id", "attachment_id"],
+    download: true,
+  },
+  {
+    name: "messages list",
+    description: "List messages within an inbox, with pagination and mail filters.",
+    endpoint: MessagesApi.endpoints.inboxes_messages_list,
+    params: inbox,
+    query: messageQuery,
+  },
+  {
+    name: "messages search",
+    description: "Search inbox messages with --q.",
+    endpoint: MessagesApi.endpoints.inboxes_messages_search,
+    params: inbox,
+    query: search,
   },
   {
     name: "messages get",
@@ -155,6 +238,48 @@ export const commands: readonly Command[] = [
     body: { decision: "string" },
   },
   {
+    name: "messages delete",
+    description: "Delete a message.",
+    endpoint: MessagesApi.endpoints.inboxes_messages_delete,
+    params: message,
+  },
+  {
+    name: "messages batch-get",
+    description: "Read up to 500 unique message IDs.",
+    endpoint: MessagesApi.endpoints.inboxes_messages_batchGet,
+    params: inbox,
+    body: { message_ids: "array" },
+  },
+  {
+    name: "messages batch-update",
+    description: "Update labels on up to 50 unique message IDs.",
+    endpoint: MessagesApi.endpoints.inboxes_messages_batchUpdate,
+    params: inbox,
+    body: { message_ids: "array", ...labels },
+  },
+  {
+    name: "messages attachment",
+    description: "Download a message attachment; use -o <path> or redirected stdout.",
+    endpoint: MessagesApi.endpoints.inboxes_messages_getAttachment,
+    params: [...message, "attachment_id"],
+    download: true,
+  },
+  {
+    name: "messages raw",
+    description: "Download the original MIME message; use -o <path> or redirected stdout.",
+    endpoint: MessagesApi.endpoints.inboxes_messages_getRaw,
+    params: message,
+    download: true,
+  },
+  {
+    name: "messages reply-all",
+    description: "Reply to all original recipients with an idempotency key.",
+    endpoint: MessagesApi.endpoints.inboxes_messages_replyAll,
+    params: message,
+    body: { reply_to: "array", text: "string", html: "string", labels: "array" },
+    idempotent: true,
+  },
+  {
     name: "drafts list",
     description: "List drafts, optionally within --inbox.",
     endpoint: DraftsApi.endpoints.drafts_list,
@@ -181,6 +306,14 @@ export const commands: readonly Command[] = [
     endpoint: DraftsApi.endpoints.drafts_get,
     scopedEndpoint: DraftsApi.endpoints.inboxes_drafts_get,
     params: ["draft_id"],
+  },
+  {
+    name: "drafts attachment",
+    description: "Download a draft attachment, optionally within --inbox.",
+    endpoint: DraftsApi.endpoints.drafts_getAttachment,
+    scopedEndpoint: DraftsApi.endpoints.inboxes_drafts_getAttachment,
+    params: ["draft_id", "attachment_id"],
+    download: true,
   },
   {
     name: "drafts update",
@@ -232,7 +365,7 @@ export const commands: readonly Command[] = [
     description: "List API key metadata as owner.",
     endpoint: ApiKeysApi.endpoints.apiKeys_list,
     scopedEndpoint: ApiKeysApi.endpoints.inboxes_apiKeys_list,
-    query: cursor,
+    query: { ...pagination, type: "string" },
   },
   {
     name: "api-keys create",
@@ -248,6 +381,12 @@ export const commands: readonly Command[] = [
       send_policy: "string",
       expires_at: "string",
     },
+  },
+  {
+    name: "api-keys get",
+    description: "Read API key metadata as owner; never returns the secret.",
+    endpoint: ApiKeysApi.endpoints.apiKeys_get,
+    params: ["api_key_id"],
   },
   {
     name: "api-keys update",
@@ -368,6 +507,86 @@ export const commands: readonly Command[] = [
     scopedEndpoint: WebhooksApi.endpoints.inboxes_webhooks_updateHeaders,
     params: ["webhook_id"],
     body: { headers: "object", remove_headers: "array" },
+  },
+  {
+    name: "domains list",
+    description: "List domains as owner.",
+    endpoint: DomainsApi.endpoints.domains_list,
+    query: pagination,
+  },
+  {
+    name: "domains create",
+    description: "Register a domain as owner; apply its plan separately.",
+    endpoint: DomainsApi.endpoints.domains_create,
+    body: { domain: "string", allow_conflicting_provider: "boolean", ...domainOptions },
+  },
+  {
+    name: "domains get",
+    description: "Inspect domain state and DNS records as owner.",
+    endpoint: DomainsApi.endpoints.domains_get,
+    params: ["domain_id"],
+  },
+  {
+    name: "domains update",
+    description: "Update supported domain options as owner.",
+    endpoint: DomainsApi.endpoints.domains_update,
+    params: ["domain_id"],
+    body: domainOptions,
+  },
+  {
+    name: "domains delete",
+    description: "Delete a domain after teardown as owner.",
+    endpoint: DomainsApi.endpoints.domains_delete,
+    params: ["domain_id"],
+  },
+  {
+    name: "domains zone-file",
+    description: "Print domain DNS records as a text zone file.",
+    endpoint: DomainsApi.endpoints.domains_getZoneFile,
+    params: ["domain_id"],
+    response: "text",
+  },
+  {
+    name: "domains plan",
+    description: "Inspect the provisioning plan before applying it as owner.",
+    endpoint: DomainsApi.endpoints.domains_plan,
+    params: ["domain_id"],
+  },
+  {
+    name: "domains verify",
+    description: "Check domain DNS and provider verification as owner.",
+    endpoint: DomainsApi.endpoints.domains_verify,
+    params: ["domain_id"],
+  },
+  {
+    name: "domains apply",
+    description: "Provision the registered domain using its plan as owner.",
+    endpoint: DomainsApi.endpoints.domains_apply,
+    params: ["domain_id"],
+  },
+  {
+    name: "domains teardown",
+    description: "Remove recorded provider resources as owner.",
+    endpoint: DomainsApi.endpoints.domains_teardown,
+    params: ["domain_id"],
+  },
+  {
+    name: "transport status",
+    description: "Inspect transport and token verification metadata as local owner.",
+    endpoint: OwnerApiGroup.endpoints.owner_transport,
+  },
+  {
+    name: "transport configure",
+    description:
+      "Verify and save transport credentials from INBOT_CLOUDFLARE_API_TOKEN or --token-stdin.",
+    endpoint: OwnerApiGroup.endpoints.owner_setTransport,
+    body: { account_id: "string" },
+    tokenInput: true,
+  },
+  {
+    name: "transport clear",
+    description: "Clear transport credentials after tearing down provisioned resources as owner.",
+    endpoint: OwnerApiGroup.endpoints.owner_clearTransport,
   },
   {
     name: "oauth clients",

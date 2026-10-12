@@ -120,7 +120,7 @@ Use the same flavor and home as the server.
 Agents set both `INBOT_URL` (the HTTP(S) origin without `/v0`) and
 `INBOT_API_KEY`. This pair takes precedence over the owner connection, including
 when `--home` is present. An incomplete pair fails rather than falling back to
-owner credentials. Every request sends the selected bearer credential. Redirects
+owner credentials. REST requests send the selected bearer credential. Capability downloads use their short-lived URL without forwarding that credential. Redirects
 are refused; requests have a 30-second timeout.
 
 ```sh
@@ -149,43 +149,85 @@ are `--home <directory>`, `--flavor development|production`, and `--json`.
 Place the command first, or precede it with global options. Addresses and IDs are
 positional; quote IDs containing shell metacharacters.
 
-| Command                  | Arguments                                                       | REST operation                                |
-| ------------------------ | --------------------------------------------------------------- | --------------------------------------------- |
-| `serve`                  | Existing server flags                                           | Existing server entry point                   |
-| `service install`        | Optional `--port`, home and JSON flags                          | Local per-user service manager                |
-| `service uninstall`      | Home and JSON flags                                             | Local per-user service manager                |
-| `service status`         | Home and JSON flags                                             | Local manager and public owner status probe   |
-| `open`                   | Optional `--browser`                                            | POST `/v0/owner/login-links`                  |
-| `inboxes list`           | Pagination flags                                                | GET `/v0/inboxes`                             |
-| `inboxes create`         | Body flags or JSON                                              | POST `/v0/inboxes`                            |
-| `inboxes get`            | `<inbox_id>`                                                    | GET `/v0/inboxes/:inbox_id`                   |
-| `inboxes delete`         | `<inbox_id>`                                                    | DELETE `/v0/inboxes/:inbox_id`                |
-| `threads list`           | Optional `--inbox`, filters                                     | GET `/v0/threads` or inbox threads            |
-| `threads get`            | `<thread_id>`, optional `--inbox`                               | GET organization or inbox thread              |
-| `messages get`           | `<inbox_id> <message_id>`                                       | GET inbox message                             |
-| `messages resolve`       | `<inbox_id> <message_id> --decision sent or failed`             | POST inbox message/resolve (local owner)      |
-| `messages send`          | `<inbox_id>`, body                                              | POST inbox messages/send                      |
-| `messages reply`         | `<inbox_id> <message_id>`, body                                 | POST inbox message/reply                      |
-| `messages forward`       | `<inbox_id> <message_id>`, body                                 | POST inbox message/forward                    |
-| `messages update`        | `<inbox_id> <message_id>`, labels                               | PATCH inbox message                           |
-| `drafts list`            | Optional `--inbox`, filters                                     | GET `/v0/drafts` or inbox drafts              |
-| `drafts create`          | `<inbox_id>`, body                                              | POST inbox drafts                             |
-| `drafts get`             | `<draft_id>`, optional `--inbox`                                | GET organization or inbox draft               |
-| `drafts update`          | `<inbox_id> <draft_id>`, body                                   | PATCH inbox draft                             |
-| `drafts delete`          | `<inbox_id> <draft_id>`                                         | DELETE inbox draft                            |
-| `drafts send`            | `<inbox_id> <draft_id>`, labels                                 | POST inbox draft/send                         |
-| `drafts approve`         | `<inbox_id> <draft_id>`                                         | POST inbox draft/approve (owner)              |
-| `drafts reject`          | `<inbox_id> <draft_id>`, optional `--reason`                    | POST inbox draft/reject (owner)               |
-| `lists rejections`       | optional `--inbox-id`, cursor flags                             | GET owner rejection metadata (local owner)    |
-| `lists delete-rejection` | `<rejection_id>`                                                | DELETE owner rejection metadata (local owner) |
-| `lists list`             | `<direction> <type>`, optional `--inbox`, cursor flags          | GET global or inbox list                      |
-| `lists create`           | `<direction> <type>`, `--entry`, optional `--reason`, `--inbox` | POST global or inbox list                     |
-| `lists get`              | `<direction> <type> <entry>`, optional `--inbox`                | GET global or inbox list entry                |
-| `lists delete`           | `<direction> <type> <entry>`, optional `--inbox`                | DELETE global or inbox list entry             |
-| `api-keys list`          | Optional `--inbox`, cursor flags                                | GET organization or inbox API keys (owner)    |
-| `api-keys create`        | Optional `--inbox`, body                                        | POST organization or inbox API keys (owner)   |
-| `api-keys update`        | `<api_key_id>`, optional `--inbox`, body                        | PATCH organization or inbox API key (owner)   |
-| `api-keys revoke`        | `<api_key_id>`, optional `--inbox`                              | DELETE organization or inbox API key (owner)  |
+| Command                   | Arguments                                                                                                 | REST operation                                                                                                                   |
+| ------------------------- | --------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| `serve`                   | Existing server flags                                                                                     | Existing server entry point                                                                                                      |
+| `service install`         | Optional `--port`, home and JSON flags                                                                    | Local per-user service manager                                                                                                   |
+| `service uninstall`       | Home and JSON flags                                                                                       | Local per-user service manager                                                                                                   |
+| `service status`          | Home and JSON flags                                                                                       | Local manager and public owner status probe                                                                                      |
+| `open`                    | optional `--browser`                                                                                      | POST `/v0/owner/login-links`                                                                                                     |
+| `inboxes list`            | query flags                                                                                               | GET `/v0/inboxes`                                                                                                                |
+| `inboxes create`          | body flags or JSON                                                                                        | POST `/v0/inboxes`                                                                                                               |
+| `inboxes search`          | query flags                                                                                               | GET `/v0/inboxes/search`                                                                                                         |
+| `inboxes get`             | `<inbox_id>`                                                                                              | GET `/v0/inboxes/:inbox_id`                                                                                                      |
+| `inboxes update`          | `<inbox_id>`, body flags or JSON                                                                          | PATCH `/v0/inboxes/:inbox_id`                                                                                                    |
+| `inboxes delete`          | `<inbox_id>`                                                                                              | DELETE `/v0/inboxes/:inbox_id`                                                                                                   |
+| `threads list`            | optional `--inbox`, query flags                                                                           | GET `/v0/threads` or `/v0/inboxes/:inbox_id/threads`                                                                             |
+| `threads get`             | `<thread_id>`, optional `--inbox`, query flags                                                            | GET `/v0/threads/:thread_id` or `/v0/inboxes/:inbox_id/threads/:thread_id`                                                       |
+| `threads search`          | optional `--inbox`, query flags                                                                           | GET `/v0/threads/search` or `/v0/inboxes/:inbox_id/threads/search`                                                               |
+| `threads update`          | `<thread_id>`, optional `--inbox`, body flags or JSON                                                     | PATCH `/v0/threads/:thread_id` or `/v0/inboxes/:inbox_id/threads/:thread_id`                                                     |
+| `threads delete`          | `<thread_id>`, optional `--inbox`                                                                         | DELETE `/v0/threads/:thread_id` or `/v0/inboxes/:inbox_id/threads/:thread_id`                                                    |
+| `threads attachment`      | `<thread_id>`, `<attachment_id>`, optional `--inbox`, `-o <path>` or redirected stdout; `--json` metadata | GET `/v0/threads/:thread_id/attachments/:attachment_id` or `/v0/inboxes/:inbox_id/threads/:thread_id/attachments/:attachment_id` |
+| `messages list`           | `<inbox_id>`, query flags                                                                                 | GET `/v0/inboxes/:inbox_id/messages`                                                                                             |
+| `messages search`         | `<inbox_id>`, query flags                                                                                 | GET `/v0/inboxes/:inbox_id/messages/search`                                                                                      |
+| `messages get`            | `<inbox_id>`, `<message_id>`                                                                              | GET `/v0/inboxes/:inbox_id/messages/:message_id`                                                                                 |
+| `messages send`           | `<inbox_id>`, body flags or JSON                                                                          | POST `/v0/inboxes/:inbox_id/messages/send`                                                                                       |
+| `messages reply`          | `<inbox_id>`, `<message_id>`, body flags or JSON                                                          | POST `/v0/inboxes/:inbox_id/messages/:message_id/reply`                                                                          |
+| `messages forward`        | `<inbox_id>`, `<message_id>`, body flags or JSON                                                          | POST `/v0/inboxes/:inbox_id/messages/:message_id/forward`                                                                        |
+| `messages update`         | `<inbox_id>`, `<message_id>`, body flags or JSON                                                          | PATCH `/v0/inboxes/:inbox_id/messages/:message_id`                                                                               |
+| `messages resolve`        | `<inbox_id>`, `<message_id>`, body flags or JSON                                                          | POST `/v0/inboxes/:inbox_id/messages/:message_id/resolve`                                                                        |
+| `messages delete`         | `<inbox_id>`, `<message_id>`                                                                              | DELETE `/v0/inboxes/:inbox_id/messages/:message_id`                                                                              |
+| `messages batch-get`      | `<inbox_id>`, body flags or JSON                                                                          | POST `/v0/inboxes/:inbox_id/messages/batch-get`                                                                                  |
+| `messages batch-update`   | `<inbox_id>`, body flags or JSON                                                                          | POST `/v0/inboxes/:inbox_id/messages/batch-update`                                                                               |
+| `messages attachment`     | `<inbox_id>`, `<message_id>`, `<attachment_id>`, `-o <path>` or redirected stdout; `--json` metadata      | GET `/v0/inboxes/:inbox_id/messages/:message_id/attachments/:attachment_id`                                                      |
+| `messages raw`            | `<inbox_id>`, `<message_id>`, `-o <path>` or redirected stdout; `--json` metadata                         | GET `/v0/inboxes/:inbox_id/messages/:message_id/raw`                                                                             |
+| `messages reply-all`      | `<inbox_id>`, `<message_id>`, body flags or JSON                                                          | POST `/v0/inboxes/:inbox_id/messages/:message_id/reply-all`                                                                      |
+| `drafts list`             | optional `--inbox`, query flags                                                                           | GET `/v0/drafts` or `/v0/inboxes/:inbox_id/drafts`                                                                               |
+| `drafts create`           | `<inbox_id>`, body flags or JSON                                                                          | POST `/v0/inboxes/:inbox_id/drafts`                                                                                              |
+| `drafts get`              | `<draft_id>`, optional `--inbox`                                                                          | GET `/v0/drafts/:draft_id` or `/v0/inboxes/:inbox_id/drafts/:draft_id`                                                           |
+| `drafts attachment`       | `<draft_id>`, `<attachment_id>`, optional `--inbox`, `-o <path>` or redirected stdout; `--json` metadata  | GET `/v0/drafts/:draft_id/attachments/:attachment_id` or `/v0/inboxes/:inbox_id/drafts/:draft_id/attachments/:attachment_id`     |
+| `drafts update`           | `<inbox_id>`, `<draft_id>`, body flags or JSON                                                            | PATCH `/v0/inboxes/:inbox_id/drafts/:draft_id`                                                                                   |
+| `drafts delete`           | `<inbox_id>`, `<draft_id>`                                                                                | DELETE `/v0/inboxes/:inbox_id/drafts/:draft_id`                                                                                  |
+| `drafts send`             | `<inbox_id>`, `<draft_id>`, body flags or JSON                                                            | POST `/v0/inboxes/:inbox_id/drafts/:draft_id/send`                                                                               |
+| `drafts approve`          | `<inbox_id>`, `<draft_id>`                                                                                | POST `/v0/inboxes/:inbox_id/drafts/:draft_id/approve`                                                                            |
+| `drafts reject`           | `<inbox_id>`, `<draft_id>`, body flags or JSON                                                            | POST `/v0/inboxes/:inbox_id/drafts/:draft_id/reject`                                                                             |
+| `api-keys list`           | optional `--inbox`, query flags                                                                           | GET `/v0/api-keys` or `/v0/inboxes/:inbox_id/api-keys`                                                                           |
+| `api-keys create`         | optional `--inbox`, body flags or JSON                                                                    | POST `/v0/api-keys` or `/v0/inboxes/:inbox_id/api-keys`                                                                          |
+| `api-keys get`            | <api_key_id>                                                                                              | GET `/v0/api-keys/:api_key_id`                                                                                                   |
+| `api-keys update`         | <api_key_id>, optional `--inbox`, body flags or JSON                                                      | PATCH `/v0/api-keys/:api_key_id` or `/v0/inboxes/:inbox_id/api-keys/:api_key_id`                                                 |
+| `api-keys revoke`         | <api_key_id>, optional `--inbox`                                                                          | DELETE `/v0/api-keys/:api_key_id` or `/v0/inboxes/:inbox_id/api-keys/:api_key_id`                                                |
+| `lists list`              | `<direction>`, `<type>`, optional `--inbox`, query flags                                                  | GET `/v0/lists/:direction/:type` or `/v0/inboxes/:inbox_id/lists/:direction/:type`                                               |
+| `lists create`            | `<direction>`, `<type>`, optional `--inbox`, body flags or JSON                                           | POST `/v0/lists/:direction/:type` or `/v0/inboxes/:inbox_id/lists/:direction/:type`                                              |
+| `lists get`               | `<direction>`, `<type>`, `<entry>`, optional `--inbox`                                                    | GET `/v0/lists/:direction/:type/:entry` or `/v0/inboxes/:inbox_id/lists/:direction/:type/:entry`                                 |
+| `lists delete`            | `<direction>`, `<type>`, `<entry>`, optional `--inbox`                                                    | DELETE `/v0/lists/:direction/:type/:entry` or `/v0/inboxes/:inbox_id/lists/:direction/:type/:entry`                              |
+| `lists rejections`        | query flags                                                                                               | GET `/v0/owner/lists/rejections`                                                                                                 |
+| `lists delete-rejection`  | `<rejection_id>`                                                                                          | DELETE `/v0/owner/lists/rejections/:rejection_id`                                                                                |
+| `webhooks list`           | optional `--inbox`, query flags                                                                           | GET `/v0/webhooks` or `/v0/inboxes/:inbox_id/webhooks`                                                                           |
+| `webhooks create`         | optional `--inbox`, body flags or JSON                                                                    | POST `/v0/webhooks` or `/v0/inboxes/:inbox_id/webhooks`                                                                          |
+| `webhooks get`            | `<webhook_id>`, optional `--inbox`                                                                        | GET `/v0/webhooks/:webhook_id` or `/v0/inboxes/:inbox_id/webhooks/:webhook_id`                                                   |
+| `webhooks update`         | `<webhook_id>`, optional `--inbox`, body flags or JSON                                                    | PATCH `/v0/webhooks/:webhook_id` or `/v0/inboxes/:inbox_id/webhooks/:webhook_id`                                                 |
+| `webhooks delete`         | `<webhook_id>`, optional `--inbox`                                                                        | DELETE `/v0/webhooks/:webhook_id` or `/v0/inboxes/:inbox_id/webhooks/:webhook_id`                                                |
+| `webhooks headers`        | `<webhook_id>`, optional `--inbox`                                                                        | GET `/v0/webhooks/:webhook_id/headers` or `/v0/inboxes/:inbox_id/webhooks/:webhook_id/headers`                                   |
+| `webhooks update-headers` | `<webhook_id>`, optional `--inbox`, body flags or JSON                                                    | PATCH `/v0/webhooks/:webhook_id/headers` or `/v0/inboxes/:inbox_id/webhooks/:webhook_id/headers`                                 |
+| `domains list`            | query flags                                                                                               | GET `/v0/domains`                                                                                                                |
+| `domains create`          | body flags or JSON                                                                                        | POST `/v0/domains`                                                                                                               |
+| `domains get`             | `<domain_id>`                                                                                             | GET `/v0/domains/:domain_id`                                                                                                     |
+| `domains update`          | `<domain_id>`, body flags or JSON                                                                         | PATCH `/v0/domains/:domain_id`                                                                                                   |
+| `domains delete`          | `<domain_id>`                                                                                             | DELETE `/v0/domains/:domain_id`                                                                                                  |
+| `domains zone-file`       | `<domain_id>`                                                                                             | GET `/v0/domains/:domain_id/zone-file`                                                                                           |
+| `domains plan`            | `<domain_id>`                                                                                             | GET `/v0/domains/:domain_id/plan`                                                                                                |
+| `domains verify`          | `<domain_id>`                                                                                             | POST `/v0/domains/:domain_id/verify`                                                                                             |
+| `domains apply`           | `<domain_id>`                                                                                             | POST `/v0/domains/:domain_id/apply`                                                                                              |
+| `domains teardown`        | `<domain_id>`                                                                                             | POST `/v0/domains/:domain_id/teardown`                                                                                           |
+| `transport status`        | None                                                                                                      | GET `/v0/owner/transport`                                                                                                        |
+| `transport configure`     | token env/stdin, optional `--account-id`                                                                  | PUT `/v0/owner/transport`                                                                                                        |
+| `transport clear`         | None                                                                                                      | DELETE `/v0/owner/transport`                                                                                                     |
+| `oauth clients`           | None                                                                                                      | GET `/v0/owner/oauth/clients`                                                                                                    |
+| `oauth revoke`            | `<grant_id>`                                                                                              | DELETE `/v0/owner/oauth/grants/:grant_id`                                                                                        |
+| `oauth purge`             | None                                                                                                      | POST `/v0/owner/oauth/clients/purge`                                                                                             |
+| `remote status`           | None                                                                                                      | GET `/v0/owner/remote`                                                                                                           |
+| `remote enable`           | body flags or JSON                                                                                        | POST `/v0/owner/remote/enable`                                                                                                   |
+| `remote disable`          | None                                                                                                      | POST `/v0/owner/remote/disable`                                                                                                  |
 
 `open` prints a single-use login URL and never opens a browser unless
 `--browser` is present. Password setup must already be complete; links expire
@@ -196,11 +238,11 @@ Common payload fields have kebab-case flags: `--display-name`, `--to`, `--text`,
 `--to first@example.test --to second@example.test`. `--permissions` and
 `--metadata` accept JSON objects. See command help for all available flags.
 
-All body commands also accept `--data '<wire JSON>'` or `--data-file <path>`.
+Except for `transport configure`, body commands also accept `--data '<wire JSON>'` or `--data-file <path>`.
 Use `--data-file -` to read stdin. JSON uses the contract's snake_case fields and
 cannot be combined with body flags. It exposes the full existing payload,
 including attachments, headers, and null values for clearing draft fields.
-No email content is written to temporary files by the CLI.
+The CLI writes mail bytes only to an explicitly requested download path or redirected stdout; it creates no plaintext download cache.
 
 ```sh
 inbot messages send agent@example.test --to recipient@example.test \
@@ -261,9 +303,7 @@ without credentials or payload contents. Exit codes are stable:
 
 `pnpm exec vitest run apps/cli/src/cli.test.ts` runs against the real in-process
 HTTP server with a temporary encrypted home, memory keychain, fixed clock, and
-fake provider. No real mail, infrastructure, or owner home is used. Domains,
-transport setup, service installation, and additional REST
-operations are outside this CLI implementation. Resource commands add no
+fake provider. No real mail, infrastructure, or owner home is used. Service installation remains outside this CLI implementation. All declared REST resources are covered, except owner browser authentication/session/password routes. OAuth registration, token exchange, metadata, and consent are protocol/browser flows rather than resource commands. Quarantine commands belong to a separate change and no quarantine routes exist on this branch. Resource commands add no
 service behavior, permission, event, MCP tool, or remote route.
 
 ## Allow and block lists
@@ -336,7 +376,7 @@ Rejected mail metadata is available only with the local owner connection. List
 permissions do not authorize it. Records contain time, inbox, sender, and rules;
 legacy sender/rule metadata may be missing. Bodies and subjects are never returned.
 Deletion does not release mail and preserves the durable rejection decision.
-There is no transport configuration command; use Settings or the owner REST API.
+Configure transport with the local owner connection using the commands below.
 
 Update an existing key without rotating its secret:
 
@@ -351,3 +391,115 @@ Use `--inbox <inbox_id>` for the inbox route. Omitted fields stay unchanged;
 Inbox scope and expiry cannot be changed by this command.
 
 Startup failures from `serve` print `server.failed` JSON with the specific stable code and recovery fix for known key, keychain, home, and database errors. See [startup failures](../server/src/http/README.md#startup-failures).
+
+## Search, updates, batches, and downloads
+
+```sh
+inbot inboxes search --q researcher --limit 20 --json
+inbot inboxes update agent@example.test --display-name Research --status paused
+inbot inboxes update agent@example.test --status active --metadata '{"project":"synthetic"}'
+inbot inboxes update agent@example.test --data '{"metadata":{"project":null}}'
+inbot threads search --q project --inbox agent@example.test --json
+inbot threads update THREAD_ID --inbox agent@example.test --add-labels reviewed --remove-labels unread
+inbot threads delete THREAD_ID --inbox agent@example.test
+inbot messages list agent@example.test --from alice@example.test --to agent@example.test --subject project --json
+inbot messages search agent@example.test --q project --after 2026-10-10T00:00:00Z --json
+inbot messages batch-get agent@example.test --message-ids '<first@example.test>' --message-ids '<second@example.test>' --json
+inbot messages batch-update agent@example.test --message-ids '<first@example.test>' --remove-labels unread
+inbot messages delete agent@example.test '<first@example.test>'
+inbot messages reply-all agent@example.test '<first@example.test>' --text Received --idempotency-key reply-all-1
+inbot api-keys get KEY_ID --json
+inbot messages raw agent@example.test '<first@example.test>' -o message.eml
+inbot messages attachment agent@example.test '<first@example.test>' ATTACHMENT_ID --output file.bin
+inbot threads attachment THREAD_ID ATTACHMENT_ID --inbox agent@example.test > file.bin
+inbot drafts attachment DRAFT_ID ATTACHMENT_ID --inbox agent@example.test -o draft.bin
+```
+
+Inbox search accepts `--q`, `--limit` (1-100), and `--page-token`. Mail searches
+add `--before` and `--after`. Message lists use repeatable `--from`, `--to`,
+and `--subject`; thread lists use `--senders`, `--recipients`, and `--subject`.
+Both list forms retain pagination, labels, time, and hidden-mail filters.
+Batch-get accepts at most 500 unique `--message-ids`; batch-update accepts at
+most 50. Neither batch command is a send or needs a send idempotency key.
+Global `api-keys list` additionally accepts `--ascending` and `--type bearer`;
+these two options do not apply to its inbox route.
+
+Inbox status is `active` or `paused`. Metadata updates merge keys; null values
+remove keys and `metadata: null` clears all metadata. Use JSON for nulls.
+Thread label edits affect its messages. Thread deletion removes its messages;
+message and thread deletion have no restore command. The service continues to
+enforce `inbox_update`, `message_read/update/delete`, or `draft_read` and inbox
+scope. API key reads remain owner-only and never reveal the key secret.
+
+Raw and attachment commands obtain the shared download metadata, then fetch the
+five-minute capability URL from the same Inbot origin, without bearer headers
+or redirects. `-o` / `--output` creates a new file with mode 0600 and refuses to
+overwrite any existing path. Without an output path, or with `-o -`, the CLI
+writes bytes to redirected stdout. A TTY is rejected with `validation_error`
+(exit 2). `--json` prints only download metadata, including the sensitive
+capability URL; it cannot be combined with `--output`. File creation failures
+return exit 1 without replacing an existing file. Download errors retain the
+usual REST exit mapping. No default attachment filename is trusted or used.
+
+## Domains and mail transport (local owner)
+
+```sh
+inbot transport status --json
+# Read a token privately from stdin, for example from a password manager:
+inbot transport configure --account-id ACCOUNT_ID --token-stdin --json
+# Or supply INBOT_CLOUDFLARE_API_TOKEN through a trusted environment/secret manager:
+inbot transport configure --account-id ACCOUNT_ID --json
+inbot domains list --json
+inbot domains create --domain agents.example.test --json
+inbot domains get DOMAIN_ID --json
+inbot domains update DOMAIN_ID --inbound-enabled --no-tracking-enabled
+inbot domains plan DOMAIN_ID --json
+inbot domains zone-file DOMAIN_ID > domain.zone
+inbot domains apply DOMAIN_ID --json
+inbot domains verify DOMAIN_ID
+inbot domains get DOMAIN_ID --json
+inbot domains teardown DOMAIN_ID --json
+inbot domains delete DOMAIN_ID
+inbot transport clear
+```
+
+`transport configure` accepts `--account-id` and exactly one token source:
+`INBOT_CLOUDFLARE_API_TOKEN` or `--token-stdin` (raw token, trailing newline
+allowed). It rejects `--api-token`, `--data`, and `--data-file` so tokens cannot
+be passed as command arguments. Never paste a token into a shell command or
+history. The REST body remains `{ api_token, account_id? }`. Without an account
+ID the service selects a single accessible account; multiple accounts require
+an explicit choice through `action_required` (exit 6). Configuration verifies
+the candidate token before saving encrypted credentials. There is no separate
+transport verify endpoint or command. Status never returns the token; a failed
+verification preserves the previous configuration. Clear removes credentials
+and verification metadata only after recorded infrastructure is torn down.
+
+Domain create registers the literal subdomain without cloud mutations. Plan
+inspects provider requirements; apply provisions resources, and teardown
+removes recorded owned resources. Verify returns an empty 200, not the verified
+domain: run get afterward to observe `VERIFYING`, `VERIFIED`, or action-required
+state. Zone-file preserves the REST `text/plain` response, including newlines;
+`--json` returns that text as a JSON string. Domain options use the shared
+payload; unsupported tracking, feedback, wildcard subdomains, inbound disabling,
+and conflicting-provider overrides are rejected by the existing service.
+These commands neither widen permissions nor add remote management routes.
+
+## REST parity audit
+
+The initial comparison found 42 endpoint declarations without direct command
+mapping. This change covers 34 through 29 new commands (global/inbox variants
+share commands): inbox search/update; thread search/update/delete/attachment;
+message list/search/delete/batch-get/batch-update/attachment/raw/reply-all;
+draft attachment; API key get; all ten domain routes; all three transport routes.
+The command table above gives their exact HTTP methods and paths.
+
+The remaining eight declared endpoints are deliberately browser-only:
+`GET /v0/owner/status`, `POST /v0/owner/setup`, `POST /v0/owner/login`,
+`POST /v0/owner/login-links/redeem`, `POST /v0/owner/logout`,
+`GET /v0/owner/sessions`, `DELETE /v0/owner/sessions/:id`, and
+`POST /v0/owner/password`. Existing `open` still creates a single-use login link.
+OAuth protocol/consent internals and quarantine are intentionally outside this
+work. The HTTP capability download route is consumed by attachment/raw commands;
+`/v0/ws` is covered by `events --follow`. There is no CLI-reference generator in
+this branch; help derives from the command table.

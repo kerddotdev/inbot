@@ -1,8 +1,8 @@
-import { mkdtemp, rm, readFile, writeFile } from "node:fs/promises";
+import { mkdtemp, rm, readFile, writeFile, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Schema } from "effect";
-import { expect, test as base } from "vitest";
+import { expect, test as base, vi } from "vitest";
 import { makeLists } from "../../server/src/lists/lists.js";
 import { makeOAuth } from "../../server/src/oauth/service.js";
 import {
@@ -14,8 +14,32 @@ import { Event } from "../../../packages/contracts/src/events.js";
 import { Webhook, ListWebhooksResponse } from "../../../packages/contracts/src/webhooks.js";
 import { readEvents } from "../../server/src/events/log.js";
 import { Draft } from "../../../packages/contracts/src/drafts.js";
-import { ListInboxesResponse, Inbox } from "../../../packages/contracts/src/inboxes.js";
-import { Message, SendMessageResponse } from "../../../packages/contracts/src/messages.js";
+import {
+  ListInboxesResponse,
+  Inbox,
+  SearchInboxesResponse,
+} from "../../../packages/contracts/src/inboxes.js";
+import {
+  Domain,
+  ListDomainsResponse,
+  ProvisionPlan,
+} from "../../../packages/contracts/src/domains.js";
+import {
+  ListThreadsResponse,
+  SearchThreadsResponse,
+  UpdateThreadResponse,
+} from "../../../packages/contracts/src/threads.js";
+import { OwnerTransportStatus } from "../../../packages/contracts/src/owner.js";
+import { RawMessageResponse } from "../../../packages/contracts/src/messages.js";
+import { download } from "./downloads.js";
+import {
+  Message,
+  SendMessageResponse,
+  ListMessagesResponse,
+  SearchMessagesResponse,
+  BatchGetMessagesResponse,
+  BatchUpdateMessagesResponse,
+} from "../../../packages/contracts/src/messages.js";
 import { ApiKey, CreateApiKeyResponse } from "../../../packages/contracts/src/api-keys.js";
 import { fixture } from "../../server/src/http/test-fixture.js";
 import { runCli, type CliIO } from "./cli.js";
@@ -67,6 +91,644 @@ const payload = {
   subject: "Synthetic CLI message",
   text: "Synthetic content",
 };
+
+test("searches inboxes and updates status and metadata without widening agent permissions", async ({
+  api,
+}) => {
+  const search = await invoke(api, ["inboxes", "search", "--q", "agent", "--limit", "1", "--json"]);
+  expect(search.code).toBe(0);
+  expect(
+    Schema.decodeUnknownSync(SearchInboxesResponse)(JSON.parse(search.stdout)).inboxes.map(
+      (row) => row.inbox_id,
+    ),
+  ).toEqual([inboxId]);
+  const updated = await invoke(api, [
+    "inboxes",
+    "update",
+    inboxId,
+    "--display-name",
+    "Research",
+    "--status",
+    "paused",
+    "--metadata",
+    '{"project":"synthetic","keep":true}',
+    "--json",
+  ]);
+  expect(updated.code).toBe(0);
+  expect(Schema.decodeUnknownSync(Inbox)(JSON.parse(updated.stdout))).toMatchObject({
+    display_name: "Research",
+    status: "paused",
+    metadata: { project: "synthetic", keep: true },
+  });
+  const merged = await invoke(api, [
+    "inboxes",
+    "update",
+    inboxId,
+    "--data",
+    '{"status":"active","metadata":{"project":null}}',
+    "--json",
+  ]);
+  expect(Schema.decodeUnknownSync(Inbox)(JSON.parse(merged.stdout))).toMatchObject({
+    status: "active",
+    metadata: { keep: true },
+  });
+  expect(
+    (await invoke(api, ["inboxes", "update", inboxId, "--data", '{"metadata":null}'])).code,
+  ).toBe(0);
+  const key = await agent(api);
+  expect(
+    (
+      await invoke(api, ["inboxes", "update", inboxId, "--status", "paused"], {
+        env: agentEnv(api, key.api_key),
+      })
+    ).code,
+  ).toBe(4);
+  for (const args of [
+    ["inboxes", "update", inboxId],
+    ["inboxes", "update", inboxId, "--status", "invalid"],
+    ["inboxes", "search", "--q", "agent", "--limit", "101"],
+  ]) {
+    expect((await invoke(api, args)).code).toBe(2);
+  }
+});
+
+test("searches global and scoped threads, edits labels, and deletes their messages", async ({
+  api,
+}) => {
+  const key = await agent(api);
+  const env = agentEnv(api, key.api_key);
+  for (const scope of [[], ["--inbox", inboxId]]) {
+    const result = await invoke(api, ["threads", "search", "--q", "project", ...scope, "--json"], {
+      env,
+    });
+    expect(result.code).toBe(0);
+    expect(
+      Schema.decodeUnknownSync(SearchThreadsResponse)(JSON.parse(result.stdout)).threads.map(
+        (row) => row.thread_id,
+      ),
+    ).toEqual([api.threadId]);
+    const edit = await invoke(
+      api,
+      ["threads", "update", api.threadId, ...scope, "--add-labels", "reviewed", "--json"],
+      { env },
+    );
+    expect(edit.code).toBe(0);
+    expect(
+      Schema.decodeUnknownSync(UpdateThreadResponse)(JSON.parse(edit.stdout)).labels,
+    ).toContain("reviewed");
+    expect((await invoke(api, ["threads", "delete", api.threadId, ...scope], { env })).code).toBe(
+      4,
+    );
+  }
+  expect(
+    (
+      await invoke(
+        api,
+        [
+          "threads",
+          "update",
+          api.threadId,
+          "--inbox",
+          "other@example.test",
+          "--remove-labels",
+          "reviewed",
+        ],
+        { env },
+      )
+    ).code,
+  ).toBe(5);
+  expect((await invoke(api, ["threads", "delete", api.threadId, "--inbox", inboxId])).code).toBe(0);
+  expect((await invoke(api, ["messages", "get", inboxId, parentId])).code).toBe(5);
+  const second = await api.run(
+    api.mailbox.insertMessage({
+      inbox_id: inboxId,
+      message_id: "<second@example.test>",
+      direction: "received",
+      from: "sender@example.test",
+      to: [inboxId],
+      timestamp: "2026-10-10T11:00:00Z",
+      raw: Buffer.from("Synthetic"),
+    }),
+  );
+  expect((await invoke(api, ["threads", "delete", second.thread_id])).code).toBe(0);
+  const remaining = await invoke(api, ["threads", "list", "--json"]);
+  expect(Schema.decodeUnknownSync(ListThreadsResponse)(JSON.parse(remaining.stdout)).count).toBe(0);
+});
+
+test("lists and searches messages, maps repeated filters, and applies batches and deletion", async ({
+  api,
+}) => {
+  const key = await agent(api);
+  const env = agentEnv(api, key.api_key);
+  const listed = await invoke(
+    api,
+    [
+      "messages",
+      "list",
+      inboxId,
+      "--from",
+      "alice@example.test",
+      "--to",
+      inboxId,
+      "--subject",
+      "project",
+      "--ascending",
+      "--limit",
+      "1",
+      "--json",
+    ],
+    { env },
+  );
+  expect(listed.code).toBe(0);
+  expect(
+    Schema.decodeUnknownSync(ListMessagesResponse)(JSON.parse(listed.stdout)).messages.map(
+      (row) => row.message_id,
+    ),
+  ).toEqual([parentId]);
+  const searched = await invoke(
+    api,
+    [
+      "messages",
+      "search",
+      inboxId,
+      "--q",
+      "searchable",
+      "--after",
+      "2026-10-10T00:00:00Z",
+      "--json",
+    ],
+    { env },
+  );
+  expect(searched.code).toBe(0);
+  expect(Schema.decodeUnknownSync(SearchMessagesResponse)(JSON.parse(searched.stdout)).count).toBe(
+    1,
+  );
+  expect((await invoke(api, ["messages", "search", inboxId])).code).toBe(2);
+  const batch = await invoke(
+    api,
+    ["messages", "batch-get", inboxId, "--message-ids", parentId, "--json"],
+    { env },
+  );
+  expect(batch.code).toBe(0);
+  expect(
+    Schema.decodeUnknownSync(BatchGetMessagesResponse)(JSON.parse(batch.stdout)).messages[0]?.text,
+  ).toContain("searchable");
+  expect(
+    (
+      await invoke(
+        api,
+        ["messages", "batch-get", inboxId, "--message-ids", parentId, "--message-ids", parentId],
+        { env },
+      )
+    ).code,
+  ).toBe(2);
+  const edits = await invoke(
+    api,
+    [
+      "messages",
+      "batch-update",
+      inboxId,
+      "--message-ids",
+      parentId,
+      "--add-labels",
+      "reviewed",
+      "--remove-labels",
+      "unread",
+      "--json",
+    ],
+    { env },
+  );
+  expect(edits.code).toBe(0);
+  const labels = Schema.decodeUnknownSync(BatchUpdateMessagesResponse)(JSON.parse(edits.stdout))
+    .updates[0]?.labels;
+  expect(labels).toContain("reviewed");
+  expect(labels).not.toContain("unread");
+  expect((await invoke(api, ["messages", "list", "other@example.test"], { env })).code).toBe(5);
+  expect((await invoke(api, ["messages", "delete", inboxId, parentId], { env })).code).toBe(4);
+  expect((await invoke(api, ["messages", "delete", inboxId, parentId])).code).toBe(0);
+  expect((await invoke(api, ["messages", "get", inboxId, parentId])).code).toBe(5);
+});
+
+test("calls reply-all with shared validation and reuses its idempotency key", async ({ api }) => {
+  await api.run(api.transport.set({ account_id: "fake", api_token: "fake" }));
+  const key = await agent(api);
+  const args = [
+    "messages",
+    "reply-all",
+    inboxId,
+    parentId,
+    "--text",
+    "Synthetic reply",
+    "--idempotency-key",
+    "reply-all-1",
+    "--json",
+  ];
+  const first = await invoke(api, args, { env: agentEnv(api, key.api_key) });
+  expect(first.code).toBe(0);
+  expect(
+    Schema.decodeUnknownSync(SendMessageResponse)(JSON.parse(first.stdout)).message_id,
+  ).toBeTruthy();
+  expect(first.stderr).toBe("Idempotency-Key: reply-all-1\n");
+  expect((await invoke(api, args, { env: agentEnv(api, key.api_key) })).stdout).toBe(first.stdout);
+  expect(
+    (
+      await invoke(api, [
+        "messages",
+        "reply-all",
+        inboxId,
+        parentId,
+        "--data",
+        '{"to":["unexpected@example.test"]}',
+      ])
+    ).code,
+  ).toBe(2);
+});
+
+test("gets API key metadata without its secret and preserves owner and not-found errors", async ({
+  api,
+}) => {
+  const key = await agent(api);
+  const result = await invoke(api, ["api-keys", "get", key.api_key_id, "--json"]);
+  expect(result.code).toBe(0);
+  expect(Schema.decodeUnknownSync(ApiKey)(JSON.parse(result.stdout)).api_key_id).toBe(
+    key.api_key_id,
+  );
+  expect(result.stdout + result.stderr).not.toContain(key.api_key);
+  expect(
+    (await invoke(api, ["api-keys", "get", key.api_key_id], { env: agentEnv(api, key.api_key) }))
+      .code,
+  ).toBe(4);
+  expect((await invoke(api, ["api-keys", "get", "missing"])).code).toBe(5);
+  expect((await invoke(api, ["api-keys", "list", "--type", "bearer", "--ascending"])).code).toBe(0);
+});
+
+test("downloads raw bytes to private files or binary stdout and keeps metadata in JSON mode", async ({
+  api,
+}) => {
+  const output = join(api.home, "raw.eml");
+  const args = ["messages", "raw", inboxId, parentId];
+  const file = await invoke(api, [...args, "-o", output], { stdoutIsTTY: true });
+  expect(file.code).toBe(0);
+  expect(file.stdout).toBe("");
+  expect(await readFile(output)).toEqual(api.raw);
+  expect((await stat(output)).mode & 0o777).toBe(0o600);
+  const existing = await invoke(api, [...args, "-o", output]);
+  expect(existing.code).toBe(1);
+  expect(existing.stderr).toContain("never overwritten");
+  expect(await readFile(output)).toEqual(api.raw);
+  for (const suffix of [[], ["-o", "-"]]) {
+    const chunks: Uint8Array[] = [];
+    const redirected = await invoke(api, [...args, ...suffix], {
+      stdoutIsTTY: false,
+      stdoutBinary: async (bytes) => {
+        chunks.push(bytes);
+      },
+    });
+    expect(redirected.code).toBe(0);
+    expect(redirected.stdout).toBe("");
+    expect(Buffer.concat(chunks)).toEqual(api.raw);
+    expect(
+      (
+        await invoke(api, [...args, ...suffix], {
+          stdoutIsTTY: true,
+          stdoutBinary: async () => {
+            throw new Error("Must not write");
+          },
+        })
+      ).code,
+    ).toBe(2);
+  }
+  const metadata = await invoke(api, [...args, "--json"], { stdoutIsTTY: true });
+  expect(metadata.code).toBe(0);
+  expect(Schema.decodeUnknownSync(RawMessageResponse)(JSON.parse(metadata.stdout)).size).toBe(
+    api.raw.length,
+  );
+  expect((await invoke(api, [...args, "--json", "-o", output])).code).toBe(2);
+  expect(
+    (
+      await invoke(api, [
+        "messages",
+        "raw",
+        inboxId,
+        "missing",
+        "-o",
+        join(api.home, "missing.eml"),
+      ])
+    ).code,
+  ).toBe(5);
+});
+
+test("downloads message, thread, and draft attachments through scoped and global routes", async ({
+  api,
+}) => {
+  const bytes = Buffer.from([0, 255, 128, 13, 10, 65]);
+  const stored = await api.run(
+    api.mailbox.insertMessage({
+      inbox_id: inboxId,
+      message_id: "<binary@example.test>",
+      direction: "received",
+      from: "sender@example.test",
+      to: [inboxId],
+      timestamp: "2026-10-10T11:00:00Z",
+      raw: Buffer.from("Synthetic MIME"),
+      attachments: [{ attachment_id: "binary-file", filename: "sample.bin", content: bytes }],
+    }),
+  );
+  const created = await invoke(api, [
+    "drafts",
+    "create",
+    inboxId,
+    "--data",
+    JSON.stringify({ attachments: [{ filename: "draft.bin", content: bytes.toString("base64") }] }),
+    "--json",
+  ]);
+  expect(created.code).toBe(0);
+  const draft = Schema.decodeUnknownSync(Draft)(JSON.parse(created.stdout));
+  const attachmentId = draft.attachments?.[0]?.attachment_id;
+  if (attachmentId === undefined) throw new Error("Missing attachment");
+  const key = await agent(api);
+  const env = agentEnv(api, key.api_key);
+  const commands = [
+    ["messages", "attachment", inboxId, "<binary@example.test>", "binary-file"],
+    ["threads", "attachment", stored.thread_id, "binary-file"],
+    ["threads", "attachment", stored.thread_id, "binary-file", "--inbox", inboxId],
+    ["drafts", "attachment", draft.draft_id, attachmentId],
+    ["drafts", "attachment", draft.draft_id, attachmentId, "--inbox", inboxId],
+  ];
+  for (const args of commands) {
+    const chunks: Uint8Array[] = [];
+    const result = await invoke(api, args, {
+      env,
+      stdoutIsTTY: false,
+      stdoutBinary: async (bytes) => {
+        chunks.push(bytes);
+      },
+    });
+    expect(result.code, result.stderr).toBe(0);
+    expect(Buffer.concat(chunks)).toEqual(bytes);
+    expect(result.stdout + result.stderr).not.toContain(key.api_key);
+  }
+  expect(
+    (
+      await invoke(
+        api,
+        [
+          "threads",
+          "attachment",
+          stored.thread_id,
+          "binary-file",
+          "--inbox",
+          "other@example.test",
+          "--json",
+        ],
+        { env },
+      )
+    ).code,
+  ).toBe(5);
+  await api.run(api.keys.update(key.api_key_id, { permissions: { inbox_read: true } }));
+  expect(
+    (
+      await invoke(
+        api,
+        ["messages", "attachment", inboxId, "<binary@example.test>", "binary-file", "--json"],
+        {
+          env,
+        },
+      )
+    ).code,
+  ).toBe(4);
+});
+
+base(
+  "refuses foreign capability URLs and maps download failures without writing bytes",
+  async () => {
+    const origin = "http://127.0.0.1:43123";
+    const fetcher = vi.spyOn(globalThis, "fetch");
+    let written = false;
+    const io: CliIO = {
+      env: {},
+      stdout: () => {},
+      stderr: () => {},
+      stdoutBinary: async () => {
+        written = true;
+      },
+    };
+    try {
+      for (const url of [
+        "https://foreign.example/v0/downloads/a.b",
+        `${origin}/other`,
+        `${origin}/v0/downloads/a.b?token=secret`,
+      ]) {
+        await expect(
+          download(origin, { download_url: url, size: 1 }, undefined, io),
+        ).rejects.toMatchObject({ exitCode: 10 });
+      }
+      expect(fetcher).not.toHaveBeenCalled();
+      fetcher.mockResolvedValue(
+        Response.json(
+          {
+            name: "InbotError",
+            code: "unauthorized",
+            message: "Issuer revoked.",
+            fix: "Request a fresh URL.",
+          },
+          { status: 401 },
+        ),
+      );
+      await expect(
+        download(origin, { download_url: `${origin}/v0/downloads/a.b`, size: 1 }, undefined, io),
+      ).rejects.toMatchObject({ exitCode: 3 });
+      expect(fetcher.mock.calls[0]?.[1]).toMatchObject({ redirect: "error" });
+      expect(fetcher.mock.calls[0]?.[1]).not.toHaveProperty("headers");
+      fetcher.mockResolvedValue(new Response(new Uint8Array([1, 2])));
+      await expect(
+        download(origin, { download_url: `${origin}/v0/downloads/a.b`, size: 1 }, undefined, io),
+      ).rejects.toMatchObject({ exitCode: 10 });
+      expect(written).toBe(false);
+    } finally {
+      fetcher.mockRestore();
+    }
+  },
+);
+
+test("configures verified transport from env or stdin, hides secrets, and clears it", async ({
+  api,
+}) => {
+  const accountId = "a".repeat(32);
+  const token = "synthetic-cloud-token";
+  const status = await invoke(api, ["transport", "status", "--json"]);
+  expect(
+    Schema.decodeUnknownSync(OwnerTransportStatus)(JSON.parse(status.stdout)).verification_status,
+  ).toBe("not_configured");
+  const configured = await invoke(
+    api,
+    ["transport", "configure", "--account-id", accountId, "--json"],
+    { env: { INBOT_HOME: api.home, INBOT_CLOUDFLARE_API_TOKEN: token } },
+  );
+  expect(configured.code).toBe(0);
+  expect(
+    Schema.decodeUnknownSync(OwnerTransportStatus)(JSON.parse(configured.stdout)),
+  ).toMatchObject({ account_id: accountId, token_set: true, verification_status: "verified" });
+  const stdin = await invoke(
+    api,
+    ["transport", "configure", "--account-id", accountId, "--token-stdin", "--json"],
+    { readStdin: async () => `${token}\r\n` },
+  );
+  expect(stdin.code).toBe(0);
+  expect(configured.stdout + configured.stderr + stdin.stdout + stdin.stderr).not.toContain(token);
+  for (const args of [
+    ["transport", "configure", "--api-token", token],
+    [
+      "transport",
+      "configure",
+      "--data",
+      JSON.stringify({ account_id: accountId, api_token: token }),
+    ],
+    ["transport", "configure"],
+  ]) {
+    const result = await invoke(api, args);
+    expect(result.code).toBe(2);
+    expect(result.stderr).not.toContain(token);
+  }
+  const ambiguous = await invoke(api, ["transport", "configure", "--token-stdin"], {
+    env: { INBOT_HOME: api.home, INBOT_CLOUDFLARE_API_TOKEN: token },
+    readStdin: async () => {
+      throw new Error("Must not read");
+    },
+  });
+  expect(ambiguous.code).toBe(2);
+  const invalid = await invoke(api, ["transport", "configure", "--account-id", "invalid"], {
+    env: { INBOT_HOME: api.home, INBOT_CLOUDFLARE_API_TOKEN: token },
+  });
+  expect(invalid.code).toBe(2);
+  expect(invalid.stderr).not.toContain(token);
+  const key = await agent(api);
+  for (const args of [
+    ["transport", "status"],
+    ["transport", "clear"],
+    ["transport", "configure", "--account-id", accountId],
+  ]) {
+    const forbidden = await invoke(api, args, {
+      env: { ...agentEnv(api, key.api_key), INBOT_CLOUDFLARE_API_TOKEN: token },
+    });
+    expect(forbidden.code).toBe(4);
+    expect(forbidden.stdout + forbidden.stderr).not.toContain(token);
+  }
+  expect((await invoke(api, ["transport", "clear"])).code).toBe(0);
+  const cleared = await invoke(api, ["transport", "status", "--json"]);
+  expect(Schema.decodeUnknownSync(OwnerTransportStatus)(JSON.parse(cleared.stdout)).token_set).toBe(
+    false,
+  );
+});
+
+base(
+  "preserves the transport verification error and never echoes the candidate token",
+  async () => {
+    const home = await mkdtemp(join(tmpdir(), "inbot-cli-transport-failure-"));
+    const api = await fixture(home, {
+      transportFetch: async () => Response.json({ success: false }, { status: 403 }),
+    });
+    try {
+      const token = "synthetic-rejected-cloud-token";
+      const result = await invoke(api, ["transport", "configure", "--account-id", "a".repeat(32)], {
+        env: { INBOT_HOME: home, INBOT_CLOUDFLARE_API_TOKEN: token },
+      });
+      expect(result.code).toBe(4);
+      expect(JSON.parse(result.stderr)).toMatchObject({
+        code: "missing_permission",
+        fix: expect.any(String),
+      });
+      expect(result.stdout + result.stderr).not.toContain(token);
+      const inspected = await invoke(api, ["transport", "status", "--json"]);
+      expect(
+        Schema.decodeUnknownSync(OwnerTransportStatus)(JSON.parse(inspected.stdout)).token_set,
+      ).toBe(false);
+    } finally {
+      await api.close();
+      await rm(home, { recursive: true, force: true });
+    }
+  },
+);
+
+test("uses the complete owner domain lifecycle and preserves DNS text and real states", async ({
+  api,
+}) => {
+  await api.run(api.transport.set({ account_id: "fake-account", api_token: "synthetic" }));
+  const registered = await invoke(api, [
+    "domains",
+    "create",
+    "--domain",
+    "agents.example.test",
+    "--inbound-enabled",
+    "--no-tracking-enabled",
+    "--json",
+  ]);
+  expect(registered.code, registered.stderr).toBe(0);
+  const domain = Schema.decodeUnknownSync(Domain)(JSON.parse(registered.stdout));
+  expect(domain.status).toBe("NOT_STARTED");
+  const id = domain.domain_id;
+  const listed = await invoke(api, ["domains", "list", "--limit", "1", "--ascending", "--json"]);
+  expect(
+    Schema.decodeUnknownSync(ListDomainsResponse)(JSON.parse(listed.stdout)).domains.map(
+      (row) => row.domain_id,
+    ),
+  ).toEqual([id]);
+  expect((await invoke(api, ["domains", "list"])).stdout).toContain("DOMAIN_ID");
+  const beforePlan = api.cloud.mutations.length;
+  const plan = await invoke(api, ["domains", "plan", id, "--json"]);
+  expect(plan.code).toBe(0);
+  expect(
+    Schema.decodeUnknownSync(ProvisionPlan)(JSON.parse(plan.stdout)).steps.length,
+  ).toBeGreaterThan(0);
+  expect(api.cloud.mutations.length).toBe(beforePlan);
+  const zone = await invoke(api, ["domains", "zone-file", id]);
+  expect(zone.code).toBe(0);
+  expect(zone.stdout).toBe(await (await api.request(`/v0/domains/${id}/zone-file`)).text());
+  expect(zone.stdout).toContain("\n");
+  const jsonZone = await invoke(api, ["domains", "zone-file", id, "--json"]);
+  expect(JSON.parse(jsonZone.stdout)).toBe(zone.stdout);
+  const updated = await invoke(api, [
+    "domains",
+    "update",
+    id,
+    "--inbound-enabled",
+    "--no-feedback-enabled",
+    "--json",
+  ]);
+  expect(updated.code).toBe(0);
+  expect((await invoke(api, ["domains", "update", id, "--tracking-enabled"])).code).toBe(2);
+  const key = await agent(api);
+  const env = agentEnv(api, key.api_key);
+  for (const args of [
+    ["domains", "list"],
+    ["domains", "get", id],
+    ["domains", "plan", id],
+    ["domains", "zone-file", id],
+    ["domains", "create", "--domain", "other.example.test"],
+    ["domains", "update", id, "--inbound-enabled"],
+    ["domains", "apply", id],
+    ["domains", "verify", id],
+    ["domains", "teardown", id],
+    ["domains", "delete", id],
+  ]) {
+    expect((await invoke(api, args, { env })).code).toBe(4);
+  }
+  const applied = await invoke(api, ["domains", "apply", id, "--json"]);
+  expect(applied.code, applied.stderr).toBe(0);
+  expect(Schema.decodeUnknownSync(Domain)(JSON.parse(applied.stdout)).status).toBe("VERIFYING");
+  const conflict = await invoke(api, ["transport", "clear"]);
+  expect(conflict.code).toBe(6);
+  expect(conflict.stderr).toContain("action_required");
+  expect((await invoke(api, ["domains", "verify", id, "--json"])).stdout).toBe("null\n");
+  const inspected = await invoke(api, ["domains", "get", id, "--json"]);
+  expect(Schema.decodeUnknownSync(Domain)(JSON.parse(inspected.stdout)).status).toBe("VERIFYING");
+  const teardown = await invoke(api, ["domains", "teardown", id, "--json"]);
+  expect(teardown.code, teardown.stderr).toBe(0);
+  expect(Schema.decodeUnknownSync(Domain)(JSON.parse(teardown.stdout)).status).toBe("NOT_STARTED");
+  expect((await invoke(api, ["domains", "delete", id])).code).toBe(0);
+  expect((await invoke(api, ["domains", "get", id])).code).toBe(5);
+  expect((await invoke(api, ["transport", "clear"])).code).toBe(0);
+});
 
 async function agent(
   api: Awaited<ReturnType<typeof fixture>>,
@@ -987,6 +1649,8 @@ base("groups overview help logically and keeps group help focused", async () => 
     "api-keys",
     "lists",
     "webhooks",
+    "domains",
+    "transport",
     "oauth",
     "remote",
     "service",

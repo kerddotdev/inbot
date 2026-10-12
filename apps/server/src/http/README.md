@@ -114,6 +114,8 @@ read encrypted storage at download time and send binary content as an attachment
 with `nosniff` and `no-store`. No plaintext download cache is written. URLs
 expire on restart as well as at their advertised expiry time.
 
+The CLI consumes these download metadata routes with `messages raw/attachment`, `threads attachment`, and `drafts attachment`. It follows same-origin capability URLs without bearer headers or redirects, writes only to a requested new private file or redirected stdout, and refuses binary TTY output. `--json` keeps the metadata response; see [CLI downloads](../../../cli/README.md#search-updates-batches-and-downloads).
+
 ## Owner mail transport
 
 `GET /v0/owner/transport` returns `{ provider: "cloudflare", account_id, token_set,
@@ -150,7 +152,7 @@ provider requests already in flight can finish with the previous configuration.
 
 Every transport route requires owner bearer or owner session authentication. Unsafe
 session requests require `X-Inbot-CSRF`; agent API keys receive 403 regardless of grant.
-No MCP tool, CLI command, or remote route is added. Errors retain
+The local owner CLI maps these routes to `transport status/configure/clear`. Configuration reads the token from `INBOT_CLOUDFLARE_API_TOKEN` or raw stdin (`--token-stdin`), never command arguments. There is no separate verify route: PUT verifies before saving. No MCP tool or remote route is added. Errors retain
 `{ name, code, message, fix }`, including validation, permission, provider availability,
 and action-required failures.
 
