@@ -175,7 +175,8 @@ try {
       if (ready && !windows) assert.equal(result.code, 0, `Unclean server shutdown: ${failure}`);
     }
   } finally {
-    await rm(temporary, { recursive: true, force: true });
+    // Windows can hold the runtime executable briefly after the captured process exits.
+    await rm(temporary, { recursive: true, force: true, maxRetries: 10, retryDelay: 500 });
   }
 }
 console.log(
