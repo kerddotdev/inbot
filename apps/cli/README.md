@@ -31,6 +31,9 @@ native prebuilds, the server, CLI, inbound Worker bundle, and owner UI. No exter
 Node runtime is required. Releases have not been published yet. See the root
 [install and packaging guide](../../README.md#install) for the checksum-verifying
 `install.sh` and `install.ps1`, supported platforms and local verification.
+Windows archives include x64 and ARM64 builds; `install.ps1` selects the OS
+architecture. Its `-NoPathUpdate` switch leaves PATH unchanged for isolated
+installer checks or manual shim management.
 
 ```sh
 inbot serve --init --port 8025

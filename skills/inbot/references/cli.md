@@ -5,6 +5,8 @@ commands default to production flavor; source checkouts default to development.
 Use the same explicit `--home` and `--flavor` as the running service when using
 an owner connection. Installers do not register a service. See the
 [installation guide](../../../README.md#install) for release availability.
+Windows release archives support x64 and ARM64; `install.ps1` selects the OS
+architecture. Use `-NoPathUpdate` only when managing the shim path explicitly.
 
 Set `INBOT_URL` to the service origin and `INBOT_API_KEY` to your scoped key.
 Both must be present; the CLI never falls back to owner credentials when only
