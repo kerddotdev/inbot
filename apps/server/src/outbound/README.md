@@ -207,8 +207,7 @@ credentials with the existing provision adapter before persisting them. Failed c
 preserve the previous configuration. The verification timestamp uses the existing
 `meta` table in the same transaction as credentials; the transport migration remains version 5.
 Clearing requires domain teardown. See the [owner transport API](../http/README.md#owner-mail-transport)
-and [required token permissions](../provision/README.md#token-permissions). No transport
-MCP tool or CLI command is exposed.
+and [required token permissions](../provision/README.md#token-permissions). No transport MCP tool is exposed. The local owner CLI offers `transport status/configure/clear`; configure reads its token from `INBOT_CLOUDFLARE_API_TOKEN` or raw stdin with `--token-stdin` and verifies it before persistence.
 `ConfiguredProvider` reads those settings to select the existing live Cloudflare
 adapter. Test servers inject a fake provider instead.
 
