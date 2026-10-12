@@ -146,3 +146,16 @@ export function Icon({ name, small = false, className = "", ...rest }: IconProps
     </svg>
   );
 }
+
+export function Mark({ className = "" }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 64 64" aria-hidden="true" className={`size-[18px] flex-none ${className}`}>
+      <circle cx="32" cy="13" r="5" className="fill-ink" />
+      <rect x="27" y="24" width="10" height="14" rx="2" className="fill-ink" />
+      <path
+        d="M8 34h10l5 10h18l5-10h10v16a6 6 0 0 1-6 6H14a6 6 0 0 1-6-6Z"
+        className="fill-accent"
+      />
+    </svg>
+  );
+}

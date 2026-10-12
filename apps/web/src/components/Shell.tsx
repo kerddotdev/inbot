@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { Icon, type IconName } from "../icons";
+import { Icon, Mark, type IconName } from "../icons";
 import { links, type Route } from "../router";
 import type { Inbox } from "@inbot/contracts/src/inboxes.js";
 import { Button, IconButton, Status } from "./ui";
@@ -59,7 +59,10 @@ export function Shell({
           aria-controls="sidebar"
           onClick={() => setNavOpen((value) => !value)}
         />
-        <span className="font-semibold">Inbot</span>
+        <span className="flex items-center gap-2 font-semibold">
+          <Mark />
+          Inbot
+        </span>
       </div>
       {navOpen ? (
         <div
@@ -74,7 +77,7 @@ export function Shell({
         className={`fixed inset-y-0 left-0 z-30 flex w-[232px] flex-col border-r border-line bg-side px-2.5 pb-3 shadow-sheet transition-[transform,visibility] duration-200 lg:static lg:visible lg:translate-x-0 lg:shadow-none ${navOpen ? "visible translate-x-0" : "invisible -translate-x-full"}`}
       >
         <div className="flex h-[52px] items-center gap-2 px-2.5 font-semibold tracking-[-0.005em]">
-          <Icon name="inbox" className="text-accent" />
+          <Mark />
           Inbot
         </div>
         <div className="mt-2.5">
