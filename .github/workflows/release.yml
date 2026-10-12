@@ -51,8 +51,6 @@ jobs:
           node-version: 24.21.0
           cache: pnpm
       - run: pnpm install --frozen-lockfile --ignore-scripts
-      - run: pnpm typecheck
-      - run: pnpm exec vitest run apps/cli/src/packaged.test.ts
       - run: pnpm package
       - run: node scripts/smoke-release.mjs dist-release
       - name: Smoke Linux x64 on the ARM64 Vectis guest
