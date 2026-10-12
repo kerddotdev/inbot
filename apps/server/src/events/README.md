@@ -206,3 +206,7 @@ must be recreated or explicitly migrated; that temporary schema is not the lists
 migration retained here. No automatic conversion of those homes is provided.
 Migration 11 is revised in place on this branch; synthetic homes with an earlier
 version of migration 11 must also be recreated. The runner remains strict.
+
+## Quarantine events
+
+`inbound.quarantined`, `inbound.released`, and `inbound.deleted` are transactional owner events with `quarantine: { quarantine_id, reason_code, timestamp }`. They contain no mail content, source object key, credentials, or recipient. Their null inbox scope restricts WebSocket replay and signed webhook delivery to the owner with no inbox filter. Agent keys and OAuth grants cannot observe them. Release and deletion events are emitted after observed ciphertext cleanup; pending cleanup remains visible until completion. Settings invalidates the quarantine cache on these events and reconnect.

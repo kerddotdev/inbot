@@ -170,3 +170,5 @@ Sources: [API lifecycle](https://developers.cloudflare.com/cloudflare-one/networ
 [pinned metrics binding and announcement](https://github.com/cloudflare/cloudflared/blob/2026.9.1/metrics/metrics.go),
 [pinned JSON stderr logging](https://github.com/cloudflare/cloudflared/blob/2026.9.1/logger/create.go),
 [pinned release checksums](https://github.com/cloudflare/cloudflared/releases/tag/2026.9.1).
+
+Owner quarantine routes under `/v0/owner/quarantine` are blocked on the tunnel listener, including list, retry, and delete. They require a local owner connection; OAuth tokens and agent keys cannot access them locally either.

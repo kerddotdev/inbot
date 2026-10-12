@@ -101,20 +101,17 @@ test("re-ingests idempotently when the receipt write fails after the mailbox com
   api,
 }) => {
   await api.put(1);
-  let writes = 0;
-  const store = {
-    use: <A>(operation: Parameters<typeof api.store.use<A>>[0]) => {
-      writes++;
-      return writes === 3
-        ? Effect.fail(new DatabaseError({ operation: "query" }))
-        : api.store.use(operation);
-    },
-  };
-  expect(
-    (await api.process(processInbound().pipe(Effect.provideService(Store, store)))).retried,
-  ).toBe(1);
+  await api.run(
+    api.store.use((db) =>
+      db.exec(
+        `CREATE TRIGGER fail_inbound_commit BEFORE UPDATE OF state ON inbound_objects WHEN NEW.state = 'committed' BEGIN SELECT RAISE(ABORT, 'synthetic receipt failure'); END`,
+      ),
+    ),
+  );
+  expect((await api.process(processInbound())).retried).toBe(1);
   expect((await api.run(api.mailbox.listMessages(inbox))).messages).toHaveLength(1);
   expect(api.buffer.objects.size).toBe(1);
+  await api.run(api.store.use((db) => db.exec("DROP TRIGGER fail_inbound_commit")));
   api.time.now += 5000;
   expect((await api.process(processInbound())).processed).toBe(1);
   expect((await api.run(api.mailbox.listMessages(inbox))).messages).toHaveLength(1);

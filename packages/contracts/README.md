@@ -79,3 +79,9 @@ and `DeliveryEvent` schemas. The wrappers reuse the existing requests
 and do not change REST wire formats. The outbound service persists replay keys
 and acceptance state, composes mail, and applies provider events; public handlers,
 grants/send policies, and webhook/WebSocket publication remain unimplemented.
+
+## Owner quarantine contract
+
+`QuarantineItem` contains `quarantine_id`, `source_kind` (`buffer_object` or `queue_message`), `reason_code`, `first_seen`, nullable `size`, `inbox_id`, `attempts`, and `last_attempt_at`, plus `status` (`quarantined`, `release_pending`, or `delete_pending`). Unknown metadata is null; listing never decrypts message content.
+
+`QuarantineApi` declares local owner-only list, retry, and idempotent delete under `/v0/owner/quarantine`. Pagination follows the common cursor query and page fields. Retry reports `released` or returns the updated `quarantined` item. It uses existing errors, including `not_found`, `page_token_stale`, `action_required`, `not_supported`, and `service_unavailable`. It is intentionally absent from the agent `InbotApi` and MCP. Owner events `inbound.quarantined`, `inbound.released`, and `inbound.deleted` carry only quarantine ID, reason code, and timestamp.

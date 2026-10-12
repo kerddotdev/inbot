@@ -1,3 +1,4 @@
+import { quarantineCommands } from "./quarantine-commands.js";
 import type { HttpApiEndpoint } from "effect/http-api";
 import { WebhooksApi } from "../../../packages/contracts/src/api/webhooks.js";
 import { InboxesApi } from "../../../packages/contracts/src/api/inboxes.js";
@@ -620,6 +621,7 @@ export const commands: readonly Command[] = [
     description: "Stop the connector and remove its recorded DNS and tunnel (owner, local URL).",
     endpoint: RemoteApiGroup.endpoints.remote_disable,
   },
+  ...quarantineCommands,
 ];
 
 export const flagName = (field: string) => field.replaceAll("_", "-");

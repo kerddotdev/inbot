@@ -1,8 +1,10 @@
+import { ListQuarantineResponse } from "../../../packages/contracts/src/quarantine.js";
 import { mkdtemp, rm, readFile, writeFile, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Schema } from "effect";
 import { expect, test as base, vi } from "vitest";
+import { bufferState } from "../../server/src/inbound/state.js";
 import { makeLists } from "../../server/src/lists/lists.js";
 import { makeOAuth } from "../../server/src/oauth/service.js";
 import {
@@ -1653,6 +1655,7 @@ base("groups overview help logically and keeps group help focused", async () => 
     "transport",
     "oauth",
     "remote",
+    "quarantine",
     "service",
     "events",
   ]);
@@ -1660,4 +1663,33 @@ base("groups overview help logically and keeps group help focused", async () => 
   expect(lists[0]).toBe("lists list");
   expect(lists).toContain("lists delete-rejection");
   expect(lists.every((line) => line.startsWith("lists "))).toBe(true);
+});
+
+test("uses the shared owner-only quarantine endpoints with JSON, table output and stable errors", async ({
+  api,
+}) => {
+  const state = bufferState(api.store, "fake-account", "fake-bucket");
+  await api.run(state.quarantineMessage("fake-queue", "invalid", "invalid_pointer"));
+  const listed = await invoke(api, ["quarantine", "list", "--json", "--limit", "1"]);
+  expect(listed.code).toBe(0);
+  const page = Schema.decodeUnknownSync(Schema.fromJsonString(ListQuarantineResponse))(
+    listed.stdout,
+  );
+  const item = page.items[0];
+  if (!item) throw new Error("Expected a quarantine item");
+  const table = await invoke(api, ["quarantine", "list"]);
+  expect(table.stdout).toContain("SOURCE_KIND");
+  expect(table.stdout).toContain("invalid_pointer");
+  const retry = await invoke(api, ["quarantine", "retry", item.quarantine_id, "--json"]);
+  expect(retry.code).toBe(9);
+  expect(JSON.parse(retry.stderr)).toMatchObject({ code: "not_supported" });
+  const key = await agent(api);
+  expect(
+    (await invoke(api, ["quarantine", "list", "--json"], { env: agentEnv(api, key.api_key) })).code,
+  ).toBe(4);
+  for (let index = 0; index < 2; index++) {
+    const removed = await invoke(api, ["quarantine", "delete", item.quarantine_id, "--json"]);
+    expect(removed.code).toBe(0);
+    expect(removed.stdout).toBe("null\n");
+  }
 });

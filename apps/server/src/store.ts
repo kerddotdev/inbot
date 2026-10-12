@@ -4,6 +4,7 @@ import Database from "better-sqlite3-multiple-ciphers";
 import { Context, Effect, Layer, Schema } from "effect";
 import { eventsSchema } from "./events/schema.js";
 import { draftsSchema } from "./drafts/schema.js";
+import { quarantineSchema } from "./inbound/quarantine-schema.js";
 import { inboundSchema } from "./inbound/schema.js";
 import { Home } from "./home.js";
 import { apiKeysSchema, ownerSessionsSchema } from "./auth/schema.js";
@@ -53,6 +54,7 @@ export const migrations: readonly Migration[] = [
   { version: 12, sql: remoteSchema },
   { version: 13, sql: oauthSchema },
   { version: 14, sql: rejectionMetadataSchema },
+  { version: 15, sql: quarantineSchema },
 ];
 
 export function migrate(database: Database.Database, ordered: readonly Migration[] = migrations) {

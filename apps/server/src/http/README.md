@@ -525,3 +525,11 @@ the token bucket.
 
 See [OAuth security and lifecycle](../oauth/README.md) for migration 13,
 registration limits, refresh rotation, family reuse detection and event handling.
+
+## Owner quarantine
+
+- `GET /v0/owner/quarantine` accepts `limit` (1-100, default 20) and `page_token`. It returns `items`, page `count`, `limit`, and optional `next_page_token`.
+- `POST /v0/owner/quarantine/:quarantine_id/retry` returns `{ status: "released" }` only after processing and ciphertext cleanup, or `{ status: "quarantined", item }` after another permanent failure.
+- `DELETE /v0/owner/quarantine/:quarantine_id` deletes R2 ciphertext and then the visible record; repeating it returns 200. Queue items delete metadata only.
+
+These routes require the local owner bearer or an owner browser session with CSRF on mutations. Agent keys and OAuth tokens receive 403. Tunnel traffic is blocked, and MCP exposes no quarantine tool. Queue retry returns `not_supported`; unknown retry IDs return `not_found`; missing/mismatched original buffer configuration or retrying a pending deletion returns `action_required`. Provider/storage failures use `service_unavailable`. Restart pagination after `page_token_stale`. See [inbound quarantine](../inbound/README.md#owner-quarantine-management) for pending cleanup states and crash reconciliation.
