@@ -3,7 +3,7 @@ title: Quickstart
 description: From the first start of the service to an agent reading and answering mail in its own inbox, with your approval before anything is sent.
 ---
 
-This walkthrough takes you from an empty machine to an agent with its own inbox. It assumes Inbot is [installed](/get-started/install). In a source checkout, [build the service and web app](/development/build), replace `inbot` with `pnpm start:cli`, and pass `--web-root "$PWD/apps/web/dist"` when serving. Source commands default to `~/.inbot-dev`; use an explicit `--home` for development. You need a Cloudflare account with an active zone for your domain.
+This walkthrough takes you from an empty machine to an agent with its own inbox. It assumes Inbot is [installed](/get-started/install). You need a Cloudflare account with an active zone for your domain.
 
 ## 1. Start the service
 
@@ -103,6 +103,10 @@ The service starts at login with the same home on port 8025 (`--port` changes it
 ## 9. Try it
 
 Send an email from your personal address to `support@agents.example.com`, then ask your agent to check its inbox and reply. It will call `list_threads`, read the message, and call `reply_to_message`. Because the key uses the `approval` policy, the reply appears on the **Approvals** page instead of being sent. Approve it, and the message is queued. Committing the approval wakes the outbox immediately; inspect its state for provider acceptance and delivery.
+
+## Development
+
+For a source checkout, [build the service and web app](/development/build), replace `inbot` with `pnpm start:cli`, and pass `--web-root "$PWD/apps/web/dist"` when serving. Source commands default to `~/.inbot-dev`; always use an explicit temporary `--home` for development.
 
 ## Next
 

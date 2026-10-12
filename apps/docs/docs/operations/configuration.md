@@ -7,15 +7,13 @@ Inbot keeps configuration small. Startup flags choose the home, port and web app
 
 ## `inbot serve` flags
 
-| Flag                               | Default        | Meaning                                                                                                                     |
-| ---------------------------------- | -------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| `--home <dir>`                     | See below      | The home directory                                                                                                          |
-| `--port <n>`                       | `0`            | Loopback port. `0` picks a free port on each start.                                                                         |
-| `--init`                           | Off            | Create a new home with fresh keys. On an existing home it just unlocks.                                                     |
-| `--web-root <dir>`                 | None in source | Serve the owner web app from this directory. It must contain `index.html`. Installed packages default to their bundled app. |
-| `--flavor development\|production` | See below      | Selects the default home                                                                                                    |
-
-`node dist/apps/server/src/main.js serve` and `pnpm start:server` accept the same flags in a source checkout.
+| Flag                               | Default     | Meaning                                                                 |
+| ---------------------------------- | ----------- | ----------------------------------------------------------------------- |
+| `--home <dir>`                     | See below   | The home directory                                                      |
+| `--port <n>`                       | `0`         | Loopback port. `0` picks a free port on each start.                     |
+| `--init`                           | Off         | Create a new home with fresh keys. On an existing home it just unlocks. |
+| `--web-root <dir>`                 | Bundled app | Override the owner web app directory. It must contain `index.html`.     |
+| `--flavor development\|production` | See below   | Selects the default home                                                |
 
 ## Flavors and the home directory
 
@@ -25,18 +23,17 @@ The home is resolved in this order:
 2. The `INBOT_HOME` environment variable
 3. `~/.inbot` for the production flavor, or `~/.inbot-dev` for the development flavor
 
-Installed packages run as `production`. A source checkout runs as `development`, so experiments never touch an installed instance's mail. Flavor selects home and package defaults; the test-only memory keychain is refused in production flavor. Always pass an explicit `--home` when testing.
+Installed packages run as `production`. Flavor selects home and package defaults; the test-only memory keychain is refused in production flavor.
 
 ## Environment variables
 
-| Variable                                                        | Used by        | Meaning                                                                                                                                                       |
-| --------------------------------------------------------------- | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `INBOT_HOME`                                                    | Service, CLI   | Home directory when `--home` is absent                                                                                                                        |
-| `INBOT_URL`                                                     | CLI            | Service origin for an agent, without `/v0`, for example `http://127.0.0.1:8025`                                                                               |
-| `INBOT_API_KEY`                                                 | CLI            | Agent API key. Must be set together with `INBOT_URL`; the pair takes precedence over the owner connection.                                                    |
-| `INBOT_CLOUDFLARE_API_TOKEN`                                    | CLI            | Cloudflare API token read by `inbot transport configure` when `--token-stdin` is not used. See [Mail transport](/guides/transport#configure-it-with-the-cli). |
-| `INBOT_INSTALL_ROOT`, `INBOT_BIN_DIR`, `INBOT_RELEASE_BASE_URL` | Installers     | See [Install Inbot](/get-started/install)                                                                                                                     |
-| `INBOT_TEST_MEMORY_KEYCHAIN=1`                                  | Service, tests | Test only. Keeps the key in memory instead of the OS keychain. Requires an explicit `--home`, the development flavor, and refuses the default homes.          |
+| Variable                                                        | Used by      | Meaning                                                                                                                                                       |
+| --------------------------------------------------------------- | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `INBOT_HOME`                                                    | Service, CLI | Home directory when `--home` is absent                                                                                                                        |
+| `INBOT_URL`                                                     | CLI          | Service origin for an agent, without `/v0`, for example `http://127.0.0.1:8025`                                                                               |
+| `INBOT_API_KEY`                                                 | CLI          | Agent API key. Must be set together with `INBOT_URL`; the pair takes precedence over the owner connection.                                                    |
+| `INBOT_CLOUDFLARE_API_TOKEN`                                    | CLI          | Cloudflare API token read by `inbot transport configure` when `--token-stdin` is not used. See [Mail transport](/guides/transport#configure-it-with-the-cli). |
+| `INBOT_INSTALL_ROOT`, `INBOT_BIN_DIR`, `INBOT_RELEASE_BASE_URL` | Installers   | See [Install Inbot](/get-started/install)                                                                                                                     |
 
 The remote access connector runs with only `PATH` (and `SystemRoot` on Windows) from the environment.
 
@@ -70,3 +67,9 @@ These are configured at runtime, not with flags:
 | Appearance                   | Settings > Appearance, stored in the browser only                                                                    |
 
 Transport changes take effect on the next loop cycle without a restart.
+
+## Development
+
+A source checkout runs as `development`, with `~/.inbot-dev` as its default home. Always pass an explicit temporary `--home` when developing or testing. `node dist/apps/server/src/main.js serve` and `pnpm start:server` accept the same flags as `inbot serve`, but require an explicit `--web-root` for the [built owner app](/development/build).
+
+`INBOT_TEST_MEMORY_KEYCHAIN=1` keeps the key in memory instead of the OS keychain for tests. It requires an explicit `--home` and the development flavor, and refuses the default homes.

@@ -2,36 +2,25 @@
 
 Self-hosted, privacy-first email for AI agents. Each agent gets its own inbox on your custom domain, mail is stored encrypted on your own machine, and agents reach it through MCP, a CLI, or a REST API. An optional Cloudflare Tunnel lets cloud-hosted agents reach your local instance with scoped credentials. The mail provider still sees plaintext in transit: Inbot is zero-knowledge at rest, not end-to-end encrypted.
 
-Status: early development. The encrypted storage foundation, mailbox service, [inbound ingestion and encrypted buffer pulling](apps/server/src/inbound/README.md), [authenticated loopback HTTP API](apps/server/src/http/README.md), [authenticated CLI](apps/cli/README.md), shared [age envelope package](packages/envelope/README.md), [inbound Email Worker handler](apps/worker/README.md), [owner browser authentication and static UI serving](apps/server/src/http/README.md#owner-browser-authentication), drafts with owner approval and scheduled sending, and [delivery Queue consumer](apps/server/src/outbound/README.md#delivery-queue-consumer) exist. The [owner UI](apps/web/README.md) connects authentication, mail, API keys, approvals, domains, mail transport settings, and allow/block lists to the local API. The [durable event log, signed webhooks and authenticated WebSocket](apps/server/src/events/README.md) provide live updates. Optional [remote access](apps/server/src/remote/README.md) connects cloud agents through a supervised, verified Cloudflare Tunnel. [OAuth authorization](apps/server/src/oauth/README.md) provides owner consent, scoped grants and audience-bound tokens. Mail supports inbox creation, editing and deletion, API key editing, and attachment downloads in Mail and Approvals. Rejected-mail metadata is available in Settings and the CLI. Installable archives and checksum-verifying installers are implemented. Releases have not been published yet. Domain verification requires public DNS and an observed encrypted self-test arrival before reporting success.
+[Documentation](https://inbot.kerd.dev/docs) covers installation, the owner app, agent connections and the security model. Inbot 0.1.0 includes encrypted inbound buffering, durable outbound sending, scoped API keys and OAuth, owner approval, signed webhooks, live events and optional remote access. Domain verification requires public DNS and an observed encrypted self-test before reporting success.
 
 ## Install
 
-Releases have not been published yet. The installers below work once a release
-is published in [kerddotdev/inbot](https://github.com/kerddotdev/inbot/releases).
-They include Node 24.21.0, so no separate Node installation is needed.
-
-From a source checkout, run the installer for your platform:
+Install the latest release on macOS or Linux:
 
 ```sh
-sh install.sh
-# Or select a published version:
-sh install.sh --version 0.1.0
+curl -fsSL https://inbot.kerd.dev/install.sh | sh
 ```
+
+On Windows 11 x64 or ARM64:
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\install.ps1
-# Or select a published version:
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\install.ps1 -Version 0.1.0
+powershell -ExecutionPolicy Bypass -c "irm https://inbot.kerd.dev/install.ps1 | iex"
 ```
 
-Once the repository is public, download and run the Windows installer in PowerShell:
+`-ExecutionPolicy Bypass` applies only to this PowerShell process and does not change the machine's saved execution policy. Windows native modules require the Microsoft Visual C++ v14 Redistributable; the installer checks them and reports a download link if they cannot load, rather than installing the runtime automatically.
 
-```powershell
-Invoke-WebRequest https://raw.githubusercontent.com/kerddotdev/inbot/main/install.ps1 -OutFile "$env:TEMP\inbot-install.ps1"; powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$env:TEMP\inbot-install.ps1"
-```
-
-Installers select the latest published stable release by default; prereleases require an explicit version.
-Windows checks the bundled Node and native addons before installation. If the Microsoft Visual C++ v14 runtime is missing or cannot load, it stops with an architecture-specific [official Microsoft download](https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist/) link. Install or repair that runtime, restart if requested, and rerun the installer. Installing the runtime can require administrator approval; the Inbot installer does not install it automatically.
+Archives bundle Node.js 24.21.0, so no separate Node installation is needed. See the [install guide](https://inbot.kerd.dev/docs/get-started/install) for `--version <version>` / `-Version <version>`, custom paths, verification and removal.
 
 macOS and Linux install under `~/.local/share/inbot/app/<version>` with an
 `~/.local/bin/inbot` shim. Windows installs under
@@ -66,12 +55,12 @@ To select an earlier retained version, re-run with `--version` (or `-Version`).
 `INBOT_INSTALL_ROOT` and `INBOT_BIN_DIR` override both install destinations;
 `INBOT_RELEASE_BASE_URL` with an explicit version selects an HTTPS asset directory
 or a local `file://`/loopback HTTP fixture. On Unix, flags `--install-root` and
-`--bin-dir` are also supported. Windows accepts `-InstallRoot`, `-BinDir` and
-`-ReleaseBaseUrl`. Paths must be absolute.
+`--bin-dir` are also supported. Windows accepts `-InstallRoot`, `-BinDir`,
+`-ReleaseBaseUrl` and `-NoPathUpdate`. Paths must be absolute.
 
 ## First steps
 
-You need an OS credential store and a Cloudflare account with an active zone for your domain. On the first start, open the printed loopback URL, enter the one-time setup code and choose an owner password. Configure Settings > Mail transport, provision a dedicated mail subdomain from Domains, and wait for its encrypted self-test. Verification can take about ten minutes or longer; probes retry every five minutes. Then create an inbox from Mail > New inbox and a scoped API key. New web grants default to Full access with approval and no selected inboxes. See the [quickstart](apps/docs/docs/get-started/quickstart.md) and [agent connections](apps/docs/docs/agents/connect.md).
+You need an OS credential store and a Cloudflare account with an active zone for your domain. On the first start, open the printed loopback URL, enter the one-time setup code and choose an owner password. Configure Settings > Mail transport, provision a dedicated mail subdomain from Domains, and wait for its encrypted self-test. Verification can take about ten minutes or longer; probes retry every five minutes. Then create an inbox from Mail > New inbox and a scoped API key. New web grants default to Full access with approval and no selected inboxes. See the [quickstart](https://inbot.kerd.dev/docs/get-started/quickstart) and [agent connections](https://inbot.kerd.dev/docs/agents/connect).
 
 Use a fixed `--port` for saved agent configurations. Otherwise `serve` chooses a random port on each start. Run `inbot --version` or `inbot version` to inspect the package version without connecting.
 
@@ -83,13 +72,14 @@ Use a fixed `--port` for saved agent configurations. Otherwise `serve` chooses a
 | macOS Intel         | `darwin-x64`   | No dedicated smoke job                    |
 | Linux ARM64 (glibc) | `linux-arm64`  | Native on the ARM64 Ubuntu runner         |
 | Linux x64 (glibc)   | `linux-x64`    | QEMU emulation on the ARM64 Ubuntu runner |
-| Windows x64         | `win32-x64`    | No Windows smoke job yet                  |
+| Windows 11 ARM64    | `win32-arm64`  | Native on the Windows 11 ARM64 runner     |
+| Windows 11 x64      | `win32-x64`    | Emulation on the Windows 11 ARM64 runner  |
 
-Archives include native addon prebuilds; archive availability does not establish mail delivery or keychain support on every platform. Linux requires a working Secret Service. musl distributions are unsupported.
+macOS is the most validated platform. Windows 11 x64 and ARM64 are supported with CI validation as shown above. Archives include native addon prebuilds; archive availability does not establish mail delivery or keychain support on every platform. Linux requires a working Secret Service. musl distributions are unsupported.
 
 ## Remove an installation
 
-Stop your Inbot process before removing installed files. On macOS and Linux, delete the install root (`~/.local/share/inbot` by default, including retained versions) and the shim (`~/.local/bin/inbot`). On Windows, remove `%LOCALAPPDATA%\Programs\inbot` and its `bin` entry from your user PATH. Custom install roots and bin directories must be removed at their actual locations.
+Run `inbot service uninstall` if you installed a background service, or stop the foreground process, before removing installed files. On macOS and Linux, delete the install root (`~/.local/share/inbot` by default, including retained versions) and the shim (`~/.local/bin/inbot`). On Windows, remove `%LOCALAPPDATA%\Programs\inbot` and its `bin` entry from your user PATH. Remove any Inbot-specific PATH entry you added, but keep shared bin directories used by other tools. Custom install roots and shims must be removed at their actual locations. See the [uninstall guide](https://inbot.kerd.dev/docs/get-started/install#uninstall).
 
 Installed files are separate from mail and keys. Removing them leaves the home (`~/.inbot` by default) and its OS keychain entry intact. Back up the complete home while the service is stopped before any data deletion. Do not remove `keys.json` or the keychain item if you want to retain access to the encrypted database; there is no passphrase startup or recovery command.
 
@@ -139,11 +129,7 @@ On Windows, run `node --test scripts/install-windows.test.mjs` with
 `INBOT_TEST_RELEASE_DIR` set to the release directory. These tests pass
 `-NoPathUpdate` so the installer leaves the user PATH untouched.
 
-The tag-only release workflow runs the full reusable CI on Vectis before packaging.
-It verifies Linux ARM64/x64 and Windows ARM64/x64 archives and installers, signs every Mach-O in both macOS archives with Developer ID and hardened runtime, notarizes both payloads, and smoke-tests the signed macOS ARM64 archive. Checksums are rebuilt after signing, and provenance attestations cover the final archives and checksums. The workflow publishes a non-draft release with generated notes and the matching curated `CHANGELOG.md` section when available. Tags containing a hyphen become prereleases. Published versions are never modified.
-
-CLI binaries cannot be stapled; Gatekeeper verifies their notarization online.
-See [RELEASING.md](RELEASING.md) for runners, signing, release notes and repository settings.
+The tag-triggered release workflow runs CI and archive smoke tests on Vectis runners, signs and notarizes both macOS archives, rebuilds checksums for the final assets, and adds GitHub build provenance attestations. It publishes a public GitHub release with release notes and refuses to modify an already published version. Stable tags become the latest release; tags containing a hyphen become prereleases. Local packaging produces unsigned archives. See [RELEASING.md](RELEASING.md) for the maintainer runbook and [Packaging and releases](https://inbot.kerd.dev/docs/development/packaging) for the exact platform coverage and `gh attestation verify` commands.
 
 ## Development
 
@@ -213,4 +199,4 @@ pagination, and stable exit codes, or the [agent CLI guidance](skills/inbot/refe
 
 ## License
 
-The root package metadata declares MIT. A standalone license file is not yet included in the repository or release archives.
+Inbot is licensed under the [MIT License](LICENSE). Release archives include the license and [third-party notices](THIRD_PARTY_NOTICES.md).

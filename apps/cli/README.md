@@ -7,7 +7,7 @@ startup, and shutdown behavior. Packaged commands default to production flavor;
 packaged `serve` also defaults `--web-root` to the included UI. Explicit flags
 override both defaults.
 
-## Run
+## Development
 
 Requires Node 24.21.0 and pnpm 10.24.0. Build from the workspace root:
 
@@ -28,9 +28,9 @@ dependencies resolve from the root package. No additional dependency is needed.
 
 Release archives include Node 24.21.0, production dependencies with the target's
 native prebuilds, the server, CLI, inbound Worker bundle, and owner UI. No external
-Node runtime is required. Releases have not been published yet. See the root
-[install and packaging guide](../../README.md#install) for the checksum-verifying
-`install.sh` and `install.ps1`, supported platforms and local verification.
+Node runtime is required. See the [installation guide](https://inbot.kerd.dev/docs/get-started/install)
+for the one-line checksum-verifying installers, supported platforms, updating and removal.
+The [CLI reference](https://inbot.kerd.dev/docs/reference/cli) is generated from command help.
 Windows archives include x64 and ARM64 builds; `install.ps1` selects the OS
 architecture. Its `-NoPathUpdate` switch leaves PATH unchanged for isolated
 installer checks or manual shim management.

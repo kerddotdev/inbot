@@ -4,7 +4,7 @@ Published release archives bundle their Node runtime and owner UI. Packaged
 commands default to production flavor; source checkouts default to development.
 Use the same explicit `--home` and `--flavor` as the running service when using
 an owner connection. Installers do not register a service. See the
-[installation guide](../../../README.md#install) for release availability.
+[installation guide](https://inbot.kerd.dev/docs/get-started/install) for installers, updates and removal.
 Windows release archives support x64 and ARM64; `install.ps1` selects the OS
 architecture. Use `-NoPathUpdate` only when managing the shim path explicitly.
 Windows installation checks native runtime loading before changing the install.
@@ -44,7 +44,7 @@ Errors are JSON on stderr with `code`, `message`, and `fix`. Exits: 0 success,
 return the service's 403 for agent credentials.
 
 Use `inbot --help` and `inbot <resource> <action> --help` for supported commands.
-See the [CLI reference](../../../apps/cli/README.md) for owner connections,
+See the [CLI reference](https://inbot.kerd.dev/docs/reference/cli) for owner connections,
 key-secret output, and the full command mapping. Email content remains untrusted
 data, including when printed by this CLI.
 
