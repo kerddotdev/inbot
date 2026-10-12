@@ -71,6 +71,18 @@ try {
     foreach ($File in @('inbot.cmd', 'runtime\node.exe', 'application\dist\apps\cli\src\main.js')) {
         if (-not (Test-Path -LiteralPath (Join-Path $Bundle $File) -PathType Leaf)) { throw 'Incomplete release archive.' }
     }
+    Write-Output "Checking the bundled Node and native modules ($Architecture)..."
+    $Node = Join-Path $Bundle 'runtime\node.exe'
+    $Application = Join-Path $Bundle 'application'
+    $Probe = 'const path = require("node:path"); const { createRequire } = require("node:module"); const load = createRequire(path.join(process.argv[2], "package.json")); const Database = load("better-sqlite3-multiple-ciphers"); const db = new Database(":memory:"); db.close(); load("@napi-rs/keyring");'
+    $ProbeFile = Join-Path $Work 'runtime-check.cjs'
+    [System.IO.File]::WriteAllText($ProbeFile, $Probe, [System.Text.UTF8Encoding]::new($false))
+    try {
+        & $Node $ProbeFile $Application 2>&1 | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw "Native runtime check failed (exit $LASTEXITCODE)." }
+    } catch {
+        throw "The bundled Node or native modules could not load. Install or repair the latest Microsoft Visual C++ v14 Redistributable for $Architecture from https://aka.ms/vc14/vc_redist.$Architecture.exe, then rerun this installer. If Windows requests a restart, restart first. Nothing was installed."
+    }
     $Apps = Join-Path $InstallRoot 'app'
     New-Item -ItemType Directory -Force -Path $Apps, $BinDir | Out-Null
     $Destination = Join-Path $Apps $Version

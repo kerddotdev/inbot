@@ -71,13 +71,24 @@ test(
       await mkdir(release);
       await mkdir(join(bundle, "runtime"), { recursive: true });
       await mkdir(join(bundle, "application/dist/apps/cli/src"), { recursive: true });
+      const sqlite = join(bundle, "application/node_modules/better-sqlite3-multiple-ciphers");
+      const keyring = join(bundle, "application/node_modules/@napi-rs/keyring");
+      await mkdir(sqlite, { recursive: true });
+      await mkdir(keyring, { recursive: true });
+      await writeFile(join(keyring, "index.js"), "module.exports = {};\n");
       await cp(process.execPath, join(bundle, "runtime/node.exe"));
       await writeFile(
         join(bundle, "inbot.cmd"),
         '@echo off\r\n"%~dp0runtime\\node.exe" "%~dp0application\\dist\\apps\\cli\\src\\main.js" %*\r\nexit /b %errorlevel%\r\n',
       );
       const sums = [];
-      for (const version of ["0.1.0", "0.1.1"]) {
+      for (const version of ["0.1.0", "0.1.1", "0.1.2"]) {
+        await writeFile(
+          join(sqlite, "index.js"),
+          version === "0.1.2"
+            ? 'throw new Error("The specified module could not be found: VCRUNTIME140.dll");\n'
+            : "module.exports = class { close() {} };\n",
+        );
         await writeFile(
           entry,
           `console.log(process.argv[2] === "--version" ? "${version}" : "Usage: inbot fixture");\n`,
@@ -111,6 +122,17 @@ test(
         "0.1.1",
       ]);
       const shim = await readFile(env.INBOT_TEST_SHIM);
+      await assert.rejects(
+        install("0.1.2", env),
+        (error) =>
+          /Microsoft Visual C\+\+ v14 Redistributable/.test(error.stderr) &&
+          error.stderr.includes(`https://aka.ms/vc14/vc_redist.${architecture}.exe`),
+      );
+      assert.deepEqual(await readFile(env.INBOT_TEST_SHIM), shim);
+      assert.deepEqual((await readdir(join(env.INBOT_INSTALL_ROOT, "app"))).sort(), [
+        "0.1.0",
+        "0.1.1",
+      ]);
       await writeFile(
         join(release, "SHA256SUMS"),
         `${"0".repeat(64)}  inbot-0.1.1-${target}.zip\n`,
