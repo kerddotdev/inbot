@@ -300,14 +300,14 @@ export class ApiClient {
       `${listPath(selection)}${pageQuery(token)}`,
       selection.inboxId === undefined
         ? Lists.ListListEntriesResponse
-        : Lists.PodListListEntriesResponse,
+        : Lists.InboxListEntriesResponse,
       { signal },
     );
 
   createListEntry = (selection: ListSelection, body: Lists.CreateListEntryRequest) =>
     this.request(
       listPath(selection),
-      selection.inboxId === undefined ? Lists.ListEntry : Lists.PodListEntry,
+      selection.inboxId === undefined ? Lists.ListEntry : Lists.InboxListEntry,
       { method: "POST", body },
     );
 

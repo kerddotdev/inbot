@@ -9,7 +9,7 @@ import { ListMessagesQuery } from "./messages.js";
 import { BearerAuth, OwnerOnly, RequiredPermission } from "./security.js";
 
 describe("HTTP API declarations", () => {
-  it("generates an authenticated OpenAPI document with scoped and organization routes", () => {
+  it("generates an authenticated OpenAPI document with scoped and global routes", () => {
     const document = OpenApi.fromApi(InbotApi);
     expect(document.paths["/v0/inboxes"]?.get).toBeDefined();
     expect(document.paths["/v0/inboxes"]?.post).toBeDefined();

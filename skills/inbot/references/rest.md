@@ -32,7 +32,7 @@ Notes:
 
 ## Unsupported options
 
-Pod filters and URL attachments return 501 `not_supported` after authentication and validation.
+URL attachments return 501 `not_supported` after authentication and validation.
 Domains exist but are owner-only; agents cannot use them.
 Signed webhooks, WebSocket events and the CLI are implemented; see [events](events.md) and [CLI](cli.md). OAuth access tokens use the same grants as API keys and must target the listener's exact `/v0` resource. Owner OAuth management stays local.
 
@@ -77,7 +77,7 @@ Shape: `{ "name": "InbotError", "code": "...", "message": "...", "fix": "..." }`
 | `idempotency_conflict` | 409  | Same key, different request                                           |
 | `page_token_stale`     | 409  | Invalid, mismatched, or stale page token                              |
 | `payload_too_large`    | 413  | Composed message over 5 MiB                                           |
-| `not_supported`        | 501  | Unimplemented resource or option (pod filters, URL attachments)       |
+| `not_supported`        | 501  | Unimplemented resource or option (URL attachments)                    |
 | `service_unavailable`  | 503  | Transport not configured, storage failure, or other server fault      |
 
 The contract also declares `permission_escalation`, `limit_exceeded`, `domain_not_verified`, `message_rejected`, `resource_taken`, `locked` (423), and `rate_limit_exceeded` (429). Handle them generically if you see them.

@@ -14,7 +14,6 @@ export type EntryType = typeof EntryType.Type;
 
 export const ListEntry = Schema.Struct({
   entry: Schema.String,
-  organization_id: Schema.String,
   reason: Schema.optionalKey(Schema.String),
   direction: Direction,
   list_type: ListType,
@@ -30,18 +29,17 @@ export const ListListEntriesResponse = Schema.Struct({
 }).annotate({ identifier: "ListListEntriesResponse" });
 export type ListListEntriesResponse = typeof ListListEntriesResponse.Type;
 
-export const PodListEntry = Schema.Struct({
+export const InboxListEntry = Schema.Struct({
   ...ListEntry.fields,
-  pod_id: Schema.String,
   inbox_id: Schema.optionalKey(Schema.String),
-}).annotate({ identifier: "PodListEntry" });
-export type PodListEntry = typeof PodListEntry.Type;
+}).annotate({ identifier: "InboxListEntry" });
+export type InboxListEntry = typeof InboxListEntry.Type;
 
-export const PodListListEntriesResponse = Schema.Struct({
+export const InboxListEntriesResponse = Schema.Struct({
   ...PageFields,
-  entries: Schema.Array(PodListEntry),
-}).annotate({ identifier: "PodListListEntriesResponse" });
-export type PodListListEntriesResponse = typeof PodListListEntriesResponse.Type;
+  entries: Schema.Array(InboxListEntry),
+}).annotate({ identifier: "InboxListEntriesResponse" });
+export type InboxListEntriesResponse = typeof InboxListEntriesResponse.Type;
 
 export const CreateListEntryRequest = Schema.Struct({
   entry: Schema.String,

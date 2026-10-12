@@ -199,7 +199,6 @@ export const Subscribe = Schema.Struct({
   type: Schema.Literal("subscribe"),
   event_types: Schema.optionalKey(Schema.Array(EventType)),
   inbox_ids: Schema.optionalKey(Schema.Array(Schema.String)),
-  pod_ids: Schema.optionalKey(Schema.Array(Schema.String)),
   last_event_id: Schema.optionalKey(Schema.String),
 }).annotate({ identifier: "Subscribe" });
 export type Subscribe = typeof Subscribe.Type;

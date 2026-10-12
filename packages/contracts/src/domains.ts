@@ -32,7 +32,6 @@ export const VerificationRecord = Schema.Struct({
 export type VerificationRecord = typeof VerificationRecord.Type;
 
 export const DomainItem = Schema.Struct({
-  pod_id: Schema.optionalKey(Schema.String),
   domain_id: DomainId,
   domain: Schema.String,
   feedback_enabled: Schema.Boolean,

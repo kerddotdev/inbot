@@ -229,7 +229,7 @@ export const McpTools = (origin: string) =>
                 Schema.decodeUnknownSync(
                   inboxId === undefined
                     ? Lists.ListListEntriesResponse
-                    : Lists.PodListListEntriesResponse,
+                    : Lists.InboxListEntriesResponse,
                 ),
               ),
             ),
@@ -245,7 +245,7 @@ export const McpTools = (origin: string) =>
             .pipe(
               Effect.map(
                 Schema.decodeUnknownSync(
-                  inboxId === undefined ? Lists.ListEntry : Lists.PodListEntry,
+                  inboxId === undefined ? Lists.ListEntry : Lists.InboxListEntry,
                 ),
               ),
             ),
@@ -261,7 +261,7 @@ export const McpTools = (origin: string) =>
             .pipe(
               Effect.map(
                 Schema.decodeUnknownSync(
-                  inboxId === undefined ? Lists.ListEntry : Lists.PodListEntry,
+                  inboxId === undefined ? Lists.ListEntry : Lists.InboxListEntry,
                 ),
               ),
             ),

@@ -25,7 +25,6 @@ export const UpdateMetadata = Schema.Record(
 export type UpdateMetadata = typeof UpdateMetadata.Type;
 
 export const Inbox = Schema.Struct({
-  pod_id: Schema.String,
   inbox_id: InboxId,
   email: Schema.String,
   display_name: Schema.optionalKey(Schema.String),

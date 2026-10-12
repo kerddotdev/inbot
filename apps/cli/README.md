@@ -323,7 +323,7 @@ Directions: `receive`, `send`, `reply`; types: `allow`, `block`. Omit `--inbox` 
 shared global routes, or inbox routes with `--inbox <address>`. List accepts the
 usual pagination flags. Create requires `--url` and repeatable `--event-types`;
 `--inbox-ids` is repeatable for a globally scoped receiver. `--headers` accepts a
-JSON object. Pod filters are unavailable. `--data` can provide the full payload.
+JSON object. `--data` can provide the full payload.
 
 ```sh
 inbot webhooks create --inbox agent@example.test --url http://127.0.0.1:8081/events --event-types message.received --show-secret --json

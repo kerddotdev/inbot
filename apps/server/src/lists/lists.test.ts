@@ -5,7 +5,7 @@ import { Schema } from "effect";
 import { expect, test as base } from "vitest";
 import {
   ListListEntriesResponse,
-  PodListEntry,
+  InboxListEntry,
   type Direction,
   type ListType,
 } from "../../../../packages/contracts/src/lists.js";
@@ -78,13 +78,13 @@ test("REST CRUD preserves scope, normalizes identity, paginates and rejects mism
     await api.request(path, { method: "POST", body: { entry: "A.TEST" } }),
     "already_exists",
   );
-  const page = Schema.decodeUnknownSync(ListListEntriesResponse)(
+  const page = Schema.decodeUnknownSync(ListListEntriesResponse, { onExcessProperty: "error" })(
     await (await api.request(`${path}?limit=2`)).json(),
   );
   expect(page.entries.map((item) => item.entry)).toEqual(["a.test", "b.test"]);
   expect(page.next_page_token).toBeDefined();
   expect(page.limit).toBe(2);
-  const next = Schema.decodeUnknownSync(ListListEntriesResponse)(
+  const next = Schema.decodeUnknownSync(ListListEntriesResponse, { onExcessProperty: "error" })(
     await (await api.request(`${path}?limit=2&page_token=${page.next_page_token}`)).json(),
   );
   expect(next.entries.map((item) => item.entry)).toEqual(["c.test"]);
@@ -98,7 +98,7 @@ test("REST CRUD preserves scope, normalizes identity, paginates and rejects mism
       await api.request(`${changed}?page_token=${page.next_page_token}`),
       "page_token_stale",
     );
-  const local = Schema.decodeUnknownSync(PodListEntry)(
+  const local = Schema.decodeUnknownSync(InboxListEntry, { onExcessProperty: "error" })(
     await (
       await api.request(route("receive", "block", inbox), {
         method: "POST",
@@ -109,8 +109,6 @@ test("REST CRUD preserves scope, normalizes identity, paginates and rejects mism
   expect(local).toMatchObject({
     entry: "user@example.test",
     inbox_id: inbox,
-    pod_id: "local",
-    organization_id: "local",
     entry_type: "email",
   });
   expect((await api.request(`${path}/A.TEST`)).status).toBe(200);
@@ -177,7 +175,11 @@ test("list permissions and inbox scopes agree over REST and MCP under every send
       entry,
     });
     expect(created.isError).not.toBe(true);
-    expect(Schema.decodeUnknownSync(PodListEntry)(created.structuredContent).entry).toBe(entry);
+    expect(
+      Schema.decodeUnknownSync(InboxListEntry, { onExcessProperty: "error" })(
+        created.structuredContent,
+      ).entry,
+    ).toBe(entry);
     expect((await api.request(`${path}/${entry}`, { token: key.api_key })).status).toBe(200);
     expect(
       (

@@ -109,7 +109,6 @@ test("creates inboxes, replays client ids, merges metadata, and validates change
       });
       expect(inbox.inbox_id).toBe("agent@example.test");
       expect(inbox.email).toBe(inbox.inbox_id);
-      expect(inbox.pod_id).toBe("local");
       expect(
         yield* mailbox.createInbox({
           username: "different",
@@ -808,7 +807,7 @@ test("returns the newest thread page in chronological order and pages toward old
   );
 });
 
-test("restricts org-wide lists and searches to the intersection of inbox scopes", async ({
+test("restricts global lists and searches to the intersection of inbox scopes", async ({
   home,
   key,
 }) => {
