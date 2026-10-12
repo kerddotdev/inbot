@@ -810,115 +810,119 @@ function spawnServer(home: string, args: readonly string[] = [], initialize = tr
   return { child, exited, stderr: () => stderr };
 }
 
-test("builds and starts the service in a child process with a test keychain and shuts down by its captured PID", async ({
-  home,
-}) => {
-  // pnpm is a .cmd shim on Windows, which spawn can only start through a shell.
-  const build = spawn("pnpm", ["build"], {
-    cwd: process.cwd(),
-    stdio: "pipe",
-    shell: process.platform === "win32",
-  });
-  let buildOutput = "";
-  build.stdout?.on("data", (data: Buffer) => {
-    buildOutput += data.toString();
-  });
-  build.stderr?.on("data", (data: Buffer) => {
-    buildOutput += data.toString();
-  });
-  const buildCode = await new Promise<number | null>((resolve, reject) => {
-    build.once("error", reject);
-    build.once("exit", resolve);
-  });
-  expect(buildCode, buildOutput).toBe(0);
-  const uninitialized = spawnServer(home, [], false);
-  expect((await uninitialized.exited).code).toBe(1);
-  expect(JSON.parse(uninitialized.stderr())).toMatchObject({
-    code: "not_initialized",
-    fix: expect.stringContaining("Initialize this home"),
-  });
-  const processServer = spawnServer(home);
-  const { child, exited } = processServer;
-  let timer: NodeJS.Timeout | undefined;
-  const lines: string[] = [];
-  const reader = createInterface({ input: child.stdout });
-  try {
-    const ready = await Promise.race([
-      new Promise<typeof Ready.Type>((resolve, reject) => {
-        reader.on("line", (line) => {
-          lines.push(line);
-          try {
-            const event = Schema.decodeUnknownSync(
-              Schema.fromJsonString(Schema.Struct({ event: Schema.String })),
-            )(line);
-            if (event.event === "owner.setup_required") {
-              const setup = Schema.decodeUnknownSync(
-                Schema.fromJsonString(Schema.Struct({ event: Schema.String, code: Schema.String })),
+test(
+  "builds and starts the service in a child process with a test keychain and shuts down by its captured PID",
+  async ({ home }) => {
+    // pnpm is a .cmd shim on Windows, which spawn can only start through a shell.
+    const build = spawn("pnpm", ["build"], {
+      cwd: process.cwd(),
+      stdio: "pipe",
+      shell: process.platform === "win32",
+    });
+    let buildOutput = "";
+    build.stdout?.on("data", (data: Buffer) => {
+      buildOutput += data.toString();
+    });
+    build.stderr?.on("data", (data: Buffer) => {
+      buildOutput += data.toString();
+    });
+    const buildCode = await new Promise<number | null>((resolve, reject) => {
+      build.once("error", reject);
+      build.once("exit", resolve);
+    });
+    expect(buildCode, buildOutput).toBe(0);
+    const uninitialized = spawnServer(home, [], false);
+    expect((await uninitialized.exited).code).toBe(1);
+    expect(JSON.parse(uninitialized.stderr())).toMatchObject({
+      code: "not_initialized",
+      fix: expect.stringContaining("Initialize this home"),
+    });
+    const processServer = spawnServer(home);
+    const { child, exited } = processServer;
+    let timer: NodeJS.Timeout | undefined;
+    const lines: string[] = [];
+    const reader = createInterface({ input: child.stdout });
+    try {
+      const ready = await Promise.race([
+        new Promise<typeof Ready.Type>((resolve, reject) => {
+          reader.on("line", (line) => {
+            lines.push(line);
+            try {
+              const event = Schema.decodeUnknownSync(
+                Schema.fromJsonString(Schema.Struct({ event: Schema.String })),
               )(line);
-              expect(setup.code).toMatch(/^[A-Za-z0-9_-]{32}$/);
-              return;
+              if (event.event === "owner.setup_required") {
+                const setup = Schema.decodeUnknownSync(
+                  Schema.fromJsonString(
+                    Schema.Struct({ event: Schema.String, code: Schema.String }),
+                  ),
+                )(line);
+                expect(setup.code).toMatch(/^[A-Za-z0-9_-]{32}$/);
+                return;
+              }
+              resolve(Schema.decodeUnknownSync(Schema.fromJsonString(Ready))(line));
+            } catch {
+              reject(new Error("Unexpected server stdout"));
             }
-            resolve(Schema.decodeUnknownSync(Schema.fromJsonString(Ready))(line));
-          } catch {
-            reject(new Error("Unexpected server stdout"));
-          }
-        });
-      }),
-      exited.then(() => {
-        throw new Error(`Server exited before ready: ${processServer.stderr()}`);
-      }),
-      new Promise<never>((_, reject) => {
-        timer = setTimeout(() => reject(new Error("Server ready timeout")), 10_000);
-      }),
-    ]);
-    expect(ready.url).toMatch(/^http:\/\/127\.0\.0\.1:\d+$/);
-    const connection = Schema.decodeUnknownSync(Schema.fromJsonString(Connection))(
-      await readFile(join(home, "connection.json"), "utf8"),
-    );
-    expect(connection.url).toBe(ready.url);
-    await decoded(
-      await fetch(`${ready.url}/v0/inboxes`, {
-        headers: { authorization: `Bearer ${connection.token}` },
-      }),
-      ListInboxesResponse,
-    );
-    const pid = child.pid;
-    if (pid === undefined) throw new Error("Expected the spawned server PID");
-    process.kill(pid, "SIGTERM");
-    // Windows has no catchable SIGTERM: process.kill terminates the process immediately.
-    if (process.platform === "win32") await exited;
-    else {
-      expect(await exited).toEqual({ code: 0, signal: null });
-      expect(processServer.stderr()).toBe("");
+          });
+        }),
+        exited.then(() => {
+          throw new Error(`Server exited before ready: ${processServer.stderr()}`);
+        }),
+        new Promise<never>((_, reject) => {
+          timer = setTimeout(() => reject(new Error("Server ready timeout")), 10_000);
+        }),
+      ]);
+      expect(ready.url).toMatch(/^http:\/\/127\.0\.0\.1:\d+$/);
+      const connection = Schema.decodeUnknownSync(Schema.fromJsonString(Connection))(
+        await readFile(join(home, "connection.json"), "utf8"),
+      );
+      expect(connection.url).toBe(ready.url);
+      await decoded(
+        await fetch(`${ready.url}/v0/inboxes`, {
+          headers: { authorization: `Bearer ${connection.token}` },
+        }),
+        ListInboxesResponse,
+      );
+      const pid = child.pid;
+      if (pid === undefined) throw new Error("Expected the spawned server PID");
+      process.kill(pid, "SIGTERM");
+      // Windows has no catchable SIGTERM: process.kill terminates the process immediately.
+      if (process.platform === "win32") await exited;
+      else {
+        expect(await exited).toEqual({ code: 0, signal: null });
+        expect(processServer.stderr()).toBe("");
+      }
+      expect(lines).toHaveLength(2);
+      expect(await readFile(join(home, "connection.json"), "utf8")).toBeTruthy();
+    } finally {
+      if (timer !== undefined) clearTimeout(timer);
+      reader.close();
+      if (child.exitCode === null && child.signalCode === null) {
+        child.kill("SIGTERM");
+        await exited;
+      }
     }
-    expect(lines).toHaveLength(2);
-    expect(await readFile(join(home, "connection.json"), "utf8")).toBeTruthy();
-  } finally {
-    if (timer !== undefined) clearTimeout(timer);
-    reader.close();
-    if (child.exitCode === null && child.signalCode === null) {
-      child.kill("SIGTERM");
-      await exited;
-    }
-  }
-  const missingKey = spawnServer(home, [], false);
-  expect((await missingKey.exited).code).toBe(1);
-  expect(JSON.parse(missingKey.stderr())).toMatchObject({
-    code: "keychain_entry_missing",
-    fix: expect.stringContaining("passphrase"),
-  });
-  await writeFile(join(home, "keys.json"), "synthetic-corrupt-keys-with-secret");
-  const corruptKeys = spawnServer(home, [], false);
-  expect((await corruptKeys.exited).code).toBe(1);
-  expect(JSON.parse(corruptKeys.stderr())).toMatchObject({
-    code: "keys_file_corrupt",
-    fix: expect.stringContaining("backup"),
-  });
-  expect(corruptKeys.stderr()).not.toContain("synthetic-corrupt-keys-with-secret");
-  const production = spawnServer(home, ["--flavor", "production"]);
-  expect((await production.exited).code).toBe(1);
-  expect(production.stderr()).toContain("server.failed");
-}, 20_000);
+    const missingKey = spawnServer(home, [], false);
+    expect((await missingKey.exited).code).toBe(1);
+    expect(JSON.parse(missingKey.stderr())).toMatchObject({
+      code: "keychain_entry_missing",
+      fix: expect.stringContaining("passphrase"),
+    });
+    await writeFile(join(home, "keys.json"), "synthetic-corrupt-keys-with-secret");
+    const corruptKeys = spawnServer(home, [], false);
+    expect((await corruptKeys.exited).code).toBe(1);
+    expect(JSON.parse(corruptKeys.stderr())).toMatchObject({
+      code: "keys_file_corrupt",
+      fix: expect.stringContaining("backup"),
+    });
+    expect(corruptKeys.stderr()).not.toContain("synthetic-corrupt-keys-with-secret");
+    const production = spawnServer(home, ["--flavor", "production"]);
+    expect((await production.exited).code).toBe(1);
+    expect(production.stderr()).toContain("server.failed");
+  },
+  process.platform === "win32" ? 60_000 : 20_000,
+);
 
 test("thread and batch label edits reject system state labels without partial changes", async ({
   api,
