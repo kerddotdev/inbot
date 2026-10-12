@@ -85,3 +85,7 @@ To verify published provenance, use `gh attestation verify <archive> --repo kerd
 From a checkout, run `powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\install.ps1`. See [README.md](README.md#install) for the download one-liner and version selection.
 
 Before installing or changing the shim, the installer runs the bundled Node and loads both native modules, opening only an in-memory SQLite database. If the native runtime cannot load, it stops with the official architecture-specific Microsoft Visual C++ v14 Redistributable URL and asks the user to install or repair it and restart if requested. The installer deliberately leaves the administrator-level runtime installation to the user. Existing installations and PATH remain unchanged on prerequisite failure. See [Microsoft's runtime downloads](https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist/) for supported versions.
+
+## Website deployment
+
+The release workflow redeploys the website through `.github/workflows/deploy-site.yml` after the `publish` job successfully publishes the release. To redeploy manually, run the **Deploy site** workflow from the GitHub Actions tab using **Run workflow** (`workflow_dispatch`).
