@@ -20,7 +20,7 @@ The first start prints two lines:
 {"event":"server.ready","url":"http://127.0.0.1:8025"}
 ```
 
-Keep the process running in this terminal.
+Keep the process running in this terminal for now. Step 8 shows how to run it as a background service instead.
 
 ## 2. Set your owner password
 
@@ -89,7 +89,18 @@ See [Connect Claude Code](/agents/claude-code) to install the Inbot skill and ve
 
 [Connect an agent](/agents/connect) covers other MCP clients, OAuth, the CLI and REST.
 
-## 8. Try it
+## 8. Keep it running
+
+Foreground `inbot serve` stops when you close the terminal. After you have set the owner password, stop it with Ctrl-C and install the per-user background service:
+
+```sh
+inbot service install
+inbot service status
+```
+
+The service starts at login with the same home on port 8025 (`--port` changes it). Setup is already complete, so it unlocks with the keychain and needs no setup code. Run `inbot open --browser` for a login link. Logs are in `<home>/logs/service.log` and `service.err.log`. See [Run as a background service](/operations/service#run-as-a-background-service) for the details.
+
+## 9. Try it
 
 Send an email from your personal address to `support@agents.example.com`, then ask your agent to check its inbox and reply. It will call `list_threads`, read the message, and call `reply_to_message`. Because the key uses the `approval` policy, the reply appears on the **Approvals** page instead of being sent. Approve it, and the message is queued. Committing the approval wakes the outbox immediately; inspect its state for provider acceptance and delivery.
 

@@ -14,7 +14,7 @@ No release has been published yet. The installers described here are implemented
 | Mail provider    | A Cloudflare account with a zone for your domain. See [Mail transport](/guides/transport).                                                |
 | Node.js          | Not needed for release archives, which bundle Node.js 24.21.0. Source builds need Node.js 24.21.0 or newer (below 25) and pnpm 10.24.0.   |
 
-Release archives are only smoke-tested on macOS and Linux. Windows archives are built and installable, but not yet smoke-tested.
+Release archives are only smoke-tested on macOS and Linux. Windows archives are built and installable, but not yet smoke-tested. The project's CI runs its full check on a Windows 11 ARM64 runner; that is a synthetic test run, not evidence of real-world Windows use.
 
 ## macOS and Linux
 
@@ -31,7 +31,7 @@ The installer needs `curl`, `tar`, and `sha256sum` or `shasum`. It:
 3. Refuses to continue unless the archive's SHA-256 matches its line in `SHA256SUMS`, every entry stays inside the archive's `inbot/` folder, and the launcher, runtime and CLI are present.
 4. Extracts into `~/.local/share/inbot/app/<version>` and writes an `~/.local/bin/inbot` shim.
 
-It does not change your `PATH`. If `~/.local/bin` is not on it, the installer prints the directory to add. It never installs a background service.
+It does not change your `PATH`. If `~/.local/bin` is not on it, the installer prints the directory to add. The installer never installs a background service; [`inbot service install`](/operations/service#run-as-a-background-service) does that later, on request.
 
 | Option                 | Environment variable     | Default                  |
 | ---------------------- | ------------------------ | ------------------------ |
@@ -50,7 +50,7 @@ Paths must be absolute. `INBOT_RELEASE_BASE_URL` requires `--version` and accept
 .\install.ps1 -Version 0.1.0
 ```
 
-The PowerShell installer performs the same checksum and archive checks on `inbot-<version>-win32-x64.zip`. It installs under `%LOCALAPPDATA%\Programs\inbot\app\<version>`, writes `inbot.cmd` to `%LOCALAPPDATA%\Programs\inbot\bin`, and adds that folder to your user `PATH`. It needs no administrator rights. `-InstallRoot`, `-BinDir` and `-ReleaseBaseUrl` match the Unix options.
+The PowerShell installer performs the same checksum and archive checks on `inbot-<version>-win32-x64.zip`. It installs under `%LOCALAPPDATA%\Programs\inbot\app\<version>`, writes `inbot.cmd` to `%LOCALAPPDATA%\Programs\inbot\bin`, and adds that folder to your user `PATH`. It needs no administrator rights. It does not register a background service; `inbot service install` can create a Scheduled Task that runs at logon. `-InstallRoot`, `-BinDir` and `-ReleaseBaseUrl` match the Unix options.
 
 ## What gets installed
 
@@ -71,13 +71,13 @@ Verify the installed version with `inbot --version` (or `inbot version`); neithe
 
 ## Upgrade, downgrade and remove
 
-- **Upgrade:** stop the running `inbot serve`, then run the installer again. Your home directory and database are not touched.
+- **Upgrade:** stop the running `inbot serve` (or the background service), then run the installer again. Your home directory and database are not touched. If you use the background service, run `inbot service install` again afterward, because the service definition pins the previous package's executable paths.
 - **Downgrade:** previous versions stay under `app/<version>`. Run the installer with `--version` (or `-Version`) to point the shim back at one.
 - **Repeat installs** of the same version and checksum reuse the installed archive and rewrite the shim. A different archive under an existing version number is refused.
-- **Remove:** delete the install root and the shim. Your mail lives in the home directory (`~/.inbot`), which you remove separately, together with its keychain entry, only if you want the data gone. See [Running the service](/operations/service#back-up-your-home) before deleting anything.
+- **Remove:** run `inbot service uninstall` if you installed the background service, then delete the install root and the shim. Your mail lives in the home directory (`~/.inbot`), which you remove separately, together with its keychain entry, only if you want the data gone. See [Running the service](/operations/service#back-up-your-home) before deleting anything.
 
 There is no automatic update and no `inbot update` command.
 
 ## Next
 
-Continue with the [quickstart](/get-started/quickstart).
+Continue with the [quickstart](/get-started/quickstart). To keep Inbot running without a terminal, see [Run as a background service](/operations/service#run-as-a-background-service).

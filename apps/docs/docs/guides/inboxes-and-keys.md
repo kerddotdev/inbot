@@ -11,10 +11,11 @@ An inbox is one address. Its `inbox_id` is the address itself, such as `support@
 inbot inboxes create --username support --domain agents.example.com --display-name "Support"
 inbot inboxes list
 inbot inboxes get support@agents.example.com
+inbot inboxes update support@agents.example.com --display-name "Support" --status paused
 inbot inboxes delete support@agents.example.com
 ```
 
-In Mail, use **New inbox** in the sidebar to create an address and **Manage inbox** to edit the display name, pause, resume or delete it. The CLI supports create, list, get and delete; it has no inbox update command. Use the web app, REST `PATCH /v0/inboxes/{inbox_id}`, or MCP `update_inbox` for edits.
+In Mail, use **New inbox** in the sidebar to create an address and **Manage inbox** to edit the display name, pause, resume or delete it. The CLI supports create, list, search, get, update and delete. `inbot inboxes update` takes `--display-name`, `--status active|paused` and `--metadata`; use `--data` with JSON to remove metadata keys. REST `PATCH /v0/inboxes/{inbox_id}` and MCP `update_inbox` do the same.
 
 | Field          | Rules                                                                                                                                                                          |
 | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -43,7 +44,7 @@ inbot api-keys create --name triage --inbox-id support@agents.example.com \
 
 The secret (`inbot_<id>_<secret>`) is returned once. The CLI prints it only with `--show-secret`, and the web app shows it once after creation. Inbot stores only a hash, so a lost key cannot be recovered: revoke it and create a new one.
 
-Edit a key in the web app, with `PATCH /v0/api-keys/{api_key_id}`, or with `inbot api-keys update <api_key_id> --name triage --send-policy approval`. Editing changes its name, permissions or send policy without rotating the secret. Omitted fields stay unchanged; a supplied permissions object replaces the existing set.
+Read one key's metadata with `inbot api-keys get <api_key_id>`; it never returns the secret. Edit a key in the web app, with `PATCH /v0/api-keys/{api_key_id}`, or with `inbot api-keys update <api_key_id> --name triage --send-policy approval`. Editing changes its name, permissions or send policy without rotating the secret. Omitted fields stay unchanged; a supplied permissions object replaces the existing set.
 
 ### Choose the inbox scope
 

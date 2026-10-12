@@ -32,6 +32,7 @@ Events are written to an encrypted, durable log in the same transaction as the s
 | `message.failed`                                                                             | `failure`: identifiers, `reason`                                                                   | `message_read`                                 |
 | `draft.created`, `draft.approval_required`, `draft.approved`, `draft.rejected`, `draft.sent` | `draft`: `inbox_id`, `draft_id`, `timestamp`, and `message_id`, `thread_id` once sent. No content. | `draft_read`                                   |
 | `domain.verified`                                                                            | `domain`                                                                                           | Owner only                                     |
+| `inbound.quarantined`, `inbound.released`, `inbound.deleted`                                | `quarantine`: `quarantine_id`, `reason_code`, `timestamp`. No content.                             | Owner only                                     |
 | `oauth.authorized`, `oauth.revoked`, `oauth.tokens_revoked`                                  | `oauth`: `grant_id`, `client_id`, `timestamp`                                                      | Owner only                                     |
 
 Identifiers are `inbox_id`, `thread_id` and `message_id`.
@@ -39,6 +40,7 @@ Identifiers are `inbox_id`, `thread_id` and `message_id`.
 - A `message.received` event uses the hidden variant if the message has a hidden label, checked in the order blocked, spam, unauthenticated.
 - `message.failed` covers send failures, recipients refused by lists when the outbox rechecks them, and owner resolution of `send_unknown` (`owner_confirmed_not_sent`). Owner resolution as sent emits `message.sent` with `owner_confirmed_sent`.
 - `message.failed` also covers a provider failure report, with `failure.reason: "delivery_failed"`. Bounce and complaint payloads currently use `"unknown"` for both `type` and `sub_type`.
+- `inbound.released` and `inbound.deleted` follow the observed cleanup of the Cloudflare object. Quarantine events are visible to the owner credential only; agent keys and OAuth tokens never receive them.
 - Deferred delivery, list changes and inbound list rejections produce no event.
 
 Every event is filtered by the consumer's current inbox scope and permissions at delivery time.

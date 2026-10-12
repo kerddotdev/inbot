@@ -188,6 +188,8 @@ Owner only. See [Domains](/guides/domains).
 
 ## Owner
 
+Quarantine items have `quarantine_id`, `source_kind` (`buffer_object` or `queue_message`), `reason_code`, `first_seen`, `size`, `inbox_id` and `attempts` (nullable when unknown), `last_attempt_at`, and `status`: `quarantined`, `release_pending` or `delete_pending`. Listing never decrypts mail. Quarantine routes need the local owner bearer or an owner browser session with CSRF on `POST` and `DELETE`. Agent keys and OAuth tokens receive `403`, and the tunnel blocks them. Queue items hold metadata only, so retrying one returns `not_supported`. An unknown ID returns `not_found`; missing or mismatched buffer configuration, or retrying an item whose deletion is pending, returns `action_required`; storage or provider failures return `service_unavailable`. Retry `released` means processing and cleanup finished; the receive lists still apply and the mail may have been rejected.
+
 | Route                                                                          | Access            | Notes                                                                                |
 | ------------------------------------------------------------------------------ | ----------------- | ------------------------------------------------------------------------------------ |
 | `GET /owner/status`                                                            | Public            | `{ setup_required, authenticated, locked }`. With a session, returns `X-Inbot-CSRF`. |
@@ -204,6 +206,9 @@ Owner only. See [Domains](/guides/domains).
 | `GET /owner/oauth/clients`                                                     | Owner             | OAuth grants                                                                         |
 | `DELETE /owner/oauth/grants/{grant_id}`                                        | Owner             |                                                                                      |
 | `POST /owner/oauth/clients/purge`                                              | Owner             | `{ deleted_clients }`                                                                |
+| `GET /owner/quarantine`                                                        | Owner, local only | Quarantine metadata. Query `limit` (1 to 100, default 20) and `page_token`. Returns `items`, `count`, `limit` and `next_page_token`. |
+| `POST /owner/quarantine/{quarantine_id}/retry`                                 | Owner, local only | Returns `{ "status": "released" }`, or `{ "status": "quarantined", "item" }` after another permanent failure |
+| `DELETE /owner/quarantine/{quarantine_id}`                                     | Owner, local only | Permanently deletes the ciphertext and the record. Repeating it returns 200. |
 | `GET /owner/lists/rejections`                                                  | Owner             | Rejected inbound metadata; `inbox_id` filter                                         |
 | `DELETE /owner/lists/rejections/{rejection_id}`                                | Owner             |                                                                                      |
 

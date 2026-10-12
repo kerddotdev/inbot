@@ -38,7 +38,7 @@ While your machine is off, mail waits in R2 as ciphertext. It is fetched when th
 
 **Threading.** `In-Reply-To` is resolved first, then `References` from newest to oldest, within the same inbox. Subjects never join threads, and a parent that arrives late does not merge existing threads.
 
-**Failures.** Temporary errors are retried with backoff up to one hour. Objects that can never be processed, such as corrupt ciphertext or invalid MIME, are quarantined: the ciphertext stays in R2 and the database records only its key, a reason code and when it was first seen. There is no screen or command to review or release quarantined objects yet.
+**Failures.** Temporary errors are retried with backoff up to one hour. Objects that can never be processed, such as corrupt ciphertext or invalid MIME, are quarantined: the ciphertext stays in R2 and the database records only its key, a reason code and when it was first seen. You can review, retry or permanently delete them in **Settings > Quarantine** or with `inbot quarantine`; see [the owner app](/guides/owner-app#quarantine).
 
 ## Outbound
 

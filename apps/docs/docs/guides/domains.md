@@ -3,7 +3,26 @@ title: Domains
 description: Register a mail subdomain, review the plan, provision Cloudflare resources, verify delivery end to end, and tear it all down again.
 ---
 
-A domain is the subdomain your agents' addresses live on, such as `agents.example.com`. Inbot provisions everything Cloudflare needs for it, then proves that mail actually arrives before calling it verified. Domains are owner-only: use the **Domains** page or `/v0/domains`. There is no CLI command or MCP tool for them.
+A domain is the subdomain your agents' addresses live on, such as `agents.example.com`. Inbot provisions everything Cloudflare needs for it, then proves that mail actually arrives before calling it verified. Domains are owner-only: use the **Domains** page, `inbot domains` on the machine that runs Inbot, or `/v0/domains`. There is no MCP tool for them.
+
+## From the CLI
+
+Every domain step has a local owner command:
+
+```sh
+inbot domains create --domain agents.example.com
+inbot domains list
+inbot domains plan DOMAIN_ID
+inbot domains zone-file DOMAIN_ID > agents.zone
+inbot domains apply DOMAIN_ID
+inbot domains verify DOMAIN_ID
+inbot domains get DOMAIN_ID
+inbot domains update DOMAIN_ID --inbound-enabled
+inbot domains teardown DOMAIN_ID
+inbot domains delete DOMAIN_ID
+```
+
+`create` only registers the domain. `plan` previews the provisioning, `apply` provisions it and `teardown` removes the recorded resources. `verify` starts a check and returns nothing, so run `domains get` afterward to see whether the domain is `VERIFYING`, `VERIFIED` or needs action. `zone-file` prints the BIND text; with `--json` it is a JSON string. The commands call the same service methods as the web app and apply the same limits. See the [CLI reference](/reference/cli#domains).
 
 ## Before you start
 

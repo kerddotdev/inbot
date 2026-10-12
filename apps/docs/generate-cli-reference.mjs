@@ -40,6 +40,10 @@ const order = [
   "events",
   "oauth",
   "remote",
+  "domains",
+  "transport",
+  "quarantine",
+  "service",
 ];
 const groups = new Map(order.map((group) => [group, []]));
 for (const command of commands) {

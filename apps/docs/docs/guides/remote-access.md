@@ -52,7 +52,7 @@ The tunnel connects to a second loopback listener that always enforces this poli
 
 | Blocked over the tunnel, even with an owner browser session                                  |
 | -------------------------------------------------------------------------------------------- |
-| `/v0/owner/setup`, login links, transport, remote access, OAuth management and rejected mail |
+| `/v0/owner/setup`, login links, transport, remote access, OAuth management, rejected mail and quarantine |
 | `/v0/domains` and `/v0/api-keys`, including inbox-scoped API key routes                      |
 | Resolving `send_unknown` messages                                                            |
 | `/mcp/*` subpaths, and any other `/oauth` or `/.well-known` path                             |

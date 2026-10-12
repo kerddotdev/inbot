@@ -41,9 +41,22 @@ Verification confirms that the token is active and finds its account:
 
 Verification does not prove the token has every permission or that its resource scopes include your zone. Cloudflare checks each call when it happens, and a refused call becomes a `missing_permission` error that names the missing permission and asks you to save a replacement token. If verification fails, the previous configuration stays in place.
 
-## Configure it with the API
+## Configure it with the CLI
 
-The transport is owner-only. There is no CLI command and no MCP tool for it.
+The transport is owner-only and there is no MCP tool for it. On the machine that runs Inbot, the CLI acts as the owner. The token is never accepted as a command argument. Provide it on stdin or in the environment:
+
+```sh
+inbot transport status
+# Read the token from a password manager or a file descriptor:
+inbot transport configure --token-stdin
+# Or from the environment:
+INBOT_CLOUDFLARE_API_TOKEN=... inbot transport configure --account-id ACCOUNT_ID
+inbot transport clear
+```
+
+`--account-id` is optional, as in the web app. `configure` verifies the token and then saves it; there is no separate verify command. If the token reaches several accounts it returns `action_required` (exit 6) listing them. A failed verification keeps the previous configuration. `status` never returns the token. `clear` follows the rules in [Clear it](#clear-it).
+
+## Configure it with the API
 
 ```sh
 TOKEN=$(jq -r .token ~/.inbot/connection.json)

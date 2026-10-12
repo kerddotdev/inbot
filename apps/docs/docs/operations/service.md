@@ -1,9 +1,9 @@
 ---
 title: Running the service
-description: Start and stop inbot serve, understand startup output and unlock, keep it running, back up the home, and know what runs in the background.
+description: Start and stop inbot serve, install it as a per-user background service, understand startup output and unlock, read logs, back up the home, and know what runs in the background.
 ---
 
-`inbot serve` is the whole service: one foreground process that unlocks the database, serves REST, MCP and the web app on a loopback port, and runs the mail loops. There is no daemon mode and no built-in service installation yet.
+`inbot serve` is the whole service: one foreground process that unlocks the database, serves REST, MCP and the web app on a loopback port, and runs the mail loops. To run it without a terminal, [install it as a background service](#run-as-a-background-service).
 
 ## Start
 
@@ -49,9 +49,87 @@ The internal key manager can wrap the key with a passphrase, but `serve` has no 
 
 Press Ctrl-C or send SIGTERM. The service stops its background loops before closing the database, gives in-flight HTTP requests 5 seconds, clears the key from memory, and stops the remote access connector if one is running. Kill only the process ID you started; never match processes by name.
 
-## Keep it running
+## Run as a background service
 
-There is no `service install` yet. To keep Inbot running, start `inbot serve` from your own supervisor, such as a launchd agent, a systemd user unit or a terminal multiplexer. Inbound mail waits safely in Cloudflare while the service is down and is fetched when it starts again; see [Architecture](/concepts/architecture#inbound).
+`inbot service` registers `inbot serve` with your operating system's per-user service manager, so Inbot starts at login and restarts after a failure. Mail keeps arriving while the service is down, because it waits in Cloudflare and is fetched when the service starts again; see [Architecture](/concepts/architecture#inbound).
+
+| Platform | Manager                                           | Default name     | Definition                                 |
+| -------- | ------------------------------------------------- | ---------------- | ------------------------------------------ |
+| macOS    | LaunchAgent (`launchctl bootstrap` and `bootout`) | `dev.kerd.inbot` | `~/Library/LaunchAgents/<name>.plist`      |
+| Linux    | systemd user unit (`systemctl --user`)            | `inbot.service`  | `~/.config/systemd/user/<name>`            |
+| Windows  | Scheduled Task that runs at logon (`schtasks`)    | `Inbot`          | `~/AppData/Local/Inbot/services/<name>.xml` |
+
+The commands manage your own user account directly. They need no administrator rights, do not use REST or MCP, and do not change system-wide configuration or enable lingering. If `INBOT_URL` or `INBOT_API_KEY` is set, they fail with `missing_permission` (exit 4), because service management is a local owner operation.
+
+### Install
+
+Initialize and finish owner setup in the foreground first, then stop that process and install:
+
+```sh
+inbot serve --init --port 8025
+# Open http://127.0.0.1:8025, enter the setup code and choose a password.
+# Stop the foreground server with Ctrl-C, then:
+inbot service install
+```
+
+Installing requires:
+
+- A release package. A source checkout is refused with `not_supported` (exit 9), as are unsupported platforms.
+- A home that was already initialized with the OS keychain. A missing, corrupt or passphrase-only home returns `action_required` (exit 6). Install never initializes a home and never touches keychain items.
+
+| Option                          | Meaning                                                                       |
+| ------------------------------- | ----------------------------------------------------------------------------- |
+| `--home <directory>`            | Home to run. Falls back to `INBOT_HOME`, then `~/.inbot`.                     |
+| `--flavor development\|production` | Selects the default home when none is given. Packaged commands default to production. |
+| `--port <1-65535>`              | Install only. The fixed port the service listens on. Defaults to `8025`.      |
+| `--json`                        | Print the result as JSON.                                                     |
+
+The installed service always runs the production flavor with the resolved absolute home, the installing package's absolute Node.js and CLI paths, and its bundled web app. Installing again stops the existing unit, rewrites it and requests a fresh start. The definition contains no credentials or secrets.
+
+Install reports that a start was requested, not that Inbot is running. Check [status](#status) until HTTP health answers.
+
+### Status
+
+```sh
+inbot service status
+inbot service status --json
+```
+
+Status reports two things separately:
+
+- The service manager's view: `installed`, `registered`, `running` and `state`. When the manager cannot be observed, `running` and `registered` are `null` and `state` is `unknown`. Unknown is never reported as running.
+- HTTP health (`http_healthy`): whether `GET /v0/owner/status` answers on the installed `port` with the expected shape. A healthy endpoint can belong to a foreground `inbot serve` rather than the managed service, so it does not prove the service is running.
+
+The output also includes the home, the unit name and path, and the log paths.
+
+### Uninstall
+
+```sh
+inbot service uninstall
+```
+
+Uninstall stops the service and removes only its definition (and, on Windows, its helper script). The home, database, mail, logs and keychain entries stay.
+
+### Logs and first sign-in
+
+The service appends stdout and stderr to `<home>/logs/service.log` and `<home>/logs/service.err.log`. On Unix the files are mode `0600` and the directory `0700`. They carry the same JSON lines as a foreground run.
+
+If owner setup is still pending when the service starts, the one-time setup code is in `service.log`. Once HTTP answers, run `inbot open --browser` with the same home to get a single-use login link.
+
+### Several homes and upgrades
+
+Only the default production home gets the plain unit name. Any other home gets a name with the first 16 hex characters of the SHA-256 of its absolute path appended, so several homes can be installed side by side. Each needs its own fixed port. Pass the same `--home` or `--flavor` to install, status and uninstall.
+
+The unit pins the absolute paths of the Node.js runtime and CLI that you installed from. After [upgrading](/get-started/install#upgrade-downgrade-and-remove), run `inbot service install` again before removing the old package version.
+
+### Service errors
+
+| Code                  | Exit | Cause                                                                                       |
+| --------------------- | ---- | ------------------------------------------------------------------------------------------- |
+| `missing_permission`  | 4    | `INBOT_URL` or `INBOT_API_KEY` is set.                                                      |
+| `action_required`     | 6    | The home is missing, not initialized, corrupt, or does not use keychain unlock.             |
+| `not_supported`       | 9    | Source checkout or unsupported platform.                                                    |
+| `service_unavailable` | 10   | The service manager failed. Linux needs a working user systemd session and Secret Service at login. |
 
 ## Check health
 
@@ -65,7 +143,7 @@ curl -s http://127.0.0.1:8025/v0/owner/status
 
 ## Logs
 
-There is no log file and there are no log levels. stdout and stderr carry only the JSON lines above and rare internal error codes. Message content, credentials, keys and webhook payloads are never logged. The remote access connector's own output is discarded.
+There are no log levels. A foreground run writes only the JSON lines above and rare internal error codes to stdout and stderr; the background service appends the same output to [its log files](#logs-and-first-sign-in). Message content, credentials, keys and webhook payloads are never logged. The remote access connector's own output is discarded.
 
 ## Background loops
 

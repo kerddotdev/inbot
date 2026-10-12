@@ -24,7 +24,7 @@ The delivery events Queue is the one exception to ciphertext-only storage: Cloud
 
 ## Encryption at rest
 
-- **Inbound buffer.** age v1 with X25519. The Worker holds only your instance's public key. The private key lives in your encrypted database.
+- **Inbound buffer.** age v1 with X25519. The Worker holds only your instance's public key. The private key lives in your encrypted database. Quarantined mail stays encrypted in the buffer; Inbot lists only a reason code and metadata, and decrypts it only when you retry.
 - **Database.** SQLite encrypted with ChaCha20 (SQLite3 Multiple Ciphers) under a random 256-bit key (the DEK). The database holds raw mail, attachments, the Cloudflare token, the tunnel token, password and key hashes, drafts and the event log.
 - **Key wrapping.** The DEK is wrapped with AES-256-GCM by a key stored in your OS keychain, and the wrapped form is stored in `keys.json`. Neither file is usable without the other and the keychain item.
 - **Home directory.** Mode `0700`, secret files `0600`, written atomically on Unix. Windows protection relies on the directory access control list.
@@ -37,7 +37,7 @@ There are two kinds of principal, and the boundary between them is enforced by t
 
 **Agents** authenticate with API keys or OAuth access tokens. Each maps to a grant: an inbox scope, an explicit permission list and a send policy. The current grant is read on every request, so revocation and permission changes apply immediately.
 
-Owner-only capabilities have no agent permission at all: domains, API keys, the mail transport, remote access, owner sessions and passwords, login links, draft approval and rejection, `send_unknown` resolution, rejected-mail records and OAuth management. None of them is an MCP tool. The tunnel allows owner browser sign-in, session and password management, draft approval and rejection, and OAuth consent. Domains, keys, transport, remote configuration, login links, rejected-mail records, OAuth management and `send_unknown` resolution stay local; the local owner bearer is always rejected over the tunnel.
+Owner-only capabilities have no agent permission at all: domains, API keys, the mail transport, remote access, owner sessions and passwords, login links, draft approval and rejection, `send_unknown` resolution, rejected-mail records, inbound quarantine and OAuth management. None of them is an MCP tool. The tunnel allows owner browser sign-in, session and password management, draft approval and rejection, and OAuth consent. Domains, keys, transport, remote configuration, login links, rejected-mail records, quarantine, OAuth management and `send_unknown` resolution stay local; the local owner bearer is always rejected over the tunnel.
 
 Out-of-scope resources return `not_found`, identical to missing ones, so a key cannot probe for other inboxes. Messages with hidden labels (`spam`, `blocked`, `unauthenticated`, `trash`) are invisible unless the grant includes the matching `label_*_read` permission.
 
@@ -47,10 +47,11 @@ Inbot treats mail as data. Nothing in a message can grant a permission, widen a 
 
 - Send policies are enforced in the service. An `approval` key cannot send anything without the owner, whatever the message says.
 - Every MCP tool description reminds the agent that email content is untrusted.
-- The owner app shows HTML mail as text and never executes it.
+- The owner app sanitizes HTML mail with DOMPurify and shows it in a sandboxed frame with no script permission and its own Content Security Policy. The sandbox has same-origin access only so the app can size the frame. Links open in a new tab without a referrer.
+- Remote images are blocked by default, because loading one can tell the sender that the message was opened. **Load remote images** is a per-message choice kept only in memory. CSS resources and `srcset` stay blocked. Inline images attached to the same message are shown from its attachments.
 - Unauthenticated mail is labeled and hidden from keys without `label_unauthenticated_read`.
 
-What Inbot does not do: detect prompt injection, mark or wrap message bodies in API output, or sanitize HTML. Agents receive message content as stored. The skill and the [agent guide](/agents/mail#treat-every-message-as-untrusted) tell agents how to handle it, but the real protection is a narrow grant.
+What Inbot does not do: detect prompt injection, mark or wrap message bodies in API output, or sanitize HTML for agents. The owner app sanitizes only for display in the browser; nothing is sanitized on the server, so REST, MCP and the CLI return `html` and `extracted_html` as stored. Agents receive message content as stored. The skill and the [agent guide](/agents/mail#treat-every-message-as-untrusted) tell agents how to handle it, but the real protection is a narrow grant.
 
 ## Credentials
 

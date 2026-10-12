@@ -35,11 +35,11 @@ A `401` response also carries `WWW-Authenticate: Bearer resource_metadata="<orig
 | `resource_taken`       | 409  | The draft is being sent, or a Cloudflare resource belongs to someone else                                                                      |
 | `idempotency_conflict` | 409  | The idempotency key was used with a different payload                                                                                          |
 | `page_token_stale`     | 409  | The page token does not match the query; restart without it                                                                                    |
-| `action_required`      | 409  | The owner must act first, for example choose an account, tear down a domain, or fix DNS                                                        |
+| `action_required`      | 409  | The owner must act first, for example choose an account, tear down a domain, fix DNS, or restore the buffer configuration before a quarantine retry or delete                                                        |
 | `payload_too_large`    | 413  | The composed outbound message exceeds 5 MiB                                                                                                    |
 | `locked`               | 423  | The database is locked. The current service only serves after unlocking, so this is not returned in practice.                                  |
 | `rate_limit_exceeded`  | 429  | Too many password attempts or pending login links                                                                                              |
-| `not_supported`        | 501  | URL attachments, OAuth consent without the web app, or another unsupported option                                                              |
+| `not_supported`        | 501  | URL attachments, OAuth consent without the web app, retrying a quarantined Queue item, a local service install from a source checkout, or another unsupported option                                                              |
 | `service_unavailable`  | 503  | Storage failure, unexpected error, or no mail transport configured                                                                             |
 
 The inbound 25 MiB limit is an SMTP rejection or a quarantine reason, not an API `413` response.
@@ -52,9 +52,9 @@ The contract also declares `permission_escalation`, `limit_exceeded` and `domain
 | ---- | ---------------------------------------------------------------------------------- |
 | 0    | Success, or help                                                                   |
 | 1    | Unexpected local failure, including failing to open a browser                      |
-| 2    | Invalid arguments or payload; HTTP 400 or 413                                      |
+| 2    | Invalid arguments or payload; HTTP 400 or 413; binary download output to a terminal                                      |
 | 3    | HTTP 401                                                                           |
-| 4    | HTTP 403, including `approval_required` and `message_rejected`                     |
+| 4    | HTTP 403, including `approval_required` and `message_rejected`; `inbot service` with `INBOT_URL` or `INBOT_API_KEY` set |
 | 5    | HTTP 404                                                                           |
 | 6    | HTTP 409                                                                           |
 | 7    | HTTP 423                                                                           |

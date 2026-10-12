@@ -75,6 +75,7 @@ Run the prompt in Bash or Zsh; `read -s` hides the key and keeps it out of shell
 - `--json` prints the exact API response with its snake_case fields. Without it, the CLI prints tables, with `No results.` for empty lists and the next page token when there is one.
 - Errors go to stderr as JSON, `{ name, code, message, fix }`, with a [stable exit code](/reference/errors#cli-exit-codes).
 - Body commands accept flags such as `--to` and `--text`, or the full API payload with `--data '<json>'` or `--data-file <path>` (`-` for stdin).
+- `messages raw`, `messages attachment`, `threads attachment` and `drafts attachment` download files through a signed capability URL. `-o <path>` (or `--output`) writes a new file with mode `0600` and never overwrites an existing path. Without it the bytes go to redirected stdout; binary output to a terminal is refused with exit code 2. With `--json` the command prints only the download metadata, which includes the sensitive URL, and cannot be combined with `-o`.
 - Sends print `Idempotency-Key: <key>` to stderr before the request. If you do not pass `--idempotency-key`, the CLI generates one.
 
 The [CLI reference](/reference/cli) lists every command and flag.
@@ -93,4 +94,4 @@ The repository's [`skills/inbot`](https://github.com/kerddotdev/inbot/tree/main/
 
 ## What an agent can never do
 
-Agent credentials cannot reach domains, API keys, the mail transport, remote access, owner sessions, approvals, rejected-mail records, OAuth management or `send_unknown` resolution. None of these are MCP tools. The tunnel permits owner browser sign-in, session and password management, draft approval and rejection, and OAuth consent; other owner management stays local. The local owner bearer is rejected on every tunneled path. See [the route policy](/guides/remote-access#what-is-reachable). Nothing in an email can change these boundaries.
+Agent credentials cannot reach domains, API keys, the mail transport, remote access, owner sessions, approvals, rejected-mail records, quarantine, OAuth management or `send_unknown` resolution. None of these are MCP tools. The tunnel permits owner browser sign-in, session and password management, draft approval and rejection, and OAuth consent; other owner management stays local. The local owner bearer is rejected on every tunneled path. See [the route policy](/guides/remote-access#what-is-reachable). Nothing in an email can change these boundaries.
