@@ -27,6 +27,13 @@ interpreting metadata as bytes, and preserves zone-file text. Owner browser
 authentication and OAuth protocol/consent flows remain outside resource commands;
 CLI additions change no schemas, permissions, events, or REST paths.
 
+Message `html` is the original untrusted body; `extracted_html` is the extracted
+reply body and may deliberately be empty. Consumers must preserve that distinction.
+The owner UI sanitizes only its HTML presentation; REST, MCP and CLI retain both
+raw fields. Attachment `content_id` and `content_type` already support same-message
+CID resolution without a wire-format change. Signed download and scope checks
+apply to inline previews just as they do to attachment downloads.
+
 `Draft` and `DraftItem` add optional `pending_approval`, `created_by`,
 `approval_state`, and `rejection_reason` fields. They retain the `scheduled`, `sending`, and `failed` send statuses. Creating a draft
 does not authorize sending it. Reply and forward context is set on creation;
