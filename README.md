@@ -52,7 +52,7 @@ powershell -ExecutionPolicy Bypass -c "irm https://inbot.kerd.dev/install.ps1 | 
 
 Archives include Node.js and the owner app. Installers verify checksums and install without administrator privileges; background service setup is a separate step. On Unix, add `~/.local/bin` to your PATH if requested. On Windows, open a new terminal after installation; the execution-policy override applies only to the installer process.
 
-macOS is the most validated platform. Archives cover Apple Silicon and Intel Macs, Linux x64 and ARM64 with glibc, and Windows 11 x64 and ARM64. Linux needs a working Secret Service credential store; Alpine/musl is unsupported. Windows needs the Microsoft Visual C++ v14 Redistributable. Linux and Windows have synthetic CI coverage, including emulated x64 smoke tests; macOS Intel has no dedicated runtime smoke job.
+macOS is the most validated platform. Archives cover Apple Silicon and Intel Macs, Linux x64 and ARM64 with glibc, and Windows 11 x64 and ARM64. Linux needs a working Secret Service credential store; Alpine/musl is unsupported. Windows needs the Microsoft Visual C++ v14 Redistributable. Linux and Windows have synthetic CI coverage, including an emulated Windows x64 smoke test; Linux x64 and macOS Intel archives have no dedicated runtime smoke job.
 
 See the [install guide](https://inbot.kerd.dev/docs/get-started/install) for platform details, release verification, updates and removal. Updates are manual.
 
