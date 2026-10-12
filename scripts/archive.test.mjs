@@ -23,7 +23,7 @@ test(
     assert.ok(archives.length > 0);
     for (const archive of archives) {
       const target = archive.match(
-        /(darwin-arm64|darwin-x64|linux-x64|linux-arm64|win32-x64)\.(tar\.gz|zip)$/,
+        /(darwin-arm64|darwin-x64|linux-x64|linux-arm64|win32-x64|win32-arm64)\.(tar\.gz|zip)$/,
       )?.[1];
       assert.ok(target, `Unexpected archive: ${archive}`);
       const checksum = sums.split("\n").filter((line) => line.endsWith(`  ${archive}`));
@@ -96,7 +96,7 @@ function assertArchitecture(bytes, target) {
     assert.equal(bytes.subarray(0, 2).toString(), "MZ");
     const header = bytes.readUInt32LE(0x3c);
     assert.equal(bytes.readUInt32LE(header), 0x4550);
-    assert.equal(bytes.readUInt16LE(header + 4), 0x8664);
+    assert.equal(bytes.readUInt16LE(header + 4), target.endsWith("arm64") ? 0xaa64 : 0x8664);
   }
 }
 

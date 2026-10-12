@@ -3,13 +3,16 @@ param(
     [string]$Version,
     [string]$InstallRoot = $env:INBOT_INSTALL_ROOT,
     [string]$BinDir = $env:INBOT_BIN_DIR,
-    [string]$ReleaseBaseUrl = $env:INBOT_RELEASE_BASE_URL
+    [string]$ReleaseBaseUrl = $env:INBOT_RELEASE_BASE_URL,
+    [switch]$NoPathUpdate
 )
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 if ($env:OS -ne 'Windows_NT') { throw 'This installer requires Windows.' }
-if ([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture -ne 'X64') {
-    throw 'The Windows release supports x64 only.'
+$Architecture = switch ([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture) {
+    'X64' { 'x64' }
+    'Arm64' { 'arm64' }
+    default { throw 'The Windows release requires x64 or ARM64 Windows.' }
 }
 if (-not $InstallRoot) { $InstallRoot = Join-Path $env:LOCALAPPDATA 'Programs\inbot' }
 if (-not $BinDir) { $BinDir = Join-Path $env:LOCALAPPDATA 'Programs\inbot\bin' }
@@ -31,7 +34,7 @@ if (-not $ReleaseBaseUrl) {
 if ($ReleaseBaseUrl -notmatch '^(https://|http://(127\.0\.0\.1|localhost):|file://)') {
     throw 'Release URL must use HTTPS or an explicit local fixture.'
 }
-$Archive = "inbot-$Version-win32-x64.zip"
+$Archive = "inbot-$Version-win32-$Architecture.zip"
 $Work = Join-Path ([System.IO.Path]::GetTempPath()) ([System.IO.Path]::GetRandomFileName())
 $Staging = $null
 New-Item -ItemType Directory -Path $Work | Out-Null
@@ -97,14 +100,20 @@ exit /b %INBOT_EXIT_CODE%
 "@
     [System.IO.File]::WriteAllText($ShimTemp, ($ShimContent -replace "`r?`n", "`r`n"), [System.Text.UTF8Encoding]::new($false))
     Move-Item -LiteralPath $ShimTemp -Destination $Shim -Force
-    $UserPath = [Environment]::GetEnvironmentVariable('Path', 'User')
-    if ($BinDir -notin ($UserPath -split ';')) {
-        [Environment]::SetEnvironmentVariable('Path', (($UserPath, $BinDir | Where-Object { $_ }) -join ';'), 'User')
+    if (-not $NoPathUpdate) {
+        $UserPath = [Environment]::GetEnvironmentVariable('Path', 'User')
+        if ($BinDir -notin ($UserPath -split ';')) {
+            [Environment]::SetEnvironmentVariable('Path', (($UserPath, $BinDir | Where-Object { $_ }) -join ';'), 'User')
+        }
+        if ($BinDir -notin ($env:Path -split ';')) { $env:Path += ";$BinDir" }
     }
-    if ($BinDir -notin ($env:Path -split ';')) { $env:Path += ";$BinDir" }
     Write-Output "Installed Inbot $Version to $Destination"
     Write-Output 'Next: inbot serve --init'
-    Write-Output 'No service was installed. Open a new terminal if needed for PATH.'
+    if ($NoPathUpdate) {
+        Write-Output "No service was installed. PATH was not changed; invoke $Shim directly."
+    } else {
+        Write-Output 'No service was installed. Open a new terminal if needed for PATH.'
+    }
 } finally {
     Remove-Item -LiteralPath $Work -Recurse -Force
     if ($Staging -and (Test-Path -LiteralPath $Staging)) { Remove-Item -LiteralPath $Staging -Recurse -Force }
