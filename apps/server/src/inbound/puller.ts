@@ -16,6 +16,7 @@ import { ingestInbound } from "./ingest.js";
 import { configuredBuffer, loadBufferSettings } from "./settings.js";
 import { bufferState } from "./state.js";
 import type { StoreService } from "../store.js";
+import { inboundLock } from "./coordination.js";
 import { observeSelfTest } from "../provision/selftest.js";
 
 export class InboundQuarantine extends Schema.TaggedError<InboundQuarantine>()(
@@ -43,17 +44,18 @@ export interface InboundReport {
   readonly retried: number;
 }
 
-function ingestObject(
-  pointer: InboundPointer,
+export function ingestObject(
+  pointer: { readonly key: string; readonly size?: number; readonly received_at: string },
   config: InboundSettings,
   buffer: InboundBufferService,
   mailbox: MailboxService,
   state: ReturnType<typeof bufferState>,
   store: StoreService,
+  retry = false,
 ) {
   return Effect.gen(function* () {
     const existing = yield* state.get(pointer.key);
-    if (existing?.state === "quarantined") return "quarantined" as const;
+    if (existing?.state === "quarantined" && !retry) return "quarantined" as const;
     if (existing?.state !== "committed") {
       const bytes = yield* buffer
         .getObject(pointer.key)
@@ -64,7 +66,11 @@ function ingestObject(
               : error,
           ),
         );
-      if (bytes.byteLength !== pointer.size || bytes.byteLength > maxCiphertextSize)
+      yield* state.attempt(pointer.key, bytes.byteLength, pointer.received_at);
+      if (
+        (pointer.size !== undefined && bytes.byteLength !== pointer.size) ||
+        bytes.byteLength > maxCiphertextSize
+      )
         return yield* new InboundQuarantine({ code: "size_mismatch" });
       const plaintext = yield* Effect.tryPromise({
         try: () => decrypt(Redacted.value(config.identity), bytes),
@@ -100,15 +106,21 @@ function ingestObject(
       }).pipe(Effect.ensuring(Effect.sync(() => plaintext.fill(0))));
     }
     yield* buffer.deleteObject(pointer.key);
+    yield* state.finishAction(pointer.key, true);
     return "stored" as const;
   }).pipe(
     Effect.catchTag("InboundQuarantine", (error) =>
-      state.put(pointer.key, "quarantined", error.code).pipe(Effect.as("quarantined" as const)),
+      state
+        .put(pointer.key, "quarantined", error.code)
+        .pipe(
+          Effect.andThen(state.finishAction(pointer.key, false)),
+          Effect.as("quarantined" as const),
+        ),
     ),
   );
 }
 
-export function processInbound(): Effect.Effect<InboundReport, DatabaseError | BufferError> {
+function processInboundUnlocked(): Effect.Effect<InboundReport, DatabaseError | BufferError> {
   return Effect.gen(function* () {
     const loaded = yield* loadBufferSettings();
     if (loaded.status !== "ready")
@@ -165,7 +177,7 @@ export function processInbound(): Effect.Effect<InboundReport, DatabaseError | B
   });
 }
 
-export function reconcileInbound(): Effect.Effect<InboundReport, DatabaseError | BufferError> {
+function reconcileInboundUnlocked(): Effect.Effect<InboundReport, DatabaseError | BufferError> {
   return Effect.gen(function* () {
     const loaded = yield* loadBufferSettings();
     if (loaded.status !== "ready")
@@ -181,6 +193,18 @@ export function reconcileInbound(): Effect.Effect<InboundReport, DatabaseError |
     let processed = 0;
     let quarantined = 0;
     let retried = 0;
+    for (const pending of yield* state.listPendingActions()) {
+      const result = yield* ingestObject(
+        { key: pending.key, received_at: pending.first_seen },
+        config,
+        buffer,
+        mailbox.value,
+        state,
+        loaded.store,
+      ).pipe(Effect.result);
+      if (Result.isFailure(result)) retried++;
+      else processed++;
+    }
     do {
       const page = yield* buffer.listObjects("inbound/", cursor);
       for (const object of page.objects) {
@@ -221,3 +245,14 @@ export function reconcileInbound(): Effect.Effect<InboundReport, DatabaseError |
     return { status: "ready", processed, quarantined, retried };
   });
 }
+
+function serialized(effect: Effect.Effect<InboundReport, DatabaseError | BufferError>) {
+  return Effect.gen(function* () {
+    const loaded = yield* loadBufferSettings();
+    if (loaded.status !== "ready")
+      return { status: loaded.status, processed: 0, quarantined: 0, retried: 0 } as const;
+    return yield* effect.pipe(inboundLock(loaded.store));
+  });
+}
+export const processInbound = () => serialized(processInboundUnlocked());
+export const reconcileInbound = () => serialized(reconcileInboundUnlocked());

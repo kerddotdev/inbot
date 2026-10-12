@@ -11,7 +11,7 @@ import { ErrorResponse } from "../../../../packages/contracts/src/errors.js";
 import { AttachmentResponse } from "../../../../packages/contracts/src/attachments.js";
 import { makeOAuth } from "../oauth/service.js";
 import { hashToken } from "../auth/api-keys.js";
-import { Store } from "../store.js";
+import { Store, migrations } from "../store.js";
 import { EventLog, eventVisible } from "../events/log.js";
 import { client as mcpClient } from "../mcp/test-client.js";
 import { fixture } from "./test-fixture.js";
@@ -254,7 +254,7 @@ test("discovers canonical resources and completes the owner code/PKCE flow with 
       version: db.pragma("user_version", { simple: true }),
     })),
   );
-  expect(rows.version).toBe(14);
+  expect(rows.version).toBe(migrations.at(-1)?.version);
   const persisted = JSON.stringify(rows);
   for (const secret of [tokens.access_token, tokens.refresh_token, code.code, code.code_verifier])
     expect(persisted).not.toContain(secret);

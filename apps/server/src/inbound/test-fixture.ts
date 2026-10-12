@@ -76,7 +76,7 @@ export async function fixture(home: string) {
           Effect.provideService(Scope.Scope, scope),
         ),
       );
-    const process = <A, E>(effect: Effect.Effect<A, E, InboundConfig | Scope.Scope>) =>
+    const process = <A, E>(effect: Effect.Effect<A, E, InboundConfig | Mailbox | Scope.Scope>) =>
       run(
         effect.pipe(
           Effect.provideContext(context),

@@ -18,7 +18,7 @@ import {
 import { TransportConfig } from "../outbound/transport-config.js";
 import { Store } from "../store.js";
 import { InboundConfig } from "../inbound/config.js";
-import { memoryBuffer } from "../inbound/cloudflare.js";
+import { InboundBuffer, memoryBuffer } from "../inbound/cloudflare.js";
 import { fakeCloudflare } from "../provision/fake-cloudflare.js";
 import { makeProvisioner, Provisioner } from "../provision/provisioner.js";
 import { RemoteAccess, makeRemote } from "../remote/remote.js";
@@ -88,9 +88,11 @@ export async function fixture(
         ),
       ),
     );
+    const buffer = memoryBuffer();
     const baseServices = await run(
       Layer.buildWithScope(
         Layer.mergeAll(
+          Layer.succeed(InboundBuffer, buffer.service),
           Mailbox.Live,
           ApiKeys.Live,
           TransportConfig.Live,
@@ -109,7 +111,7 @@ export async function fixture(
     const provisioner = makeProvisioner({
       store: Context.get(baseServices, Store),
       api: cloud.service,
-      buffer: memoryBuffer().service,
+      buffer: buffer.service,
       dns: { check: (records) => Effect.succeed(records) },
       inbound: Context.get(baseServices, InboundConfig),
       transport: Context.get(baseServices, TransportConfig),
@@ -191,6 +193,7 @@ export async function fixture(
     const stored = ingested[0];
     if (stored?.status !== "stored") throw new Error("Expected a stored synthetic message");
     return {
+      buffer,
       home,
       setupCode,
       cloud,
@@ -208,6 +211,7 @@ export async function fixture(
       outbox: Context.get(services, Outbox),
       drafts: Context.get(services, Drafts),
       transport: Context.get(services, TransportConfig),
+      inbound: Context.get(services, InboundConfig),
       sent,
       start: async (outbox: OutboxService, clock: Clock.Clock, runScheduler = false) => {
         const serverScope = Scope.makeUnsafe();

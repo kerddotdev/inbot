@@ -5,7 +5,7 @@ import { Effect, Schema } from "effect";
 import { expect, test as base } from "vitest";
 import { ListRejectionsResponse } from "../../../../packages/contracts/src/lists.js";
 import { OwnerSessionResponse } from "../../../../packages/contracts/src/owner.js";
-import { migrate } from "../store.js";
+import { migrate, migrations } from "../store.js";
 import { listsSchema } from "../lists/schema.js";
 import { Connection } from "../auth/owner.js";
 import { Mailbox } from "../mailbox/mailbox.js";
@@ -177,7 +177,7 @@ test("migration 14 keeps legacy rejection decisions without inventing missing me
       ).run(inbox, "legacy-hash", "blocked_sender", "2026-10-10T12:00:00Z");
       db.pragma("user_version = 13");
       Effect.runSync(migrate(db));
-      expect(db.pragma("user_version", { simple: true })).toBe(14);
+      expect(db.pragma("user_version", { simple: true })).toBe(migrations.at(-1)?.version);
       Effect.runSync(migrate(db));
     }),
   );

@@ -161,6 +161,17 @@ export const OAuthGrantEvent = Schema.Struct({
   oauth: Schema.Struct({ grant_id: Schema.String, client_id: Schema.String, timestamp: Timestamp }),
 });
 
+export const QuarantineEvent = Schema.Struct({
+  type: Schema.Literal("event"),
+  event_type: Schema.Literals(["inbound.quarantined", "inbound.released", "inbound.deleted"]),
+  event_id: Schema.String,
+  quarantine: Schema.Struct({
+    quarantine_id: Schema.String,
+    reason_code: Schema.String,
+    timestamp: Timestamp,
+  }),
+});
+
 export const EventEnvelope = Schema.Struct({
   type: Schema.Literal("event"),
   event_type: EventType,
@@ -180,6 +191,7 @@ export const Event = Schema.Union([
   DraftEvent,
   DomainVerifiedEvent,
   OAuthGrantEvent,
+  QuarantineEvent,
 ]).annotate({ identifier: "Event" });
 export type Event = typeof Event.Type;
 
