@@ -37,7 +37,7 @@ const unavailable = (message: string) =>
     {
       code: "service_unavailable",
       message,
-      fix: "Check the user service manager and file permissions, then inspect <home>/logs/service.err.log. Use inbot serve in the foreground to diagnose startup.",
+      fix: "Check the user service manager and file permissions, then inspect <home>/logs/service.err.log. A failed reinstall may leave the service stopped. Run inbot service status with the same --home, then retry install after resolving the failure. Use inbot serve in the foreground to diagnose startup.",
     },
     10,
   );
@@ -187,8 +187,22 @@ export function makeService(runtime: ServiceRuntime, home: string) {
     if (state.registered === null)
       throw unavailable("Cannot observe the registered service. No definition was removed.");
     if (!state.registered) return;
-    if (platform === "darwin") await command("launchctl", ["bootout", target]);
-    else if (platform === "linux") await command("systemctl", ["--user", "disable", "--now", name]);
+    if (platform === "darwin") {
+      await command("launchctl", ["bootout", target]);
+      const deadline = Date.now() + 10_000;
+      while (true) {
+        const current = await inspect();
+        if (current.registered === false) break;
+        if (current.registered === null)
+          throw unavailable("Cannot observe launchd removal. The service definition was retained.");
+        if (Date.now() >= deadline)
+          throw unavailable(
+            "Timed out waiting for launchd removal. The service definition was retained.",
+          );
+        await new Promise<void>((done) => setTimeout(done, 250));
+      }
+    } else if (platform === "linux")
+      await command("systemctl", ["--user", "disable", "--now", name]);
     else {
       if (state.running) await command("schtasks.exe", ["/End", "/TN", name]);
       await command("schtasks.exe", ["/Delete", "/TN", name, "/F"]);

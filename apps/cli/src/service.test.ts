@@ -3,7 +3,7 @@ import { mkdtemp, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { expect, test } from "vitest";
+import { expect, test, vi } from "vitest";
 import { runCli } from "./cli.js";
 import {
   renderService,
@@ -39,6 +39,8 @@ async function fixture(platform: ServicePlatform) {
   let running = false;
   let fail = false;
   let startRunning = true;
+  let unloadObservations = 0;
+  let unloading: number | null = null;
   const runtime: ServiceRuntime = {
     platform,
     userHome: root,
@@ -53,6 +55,12 @@ async function fixture(platform: ServicePlatform) {
       if (fail) return { code: 1, stdout: "", stderr: "Synthetic manager failure" };
       let stdout = "";
       let code = 0;
+      if (args[0] === "print" && unloading !== null) {
+        if (unloading === 0) {
+          registered = false;
+          unloading = null;
+        } else unloading--;
+      }
       const found =
         registered && args.some((value) => value === name || value.endsWith(`/${name}`));
       if (args[0] === "print") {
@@ -68,10 +76,13 @@ async function fixture(platform: ServicePlatform) {
       } else if (program === "powershell.exe")
         stdout = found ? (running ? "4\r\n" : "3\r\n") : "missing\r\n";
       else if (args.includes("bootout") || args.includes("disable") || args.includes("/Delete")) {
-        registered = false;
+        unloading = args.includes("bootout") ? unloadObservations : null;
+        registered = unloading !== null && unloading > 0;
         running = false;
       } else if (args.includes("/End")) running = false;
       else if (args.includes("bootstrap") || args.includes("--now") || args.includes("/Run")) {
+        if (args.includes("bootstrap") && unloading !== null && unloading > 0)
+          return { code: 5, stdout: "", stderr: "Bootstrap failed: 5: Input/output error" };
         registered = true;
         running = startRunning;
       } else if (args.includes("/Create")) registered = true;
@@ -84,6 +95,9 @@ async function fixture(platform: ServicePlatform) {
     calls,
     runtime,
     service: makeService(runtime, home),
+    setUnloadObservations: (value: number) => {
+      unloadObservations = value;
+    },
     setFailure: (value: boolean) => {
       fail = value;
     },
@@ -159,6 +173,145 @@ for (const platform of ["darwin", "linux", "win32"] as const) {
     },
   );
 }
+
+async function completeWithTimers<T>(operation: Promise<T>): Promise<T> {
+  let settled = false;
+  const [result] = await Promise.all([
+    operation.finally(() => {
+      settled = true;
+    }),
+    (async () => {
+      await vi.waitUntil(() => settled || vi.getTimerCount() > 0);
+      await vi.runAllTimersAsync();
+    })(),
+  ]);
+  return result;
+}
+
+test.runIf(localPlatform === "darwin")(
+  "reinstall waits for launchd removal before bootstrapping again",
+  async () => {
+    const f = await fixture("darwin");
+    vi.useFakeTimers({ toFake: ["Date", "setTimeout"] });
+    try {
+      await f.service.install(9123);
+      f.setUnloadObservations(2);
+      await expect(completeWithTimers(f.service.install(9123))).resolves.toMatchObject({
+        installed: true,
+        registered: true,
+        running: true,
+        http_healthy: true,
+      });
+    } finally {
+      vi.useRealTimers();
+      await f.close();
+    }
+  },
+);
+
+test.runIf(localPlatform === "darwin")(
+  "uninstall JSON observes completed launchd removal and agrees with later status",
+  async () => {
+    const f = await fixture("darwin");
+    vi.useFakeTimers({ toFake: ["Date", "setTimeout"] });
+    try {
+      const installed = await f.service.install(9123);
+      f.setUnloadObservations(2);
+      let stdout = "";
+      await expect(
+        completeWithTimers(
+          runCli(["service", "uninstall", "--home", f.home, "--json"], {
+            env: {},
+            serviceRuntime: f.runtime,
+            stdout: (text) => {
+              stdout += text;
+            },
+            stderr: () => {},
+          }),
+        ),
+      ).resolves.toBe(0);
+      expect(JSON.parse(stdout)).toMatchObject({
+        installed: false,
+        registered: false,
+        running: false,
+        state: "stopped",
+        port: null,
+        http_healthy: false,
+      });
+      expect(JSON.parse(stdout)).toEqual(await f.service.status());
+      await expect(readFile(installed.unit_path)).rejects.toMatchObject({ code: "ENOENT" });
+      expect(await readFile(join(f.home, "keys.json"), "utf8")).toBe(keys);
+    } finally {
+      vi.useRealTimers();
+      await f.close();
+    }
+  },
+);
+
+test.runIf(localPlatform === "darwin").each(["install", "uninstall"] as const)(
+  "%s times out when launchd keeps the old job and retains its definition",
+  async (action) => {
+    const f = await fixture("darwin");
+    vi.useFakeTimers({ toFake: ["Date", "setTimeout"] });
+    try {
+      const installed = await f.service.install(9123);
+      f.setUnloadObservations(Infinity);
+      await expect(
+        completeWithTimers(action === "install" ? f.service.install(8031) : f.service.uninstall()),
+      ).rejects.toMatchObject({
+        exitCode: 10,
+        detail: {
+          code: "service_unavailable",
+          message: "Timed out waiting for launchd removal. The service definition was retained.",
+          fix: expect.stringContaining("may leave the service stopped"),
+        },
+      });
+      expect(await readFile(installed.unit_path, "utf8")).toContain("InbotPort: 9123");
+      expect(f.calls.filter((call) => call.args.includes("bootstrap"))).toHaveLength(1);
+      expect(await f.service.status()).toMatchObject({
+        installed: true,
+        registered: true,
+        running: false,
+        http_healthy: false,
+      });
+    } finally {
+      vi.useRealTimers();
+      await f.close();
+    }
+  },
+);
+
+test.runIf(localPlatform === "darwin")(
+  "an unknown launchd observation after bootout prevents reinstall and retains the definition",
+  async () => {
+    const f = await fixture("darwin");
+    try {
+      const installed = await f.service.install(9123);
+      const service = makeService(
+        {
+          ...f.runtime,
+          run: async (program, args) => {
+            const result = await f.runtime.run(program, args);
+            if (args.includes("bootout")) f.setFailure(true);
+            return result;
+          },
+        },
+        f.home,
+      );
+      await expect(service.install(8031)).rejects.toMatchObject({
+        exitCode: 10,
+        detail: {
+          code: "service_unavailable",
+          message: "Cannot observe launchd removal. The service definition was retained.",
+        },
+      });
+      expect(await readFile(installed.unit_path, "utf8")).toContain("InbotPort: 9123");
+      expect(f.calls.filter((call) => call.args.includes("bootstrap"))).toHaveLength(1);
+    } finally {
+      await f.close();
+    }
+  },
+);
 
 test("failed manager observations stay unknown and prevent destructive uninstall", async () => {
   const f = await fixture(localPlatform);

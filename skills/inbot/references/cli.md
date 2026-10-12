@@ -60,8 +60,11 @@ have distinct unit names; assign distinct fixed ports too.
 `inbot service status --json` reports observed running state and HTTP health
 separately. Unknown manager state is `running: null`, never a successful running
 claim. `inbot service uninstall` stops/removes only the service, retaining mail,
-logs, and keys. Logs append under `<home>/logs`; any remaining setup code goes
-to `service.log`. The owner can use `inbot open --browser` after HTTP answers.
+logs, and keys, and reports the observed state after removal. On macOS, reinstall
+and uninstall wait up to 10 seconds for launchd removal. A timeout or unknown
+removal state retains the definition and may leave the service stopped; the owner
+should inspect status with the same home and resolve the failure before retrying.
+Logs append under `<home>/logs`; any remaining setup code goes to `service.log`. The owner can use `inbot open --browser` after HTTP answers.
 
 These commands are local machine operations and are not REST or MCP capabilities.
 They reject `INBOT_URL` or `INBOT_API_KEY` (`missing_permission`, exit 4).
