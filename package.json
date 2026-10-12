@@ -64,7 +64,8 @@
   "packageManager": "pnpm@10.24.0",
   "pnpm": {
     "overrides": {
-      "@effect/platform-node-shared": "4.0.2"
+      "@effect/platform-node-shared": "4.0.2",
+      "exceljs@4.4.0>unzipper": "0.12.5"
     }
   }
 }

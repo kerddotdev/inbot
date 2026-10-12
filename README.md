@@ -83,8 +83,8 @@ lockfile's SHA-512 integrity. No native compilation or new dependency is require
 
 Archives include Inbot's `LICENSE`, `THIRD_PARTY_NOTICES.md`, Node's upstream
 license, and a generated `licenses/INDEX.md` with dependency license materials.
-The notices document unresolved runtime license gaps that block publication;
-building an archive does not resolve those gaps. See [RELEASING.md](RELEASING.md)
+Packaging rejects dependencies with missing license declarations or materials.
+See [RELEASING.md](RELEASING.md)
 for the maintainer checklist and generated GitHub release notes.
 
 `--skip-build` reuses an existing complete build; `--output` changes the release

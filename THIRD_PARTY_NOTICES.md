@@ -21,13 +21,8 @@ The following license texts are maintained under `scripts/licenses` because the 
 
 `isarray` 1.0.0 supplies its complete MIT license in its README; that file is copied into the notices. Keyring platform packages share the license from the same-version `@napi-rs/keyring` package.
 
-## Publication blockers
+## Dependency license coverage
 
-The current runtime dependency tree has unresolved license materials in `agentextract -> exceljs -> unzipper -> binary`:
+`exceljs` 4.4.0 uses `unzipper` 0.12.5 through a pinned pnpm override. This removes the old `binary`, `chainsaw`, and `buffers` dependencies whose npm archives omit license materials. The maintained `unzipper` package supplies its MIT license, which is copied into the archive notices. XLSX attachment extraction is covered by a synthetic workbook fixture test.
 
-- `buffers` 0.1.1 has no license declaration or license text in its npm archive. Its former upstream repository is unavailable. Inbot's MIT license does not grant rights to this dependency.
-- `binary` 0.3.0 declares MIT and `chainsaw` 0.1.0 declares MIT/X11, but their npm archives omit complete license texts and their former upstream repositories are unavailable.
-
-Their original package metadata and READMEs are retained in the archive's notice directory. These entries are explicit gaps, not inferred licenses. Do not publish release archives until redistribution rights and complete notices have been established or the affected dependencies have been replaced. Dependency changes are outside this release-files change.
-
-When changing dependencies or packaging, review the generated notice index and retain all applicable upstream license and notice files. Missing materials outside these exact, documented exceptions fail packaging rather than silently omitting a notice.
+When changing dependencies or packaging, review the generated notice index and retain all applicable upstream license and notice files. Missing license declarations or materials fail packaging rather than silently omitting a notice.

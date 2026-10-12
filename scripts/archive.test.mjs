@@ -65,6 +65,7 @@ test(
         "inbot/licenses/react@19.3.0/LICENSE",
         "inbot/licenses/dompurify@3.4.16/LICENSE",
         "inbot/licenses/unpdf@1.8.1/PDF.js-LICENSE",
+        "inbot/licenses/unzipper@0.12.5/LICENSE",
         `inbot/inbot${windows ? ".cmd" : ""}`,
       ])
         assert.ok(entries.includes(required), `Missing ${required}`);
@@ -109,7 +110,11 @@ test(
             await readFile(new URL(`../${file}`, import.meta.url), "utf8"),
           );
         const notices = await readFile(join(temporary, "inbot/licenses/INDEX.md"), "utf8");
-        assert.match(notices, /buffers@0\.1\.1.*Publication is blocked/);
+        assert.match(notices, /## Publication blockers\n\nNone detected/);
+        assert.doesNotMatch(notices, /\| (?:binary|buffers|chainsaw)@/);
+        assert.ok(
+          entries.every((entry) => !/node_modules\/(?:binary|buffers|chainsaw)\//.test(entry)),
+        );
         for (const file of manifests) {
           const manifest = JSON.parse(await readFile(join(temporary, file), "utf8"));
           assert.ok(

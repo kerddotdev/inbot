@@ -90,28 +90,21 @@ test("a declared license alone does not silently clear missing distribution mate
   });
 });
 
-test("documented license gaps preserve original metadata and block publication explicitly", async () => {
-  await fixture(async (root) => {
-    await packageAt(root, { dependencies: { buffers: "0.1.1" } });
-    const manifest = { name: "buffers", version: "0.1.1" };
-    await packageAt(join(root, "node_modules/buffers"), manifest, {
-      "README.markdown": "upstream readme\n",
+test("removed unlicensed helpers fail packaging if reintroduced", async () => {
+  for (const [name, version, license] of [
+    ["buffers", "0.1.1", undefined],
+    ["binary", "0.3.0", "MIT"],
+    ["chainsaw", "0.1.0", "MIT/X11"],
+  ])
+    await fixture(async (root) => {
+      await packageAt(root, { dependencies: { [name]: version } });
+      await packageAt(
+        join(root, "node_modules", name),
+        { name, version, license },
+        { "README.markdown": "upstream readme\n" },
+      );
+      await assert.rejects(stagePackageNotices([{ directory: root }], join(root, "licenses")), {
+        message: `Missing license material for ${name}@${version}`,
+      });
     });
-    const output = join(root, "licenses");
-    const [entry] = await stagePackageNotices([{ directory: root }], output);
-    assert.equal(entry.license, "NOASSERTION");
-    assert.deepEqual(
-      JSON.parse(await readFile(join(output, "buffers@0.1.1/package.json"))),
-      manifest,
-    );
-    assert.match(
-      await readFile(join(output, "INDEX.md"), "utf8"),
-      /buffers@0\.1\.1:.*Publication is blocked/,
-    );
-    await packageAt(join(root, "node_modules/buffers"), { ...manifest, version: "0.1.2" });
-    await assert.rejects(
-      stagePackageNotices([{ directory: root }], output),
-      /Missing license material for buffers@0.1.2/,
-    );
-  });
 });

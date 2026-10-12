@@ -5,14 +5,6 @@ import { fileURLToPath } from "node:url";
 
 const licenseName = /^(?:COPYING|COPYRIGHT|LICEN[CS]E|NOTICE)(?:[._-].*)?$/i;
 const supplements = join(dirname(fileURLToPath(import.meta.url)), "licenses");
-const knownGaps = new Map([
-  ["buffers@0.1.1", "No license declaration or license text. Publication is blocked."],
-  ["binary@0.3.0", "MIT declared, but complete license text is missing. Publication is blocked."],
-  [
-    "chainsaw@0.1.0",
-    "MIT/X11 declared, but complete license text is missing. Publication is blocked.",
-  ],
-]);
 
 export async function stagePackageNotices(roots, output) {
   const seen = new Set();
@@ -74,15 +66,8 @@ export async function stagePackageNotices(roots, output) {
       ])
         if (manifest.name === name && manifest.version !== version)
           throw new Error(`Review embedded component licenses for ${identity}`);
-      const gap = knownGaps.get(identity);
-      if (gap) {
-        files.push({ source: manifestPath, name: "package.json" });
-        for (const name of await readdir(directory))
-          if (/^README(?:[._-].*)?$/i.test(name))
-            files.push({ source: join(directory, name), name });
-      } else if (files.length === 0 || typeof manifest.license !== "string") {
+      if (files.length === 0 || typeof manifest.license !== "string")
         throw new Error(`Missing license material for ${identity}`);
-      }
       const destination = join(output, identity);
       await mkdir(destination, { recursive: true });
       for (const file of files) await copyFile(file.source, join(destination, file.name));
@@ -90,7 +75,6 @@ export async function stagePackageNotices(roots, output) {
         identity,
         license: manifest.license ?? "NOASSERTION",
         files: [...new Set(files.map((file) => file.name))].sort(),
-        gap,
       });
     }
 
@@ -112,7 +96,7 @@ export async function stagePackageNotices(roots, output) {
   await writeFile(
     join(output, "INDEX.md"),
     "# Bundled package notices\n\n" +
-      "Generated from installed production dependencies and the owner UI dependency tree. Node's upstream notices are in `../runtime/LICENSE`. See `../THIRD_PARTY_NOTICES.md` for publication blockers and supplement provenance.\n\n" +
+      "Generated from installed production dependencies and the owner UI dependency tree. Node's upstream notices are in `../runtime/LICENSE`. See `../THIRD_PARTY_NOTICES.md` for supplement provenance.\n\n" +
       "| Package | Declared license | Materials |\n| --- | --- | --- |\n" +
       entries
         .map(
@@ -121,10 +105,7 @@ export async function stagePackageNotices(roots, output) {
         )
         .join("") +
       "\n## Publication blockers\n\n" +
-      (entries
-        .filter((entry) => entry.gap)
-        .map(({ identity, gap }) => `- ${identity}: ${gap}\n`)
-        .join("") || "None detected.\n"),
+      "None detected.\n",
   );
   return entries;
 }
