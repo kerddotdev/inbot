@@ -118,7 +118,6 @@ Absent optional bodies and timestamps remain absent. Message size defaults to
 raw MIME byte length; attachment size is measured from content and an explicit
 size must agree. Parsed `calendar_event_id` can be retained without implementing
 calendar behavior. Raw reads return bytes and attachment reads return
-`{ attachment, content }`; download URLs and expiry belong to future transports
-and are not fabricated here.
+`{ attachment, content }`; the implemented HTTP download adapter turns these into signed five-minute capability URLs. The mailbox service itself returns bytes and never fabricates transport URLs.
 
 System state labels (`received`, `queued`, `sent`, `send_unknown`, `failed`, `delivered`, `bounced`, `complained`, `rejected`, `deferred`) are protected on every message, including messages without an outbox entry. Message, thread, and batch label edits that add or remove any of them return `validation_error` with a fix and make no changes. Custom labels and `unread` remain editable.

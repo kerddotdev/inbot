@@ -7,7 +7,7 @@ startup, and shutdown behavior. Packaged commands default to production flavor;
 packaged `serve` also defaults `--web-root` to the included UI. Explicit flags
 override both defaults.
 
-## Run
+## Development
 
 Requires Node 24.21.0 and pnpm 10.24.0. Build from the workspace root:
 
@@ -28,9 +28,9 @@ dependencies resolve from the root package. No additional dependency is needed.
 
 Release archives include Node 24.21.0, production dependencies with the target's
 native prebuilds, the server, CLI, inbound Worker bundle, and owner UI. No external
-Node runtime is required. Releases have not been published yet. See the root
-[install and packaging guide](../../README.md#install) for the checksum-verifying
-`install.sh` and `install.ps1`, supported platforms and local verification.
+Node runtime is required. See the [installation guide](https://inbot.kerd.dev/docs/get-started/install)
+for the one-line checksum-verifying installers, supported platforms, updating and removal.
+The [CLI reference](https://inbot.kerd.dev/docs/reference/cli) is generated from command help.
 Windows archives include x64 and ARM64 builds; `install.ps1` selects the OS
 architecture. Its `-NoPathUpdate` switch leaves PATH unchanged for isolated
 installer checks or manual shim management.
@@ -154,7 +154,7 @@ intentional retry is a new send with a new idempotency key.
 
 `inbot --version` and `inbot version` print the package version without connecting to a server.
 
-Every command accepts `--help`; `inbot --help` lists all commands. Global options
+Resource commands accept `--help`; `inbot --help` lists commands in workflow order, and `inbot <resource> --help` lists that group. Version commands print the version even with `--help`. Global options
 are `--home <directory>`, `--flavor development|production`, and `--json`.
 Place the command first, or precede it with global options. Addresses and IDs are
 positional; quote IDs containing shell metacharacters.
@@ -240,8 +240,7 @@ positional; quote IDs containing shell metacharacters.
 | `remote disable`          | None                                                                                                      | POST `/v0/owner/remote/disable`                                                                                                  |
 
 `open` prints a single-use login URL and never opens a browser unless
-`--browser` is present. Password setup must already be complete; links expire
-after two minutes. Treat a login link as a credential.
+`--browser` is present. Links can be created before password setup and expire after two minutes or a service restart. Use the same home and flavor as the running service. Treat a login link as a credential.
 
 Common payload fields have kebab-case flags: `--display-name`, `--to`, `--text`,
 `--reply-all`, `--add-labels`, `--remove-labels`, and so on. Repeat array flags:
@@ -313,7 +312,7 @@ without credentials or payload contents. Exit codes are stable:
 
 `pnpm exec vitest run apps/cli/src/cli.test.ts` runs against the real in-process
 HTTP server with a temporary encrypted home, memory keychain, fixed clock, and
-fake provider. No real mail, infrastructure, or owner home is used. Service installation remains outside this CLI implementation. All declared REST resources are covered, except owner browser authentication/session/password routes. OAuth registration, token exchange, metadata, and consent are protocol/browser flows rather than resource commands. Quarantine commands belong to a separate change and no quarantine routes exist on this branch. Resource commands add no
+fake provider. No real mail, infrastructure, or owner home is used. All declared REST resources are covered, except owner browser authentication/session/password routes. OAuth registration, token exchange, metadata, and consent are protocol/browser flows rather than resource commands. Local owner quarantine commands list, retry, and delete durable inbound failures. Resource commands add no
 service behavior, permission, event, MCP tool, or remote route.
 
 ## Allow and block lists
@@ -509,10 +508,12 @@ The remaining eight declared endpoints are deliberately browser-only:
 `POST /v0/owner/login-links/redeem`, `POST /v0/owner/logout`,
 `GET /v0/owner/sessions`, `DELETE /v0/owner/sessions/:id`, and
 `POST /v0/owner/password`. Existing `open` still creates a single-use login link.
-OAuth protocol/consent internals and quarantine are intentionally outside this
-work. The HTTP capability download route is consumed by attachment/raw commands;
-`/v0/ws` is covered by `events --follow`. There is no CLI-reference generator in
-this branch; help derives from the command table.
+OAuth protocol and consent flows use their dedicated browser and protocol
+interfaces. Local owner quarantine commands are documented below. The HTTP
+capability download route is consumed by attachment/raw commands; `/v0/ws` is
+covered by `events --follow`. Help derives from the command table, and
+`apps/docs/generate-cli-reference.mjs` generates the docs CLI reference from
+compiled help during every documentation build.
 
 ## Owner quarantine
 

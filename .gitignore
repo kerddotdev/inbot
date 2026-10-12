@@ -8,3 +8,6 @@ coverage/
 *.log
 .DS_Store
 dist-release/
+
+.blume/
+apps/docs/docs/reference/cli.md

@@ -142,9 +142,7 @@ states: a multi-recipient message can have both `delivered` and `bounced`, and
 `deferred` can coexist with later terminal labels. Delivery failure does not
 rewrite provider acceptance in the outbox. Events are deduplicated by event id
 per inbox and stored without subject or provider diagnostic text. Unknown ids
-are ignored and return `false`; a future Queue consumer must retain/reconcile
-unmatched events if they arrive before acceptance is persisted. Queue pulling,
-webhooks, and WebSocket emission are outside this implementation.
+are ignored and return `false`. The implemented delivery Queue consumer acknowledges unmatched reports without retaining them for reconciliation. Queue pulling, signed webhooks and WebSocket emission are implemented in their separate service modules.
 
 ## Idempotency
 
@@ -215,7 +213,7 @@ The existing schemas, service, REST, MCP, permissions, idempotency, reverse stat
 and documentation apply. Delivery events still apply through the existing internal
 service and the Queue consumer described below. Signed webhooks and WebSocket
 replay publish the durable event log, and CLI resource commands use REST.
-Tunnel allowlists remain planned. Agent guidance in `skills/inbot` directs
+The implemented tunnel listener uses an allowlist and blocks transport management and local owner bearer tokens. Agent guidance in `skills/inbot` directs
 owners to transport setup without granting agents access to credentials.
 
 ## Questions requiring an authorized real-account check
@@ -228,9 +226,7 @@ owners to transport setup without granting agents access to credentials.
   conservative size estimate. The requested 32-attachment cap is retained.
 - How are recipient-grouped immediate bounce/suppression results correlated
   with subsequent events? They are not treated as delivery confirmation here.
-- Is sent-message preview disabled on the provisioned domain? The research
-  notes warn that cloud preview retains plaintext. A future provisioner must
-  disable it before this adapter is enabled; no provisioning was performed.
+  The implemented provisioner disables sending previews with `preview_enabled: false` and verifies that Cloudflare reports them disabled before routing mail. See [domain provisioning](../provision/README.md).
 
 Cloudflare sending is for transactional mail. Outbound content passes through
 Cloudflare in plaintext in transit; this is not end-to-end encryption. Local
@@ -253,11 +249,11 @@ as `applied`. Alias reconciliation for unmatched events is not implemented.
 The scoped events loop starts in `serve`, polls every two seconds while completing
 work, and every thirty seconds while idle. It performs no calls when locked or
 unconfigured. Migration **6** supplies buffer configuration and quarantine tables;
-owner provisioning and quarantine UI remain planned.
+owner provisioning is implemented, while quarantine review/retry/release UI remains unavailable.
 
 Cloudflare delivery event payloads include plaintext recipient and subject fields
 while waiting in the events Queue. This differs from the encrypted inbound R2
-buffer. Provisioning should use short events retention; prompt pull and ack
+buffer. Provisioning sets five-minute events retention; prompt pull and ack
 reduces exposure but does not encrypt provider-generated event payloads. The
 consumer never logs bodies or provider error text and discards fields outside the
 existing `DeliveryEvent` contract. The inbound README links the verified Queue

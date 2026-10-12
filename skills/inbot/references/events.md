@@ -49,3 +49,5 @@ report actual states; draft approval and queueing do not mean provider acceptanc
 `message.send_unknown` carries `outcome` IDs and a machine-readable `reason`. Do
 not resend; inform the human. Owner resolution emits `message.sent` or
 `message.failed` with reason `owner_confirmed_sent` or `owner_confirmed_not_sent`.
+
+`message.failed` also comes from a provider failure report with `failure.reason: "delivery_failed"`. Bounce and complaint events currently use `"unknown"` for `type` and `sub_type`. A delivery label does not change `send_status`.
