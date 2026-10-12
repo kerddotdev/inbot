@@ -99,7 +99,12 @@ working user systemd session and Secret Service store at login; no lingering or
 system-wide configuration is changed.
 
 Reinstall stops the existing unit, rewrites it, and requests a fresh start. It does
-not claim running until the manager reports it. `status` reports `installed`,
+not claim running until the manager reports it. On macOS, reinstall and uninstall
+wait up to 10 seconds for launchd to report the old job removed. A timeout or
+unknown removal state retains the definition and returns `service_unavailable`.
+A failed reinstall may leave the service stopped; inspect status with the same
+`--home`, resolve the reported failure, and retry install. Uninstall reports the
+observed state after removal. `status` reports `installed`,
 `registered`, `running`, `state`, `unit_path`, `port`, and `http_healthy`, plus the
 home, unit name, and log paths. `running` and `registered` are null and `state` is
 `unknown` when the manager cannot be observed. HTTP health separately probes the
