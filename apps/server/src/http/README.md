@@ -116,6 +116,14 @@ expire on restart as well as at their advertised expiry time.
 
 The CLI consumes these download metadata routes with `messages raw/attachment`, `threads attachment`, and `drafts attachment`. It follows same-origin capability URLs without bearer headers or redirects, writes only to a requested new private file or redirected stdout, and refuses binary TTY output. `--json` keeps the metadata response; see [CLI downloads](../../../cli/README.md#search-updates-batches-and-downloads).
 
+The owner HTML view reuses message attachment metadata and signed downloads for
+same-message raster CID images, converting returned bytes to in-memory data URLs.
+Downloads remain attachment responses with the same issuer, permission, scope and
+origin checks. REST message bodies are never sanitized for agents. The static web
+CSP permits HTTP(S) images so inherited `srcdoc` policies can support explicit
+per-message consent; each sanitized frame defaults to data images only and has
+no script or same-origin permission. See [HTML messages](../../../web/README.md#html-messages).
+
 ## Owner mail transport
 
 `GET /v0/owner/transport` returns `{ provider: "cloudflare", account_id, token_set,
