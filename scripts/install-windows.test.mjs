@@ -136,7 +136,7 @@ test(
       await assert.rejects(
         install("0.1.2", env),
         (error) =>
-          /Microsoft Visual C\+\+ v14 Redistributable/.test(error.stderr) &&
+          /Microsoft\s+Visual\s+C\+\+\s+v14\s+Redistributable/.test(error.stderr) &&
           error.stderr.includes(`https://aka.ms/vc14/vc_redist.${architecture}.exe`),
       );
       assert.deepEqual(await readFile(env.INBOT_TEST_SHIM), shim);
