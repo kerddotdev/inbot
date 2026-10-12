@@ -66,6 +66,7 @@ export async function request(
   path: string,
   body: unknown,
   idempotencyKey?: string,
+  responseKind?: "text",
 ): Promise<unknown> {
   let response: Response;
   let text: string;
@@ -94,18 +95,13 @@ export async function request(
   }
   let wire: unknown;
   try {
-    wire = text === "" ? undefined : JSON.parse(text);
+    wire =
+      response.ok && responseKind === "text" ? text : text === "" ? undefined : JSON.parse(text);
   } catch {
     throw invalidResponse();
   }
   if (!response.ok) {
-    let error: ErrorResponse;
-    try {
-      error = Schema.decodeUnknownSync(ErrorResponse)(wire);
-    } catch {
-      throw invalidResponse();
-    }
-    throw new CliError(error, errorExitCode(error));
+    throwResponseError(wire);
   }
   for (const schema of endpoint.success) {
     try {
@@ -118,7 +114,17 @@ export async function request(
   throw invalidResponse();
 }
 
-function invalidResponse() {
+export function throwResponseError(wire: unknown): never {
+  let error: ErrorResponse;
+  try {
+    error = Schema.decodeUnknownSync(ErrorResponse)(wire);
+  } catch {
+    throw invalidResponse();
+  }
+  throw new CliError(error, errorExitCode(error));
+}
+
+export function invalidResponse() {
   return new CliError(
     {
       code: "service_unavailable",

@@ -12,6 +12,7 @@ import { humanOutput, record } from "./output.js";
 import { packageVersion } from "./version.js";
 import { runServiceCommand, serviceHelp } from "./service-command.js";
 import type { ServiceRuntime } from "./service.js";
+import { download, validateOutput } from "./downloads.js";
 
 export interface CliIO {
   readonly env: Environment;
@@ -20,6 +21,9 @@ export interface CliIO {
   readonly stderr: (text: string) => void;
   readonly openBrowser?: (url: string) => Promise<void>;
   readonly serviceRuntime?: ServiceRuntime;
+  readonly readStdin?: () => Promise<string>;
+  readonly stdoutIsTTY?: boolean;
+  readonly stdoutBinary?: (bytes: Uint8Array) => Promise<void>;
 }
 const globals: ParseArgsOptionsConfig = {
   home: { type: "string" },
@@ -43,13 +47,15 @@ function commandOptions(command: Command): ParseArgsOptionsConfig {
         option(kind),
       ]),
     ),
-    ...(command.body === undefined
+    ...(command.body === undefined || command.tokenInput
       ? {}
       : { data: { type: "string" }, "data-file": { type: "string" } }),
     ...(command.scopedEndpoint === undefined ? {} : { inbox: { type: "string" } }),
     ...(command.idempotent ? { "idempotency-key": { type: "string" } } : {}),
     ...(command.secret ? { "show-secret": { type: "boolean" } } : {}),
     ...(command.browser ? { browser: { type: "boolean" } } : {}),
+    ...(command.download ? { output: { type: "string", short: "o" } } : {}),
+    ...(command.tokenInput ? { "token-stdin": { type: "boolean" } } : {}),
   };
 }
 
@@ -71,7 +77,7 @@ function help(command?: Command, group?: string): string {
     )
     .join(
       "\n",
-    )}\n${command.body === undefined ? "" : "\n--data accepts the REST JSON payload; --data-file reads it from a file or '-' for stdin. Do not combine payload JSON with body flags.\n"}${command.idempotent ? "\nThe Idempotency-Key is printed to stderr before sending. Reuse it with the same payload after an uncertain result.\n" : ""}`;
+    )}\n${command.body === undefined || command.tokenInput ? "" : "\n--data accepts the REST JSON payload; --data-file reads it from a file or '-' for stdin. Do not combine payload JSON with body flags.\n"}${command.idempotent ? "\nThe Idempotency-Key is printed to stderr before sending. Reuse it with the same payload after an uncertain result.\n" : ""}${command.download ? "\n-o, --output <path> creates a private file and refuses to overwrite it. Omit it or use '-' for redirected binary stdout. --json returns download metadata only and cannot be combined with --output.\n" : ""}${command.tokenInput ? "\nProvide the token through INBOT_CLOUDFLARE_API_TOKEN or --token-stdin (raw token, trailing newline allowed). Never put it in command arguments. --account-id is optional when exactly one account is accessible. Configure verifies before saving; there is no separate verify route.\n" : ""}`;
 }
 
 function fields(
@@ -166,6 +172,7 @@ export async function runCli(args: readonly string[], io: CliIO): Promise<number
       io.stdout(help(command));
       return 0;
     }
+    if (command.download) validateOutput(values.output, values.json, io);
     if (positionals.length !== (command.params?.length ?? 0))
       usage(
         `Expected ${(command.params ?? []).map((param) => `<${param}>`).join(" ") || "no positional arguments"}.`,
@@ -211,13 +218,22 @@ export async function runCli(args: readonly string[], io: CliIO): Promise<number
             typeof values.data === "string"
               ? values.data
               : file === "-"
-                ? await readStdin()
+                ? await (io.readStdin ?? readStdin)()
                 : await readFile(String(file), "utf8");
           body = JSON.parse(json);
         } catch {
           usage("Cannot read the JSON payload. Use --data or a readable --data-file.");
         }
       } else body = bodyFlags;
+      if (command.tokenInput) {
+        if (values["token-stdin"] && io.env.INBOT_CLOUDFLARE_API_TOKEN !== undefined)
+          usage("Choose INBOT_CLOUDFLARE_API_TOKEN or --token-stdin.");
+        const token = values["token-stdin"]
+          ? (await (io.readStdin ?? readStdin)()).replace(/[\r\n]+$/, "")
+          : io.env.INBOT_CLOUDFLARE_API_TOKEN;
+        if (token === undefined) usage("Set INBOT_CLOUDFLARE_API_TOKEN or use --token-stdin.");
+        body = { ...bodyFlags, api_token: token };
+      }
       const payload = endpoint.payload.get("application/json");
       if (payload === undefined) throw new Error("Missing payload schema");
       try {
@@ -241,13 +257,28 @@ export async function runCli(args: readonly string[], io: CliIO): Promise<number
       }
       io.stderr(`Idempotency-Key: ${idempotencyKey}\n`);
     }
-    let result = await request(auth, endpoint, path, body, idempotencyKey);
+    let result = await request(auth, endpoint, path, body, idempotencyKey, command.response);
+    if (command.download && !values.json) {
+      await download(
+        auth.url,
+        result,
+        typeof values.output === "string" ? values.output : undefined,
+        io,
+      );
+      return 0;
+    }
     if (command.secret && !values["show-secret"] && record(result)) {
       const { api_key: _secret, secret: _webhookSecret, ...metadata } = result;
       result = metadata;
       io.stderr("Secret omitted. Use --show-secret at creation to print the one-time secret.\n");
     }
-    io.stdout(values.json ? `${JSON.stringify(result ?? null)}\n` : humanOutput(result));
+    io.stdout(
+      values.json
+        ? `${JSON.stringify(result ?? null)}\n`
+        : command.response === "text" && typeof result === "string"
+          ? result
+          : humanOutput(result),
+    );
     if (values.browser && record(result) && typeof result.url === "string") {
       const url = new URL(result.url);
       if (url.origin !== auth.url || url.pathname !== "/login")
