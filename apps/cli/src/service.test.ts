@@ -271,7 +271,6 @@ test("definitions preserve spaces and special characters without shell expansion
   expect(task).toContain("<RunLevel>LeastPrivilege</RunLevel>");
   expect(task).toContain("<LogonType>InteractiveToken</LogonType>");
   expect(task).toContain("<UserId>Owner &amp; Co</UserId>");
-  expect(task).toContain("service-host.js&quot;");
   expect(task).toContain("<RestartOnFailure>");
   for (const definition of [plist, unit, task])
     expect(definition).not.toMatch(/INBOT_API_KEY|EnvironmentVariables|Environment=|--init/);
@@ -280,6 +279,43 @@ test("definitions preserve spaces and special characters without shell expansion
   expect(() => renderService({ ...input, platform: "linux", home: "/bad\npath" })).toThrow();
   expect(() => renderService({ ...input, platform: "darwin", port: 0 })).toThrow();
 });
+
+test.each([
+  {
+    home: "C:\\Users\\Owner\\mail & box",
+    argument: "C:\\Users\\Owner\\mail &amp; box",
+    directory: "C:\\Users\\Owner\\mail &amp; box",
+  },
+  { home: "C:\\", argument: "C:\\\\", directory: "C:\\" },
+  {
+    home: "\\\\server\\mail & files\\",
+    argument: "\\\\server\\mail &amp; files\\\\",
+    directory: "\\\\server\\mail &amp; files\\",
+  },
+])(
+  "Windows task launches the log host through headless conhost for $home",
+  ({ home, argument, directory }) => {
+    const task = renderService({
+      platform: "win32",
+      home,
+      userHome: "C:\\Users\\Owner",
+      executable: "C:\\App & Folder\\runtime\\node.exe",
+      cli: "C:\\App & Folder\\application\\main.js",
+      port: 8025,
+      username: "Owner",
+    });
+    expect(task).toContain(
+      '<Actions Context="Owner"><Exec>' +
+        "<Command>%SystemRoot%\\System32\\conhost.exe</Command>" +
+        "<Arguments>--headless &quot;C:\\App &amp; Folder\\runtime\\node.exe&quot; " +
+        "&quot;C:\\App &amp; Folder\\application\\service-host.js&quot; " +
+        "&quot;C:\\App &amp; Folder\\application\\main.js&quot; " +
+        "&quot;serve&quot; &quot;--flavor&quot; &quot;production&quot; &quot;--home&quot; " +
+        `&quot;${argument}&quot; &quot;--port&quot; &quot;8025&quot;</Arguments>` +
+        `<WorkingDirectory>${directory}</WorkingDirectory></Exec></Actions>`,
+    );
+  },
+);
 
 test("status parsers distinguish registered stopped tasks from actual running processes", () => {
   const result = (stdout: string, code = 0) => ({ stdout, code, stderr: "" });
