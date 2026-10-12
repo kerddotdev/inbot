@@ -103,8 +103,10 @@ Stdout and stderr append to `<home>/logs/service.log` and `service.err.log`.
 Unix log permissions are 0600 and the log directory is 0700. If owner setup is
 still needed, its one-time setup code goes to the private stdout log. After HTTP
 answers, `inbot open --browser` with the same home prints/opens a single-use login
-link. Windows uses a small Node log host and an adjacent `.xml.ps1` helper to read
-numeric Task Scheduler states without depending on localized `schtasks` output.
+link. The Windows task action uses `%SystemRoot%\System32\conhost.exe --headless`
+to launch the package's Node log host without a console window. An adjacent
+`.xml.ps1` helper reads numeric Task Scheduler states without depending on
+localized `schtasks` output.
 Uninstall stops and removes only the unit and its Windows helper, retaining the
 home, database, logs, and keychain. Upgrade the package, then reinstall the service
 to update its pinned executable paths before removing an old package version.
