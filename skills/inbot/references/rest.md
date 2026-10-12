@@ -63,7 +63,7 @@ Details and retry rules: [sending.md](sending.md#idempotency-and-safe-retries).
 
 ## Errors
 
-Shape: `{ "name": "InbotError", "code": "...", "message": "...", "fix": "..." }`. Follow `fix`. Messages never contain mail content or credentials.
+Shape: `{ "name": "InbotError", "code": "...", "message": "...", "fix": "..." }`, with an optional `docs` link. The contract permits optional `fix` and `docs`; service errors provide a fix. Follow `fix`. Messages never contain mail content or credentials.
 
 | Code                   | HTTP | Meaning                                                               |
 | ---------------------- | ---- | --------------------------------------------------------------------- |
@@ -113,3 +113,5 @@ records. There are no rejection MCP tools or tunnel routes. Ask the owner to
 inspect a suspected receive-list rejection; the record does not retain a body.
 
 System state labels (`received`, `queued`, `sent`, `send_unknown`, `failed`, `delivered`, `bounced`, `complained`, `rejected`, `deferred`) are protected on every message, including messages without an outbox entry. Message, thread, and batch label edits that add or remove any of them return `validation_error` with a fix and make no changes. Custom labels and `unread` remain editable.
+
+Inbox creation requires `domain`; omitting `username` generates 16 random hex characters. `inbot-selftest` is reserved on registered domains. Updates merge metadata; a null-valued key removes that key, while `metadata: null` clears the object. Attachment metadata responses have an optional `text_url` contract field that current handlers do not populate.

@@ -29,7 +29,7 @@ Implemented producers:
   verification. The optional existing hook retains its durable retry behavior.
 
 List edits have no matching contract event. Receive-list rejections persist only a
-payload hash, reason and timestamp, without a mailbox message or thread. They cannot
+payload hash, reason, timestamp and owner-only sender/rule metadata, without a mailbox message or thread. They cannot
 populate the existing received snapshot or rejected identity payload and emit no
 event. Queued outbound list refusals emit `message.failed` with reason
 `message_rejected` in the same transaction as their failed state.
@@ -201,11 +201,7 @@ subprotocol; local management routes remain excluded.
 Migration **10** remains the allow/block list schema. Migration **11** adds the
 transactional event log, webhook metadata and deliveries, and draft provenance in
 the outbox. The migration runner still requires strictly contiguous versions.
-Synthetic homes created with the pre-integration events-only version 10 schema
-must be recreated or explicitly migrated; that temporary schema is not the lists
-migration retained here. No automatic conversion of those homes is provided.
-Migration 11 is revised in place on this branch; synthetic homes with an earlier
-version of migration 11 must also be recreated. The runner remains strict.
+See [Store migrations](../store.ts) for the current schema sequence. Tests create independent temporary homes and run the committed migrations.
 
 ## Quarantine events
 

@@ -386,7 +386,7 @@ The path is resolved explicitly; there is no automatic repository or `dist`
 discovery and no UI when the flag is omitted. An invalid root or missing `index.html` fails startup.
 Build the React bundle with `pnpm web:build`. The bundle and owner authentication
 API share the loopback origin. The UI connects owner authentication, mail, API keys, approvals, and mail transport settings to these routes.
-Domains and optional remote access use owner-only APIs; other settings still use mock data. See [owner UI](../../../web/README.md).
+Domains, remote access, OAuth consent and grants, inbox management, API key editing, and rejected-mail inspection use their existing APIs. See [owner UI](../../../web/README.md).
 
 GET requests first try files under the canonical web root, then fall back to
 `index.html`. `/v0`, `/mcp`, `/oauth`, and `/.well-known`, including their

@@ -107,7 +107,7 @@ inbound_queue_id, events_queue_id })` creates an identity if needed.
 `generateInboundIdentity()` can run before setup; `getRecipient()` derives the
 public recipient. Identity reads are `Redacted`; `clear()` disables pulling while
 preserving the identity and existing receipts. V1 reuses the `TransportConfig`
-API token and requires matching account ids. Owner setup routes and UI are planned.
+API token and requires matching account ids. Owner transport routes and Settings verify and save the token; domain provisioning configures the encrypted buffer. There is no agent buffer-configuration route.
 
 `InboundBuffer` provides `pull`, `ack`, `retry`, `getObject`, `deleteObject`, and
 `listObjects`, with a bounded, timeout-protected fetch adapter and a clock-driven

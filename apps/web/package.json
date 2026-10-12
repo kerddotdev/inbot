@@ -9,6 +9,7 @@
   },
   "dependencies": {
     "@inbot/contracts": "workspace:*",
+    "@inbot/design": "workspace:*",
     "@tanstack/react-query": "5.104.1",
     "dompurify": "3.4.16",
     "effect": "4.0.2",

@@ -1,0 +1,66 @@
+@import "@inbot/design/tokens.css";
+
+:root,
+:root[data-theme="dark"] {
+  --blume-background: var(--win);
+  --blume-foreground: var(--text);
+  --blume-muted: var(--hover);
+  --blume-muted-foreground: var(--text2);
+  --blume-border: var(--line);
+  --blume-accent: var(--accent);
+  --blume-accent-foreground: var(--accent-ink);
+  --blume-action: var(--accent);
+  --blume-action-foreground: var(--accent-ink);
+  --blume-code-background: var(--list);
+  --blume-radius: 0.5rem;
+  --blume-font-display: var(--serif);
+  --blume-font-body: var(--sans);
+  --blume-font-mono: var(--mono);
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  letter-spacing: -0.012em;
+}
+
+.prose {
+  font-size: 0.9375rem;
+}
+
+.prose :where(h1) {
+  font-weight: 500;
+  font-size: 2.5rem;
+  line-height: 1.15;
+}
+
+.prose :where(h2, h3, h4) {
+  font-family: var(--sans);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.prose :where(a:not([data-blume-card])) {
+  text-decoration-color: color-mix(in srgb, var(--accent) 55%, transparent);
+  transition: text-decoration-color 120ms;
+}
+
+.prose :where(a:not([data-blume-card]):hover) {
+  text-decoration-color: var(--accent);
+}
+
+[data-blume-header] a:first-of-type svg {
+  color: var(--accent);
+}
+
+::selection {
+  background: var(--sel);
+}
+
+.bg-black\/40,
+.bg-black\/30 {
+  background-color: var(--scrim);
+}

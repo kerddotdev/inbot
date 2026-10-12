@@ -48,14 +48,12 @@ permission. Threads use message permissions. `send_policy` is `direct`,
 the plaintext `api_key`. Expiry and inbox scope are immutable on update.
 
 `BearerAuth` declares `Authorization: Bearer <key>` and provides a
-`CurrentPrincipal`. Domains, API keys, and draft approve/reject endpoints additionally declare
-`OwnerOnly`.
+`CurrentPrincipal`. Domains, API keys, draft approve/reject, unknown-send resolution, transport, remote configuration, rejection metadata, and OAuth management additionally declare `OwnerOnly`. Owner session/password/login-link routes use owner-specific authentication, and OAuth consent requires an owner browser session.
 Other endpoints carry a typed `RequiredPermission` annotation. The server HTTP
 layer implements these middleware services, inbox scopes, and restricted-label
 checks for mailbox and draft operations. Send policies are enforced by shared
 service operations. Approval creates pending drafts and returns the unchanged
-error shape with the draft id in `message` and `fix`. Scoped event
-subscriptions remain planned. Owner-only resources must never become agent MCP tools.
+error shape with the draft id in `message` and `fix`. Scoped event subscriptions, signed webhook delivery and WebSocket replay are implemented by the server event service. Owner-only resources must never become agent MCP tools.
 
 Errors use the `{ name, code, message, fix?, docs? }` wire shape without an Effect
 `_tag`. Status-specific schemas constrain the code and carry `httpApiStatus`;
@@ -70,15 +68,16 @@ belong to the service.
 Compatibility fields such as `calendar_event_id` and `tracking_enabled` remain
 in resource shapes for wire compatibility.
 They do not implement those resource families. Event types are limited to the
-supported mail and domain events. Open tracking requests (`track_opens`) and
+supported mail, draft, domain and OAuth events. Open tracking requests (`track_opens`) and
 tracking events are not modeled. Providers, domains, keys, and webhook secrets
 are not provisioned by this package.
 
 `outbound.ts` adds shared service-only `OutboundRequest` wrappers, `OutboxEntry`,
 and `DeliveryEvent` schemas. The wrappers reuse the existing requests
 and do not change REST wire formats. The outbound service persists replay keys
-and acceptance state, composes mail, and applies provider events; public handlers,
-grants/send policies, and webhook/WebSocket publication remain unimplemented.
+and acceptance state, composes mail, and applies provider events. Implemented REST and MCP handlers enforce shared grants and send policies; webhook/WebSocket publication uses the transactional event log.
+
+`AttachmentResponse` flattens attachment metadata alongside `download_url`, optional `text_url` and `expires_at`; current download handlers do not populate `text_url`. Inbox updates merge metadata, remove individual null-valued keys, and clear all metadata with `metadata: null`. Owner sessions have 14-day sliding and 30-day absolute lifetimes in the server implementation.
 
 ## Owner quarantine contract
 
