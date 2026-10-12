@@ -484,7 +484,7 @@ function InboxMail({
             </h2>
             <span className="flex-1" />
             <IconButton icon="gear" label="Manage inbox" onClick={onManageInbox} />
-            <IconButton icon="pencil" label="New message" onClick={() => setComposing(true)} />
+            <IconButton icon="square-pen" label="New message" onClick={() => setComposing(true)} />
             <IconButton
               icon="refresh"
               label="Refresh"
