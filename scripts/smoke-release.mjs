@@ -43,6 +43,22 @@ try {
     temporary,
   ]);
   const bundle = join(temporary, "inbot");
+  assert.equal(
+    await readFile(join(bundle, "LICENSE"), "utf8"),
+    await readFile(new URL("../LICENSE", import.meta.url), "utf8"),
+  );
+  assert.equal(
+    await readFile(join(bundle, "THIRD_PARTY_NOTICES.md"), "utf8"),
+    await readFile(new URL("../THIRD_PARTY_NOTICES.md", import.meta.url), "utf8"),
+  );
+  assert.match(
+    await readFile(join(bundle, "licenses/INDEX.md"), "utf8"),
+    /better-sqlite3-multiple-ciphers/,
+  );
+  assert.equal(
+    JSON.parse(await readFile(join(bundle, "application/package.json"), "utf8")).license,
+    "MIT",
+  );
   const launcher = join(bundle, windows ? "inbot.cmd" : "inbot");
   const home = join(temporary, "home");
   const helpEnv = { ...bundledEnv, INBOT_HOME: home, INBOT_TEST_SHIM: launcher };
