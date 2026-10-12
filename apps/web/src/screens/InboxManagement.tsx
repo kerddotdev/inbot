@@ -2,6 +2,7 @@ import { useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Inbox, InboxStatus } from "@inbot/contracts/src/inboxes.js";
 import { api } from "../api";
+import { Select } from "../components/Select";
 import { Button, inputClasses, Page, Segmented } from "../components/ui";
 import { ErrorNotice } from "../feedback";
 import { inboxesQuery, verifiedDomainsQuery } from "../queries";
@@ -73,34 +74,27 @@ export function CreateInbox({
             <p role="status" className="text-ink2">
               Loading verified domains...
             </p>
+          ) : verified.length && !domains.error ? (
+            <Select
+              label="Domain"
+              labelClassName="font-semibold"
+              value={selectedDomain}
+              onChange={setDomain}
+              options={verified.map((item) => ({ value: item.domain, label: item.domain }))}
+            />
           ) : (
             <label className="grid gap-1.5 font-semibold">
               Domain
-              {verified.length && !domains.error ? (
-                <select
-                  required
-                  className={inputClasses}
-                  value={selectedDomain}
-                  onChange={(event) => setDomain(event.target.value)}
-                >
-                  {verified.map((item) => (
-                    <option key={item.domain_id} value={item.domain}>
-                      {item.domain}
-                    </option>
-                  ))}
-                </select>
-              ) : (
-                <input
-                  required
-                  autoCapitalize="none"
-                  autoComplete="off"
-                  spellCheck={false}
-                  className={inputClasses}
-                  value={domain}
-                  placeholder="agents.example.com"
-                  onChange={(event) => setDomain(event.target.value)}
-                />
-              )}
+              <input
+                required
+                autoCapitalize="none"
+                autoComplete="off"
+                spellCheck={false}
+                className={inputClasses}
+                value={domain}
+                placeholder="agents.example.com"
+                onChange={(event) => setDomain(event.target.value)}
+              />
             </label>
           )}
           {domains.error ? (
