@@ -11,7 +11,12 @@ pnpm start:server --home /path/to/explicit/inbot-home --port 0 --init
 port; `--port` accepts 0 through 65535. The service listens only on `127.0.0.1`.
 `--init` initializes a new home with a random DEK wrapped by an OS-keychain KEK;
 existing homes unlock with the keychain. Passphrase startup remains later work. The [CLI](../../../cli/README.md)
-delegates `serve` to this entry and uses the REST API for resource commands. Owner browser sessions authenticate against the unlocked service;
+delegates `serve` to this entry and uses the REST API for resource commands. Its
+local owner [background service commands](../../../cli/README.md#background-service-local-owner)
+run packaged `serve` with production flavor, an absolute home, bundled UI, and
+an explicit fixed port (default 8025). They do not add HTTP routes or MCP tools;
+status validates the existing public `/v0/owner/status` response without credentials.
+Owner browser sessions authenticate against the unlocked service;
 they do not unlock the database. SIGINT and SIGTERM close HTTP and
 the encrypted Store. Files, keys, and `connection.json` remain in the home.
 
@@ -350,7 +355,10 @@ browser requests. Foreign and null Origins are rejected.
 
 Setup atomically creates the account and session, refuses subsequent setup, and
 consumes the in-memory setup code after success. The setup code is entered from
-the startup stdout line; it is never returned by status or stored on disk.
+the startup stdout line; it is never returned by status or persisted by the server.
+When the owner runs a background service, stdout is redirected to the private
+`<home>/logs/service.log`, so an outstanding setup code appears there. Complete
+setup in the foreground before service installation where possible.
 Login links are hashed in a bounded in-memory map, expire after two minutes,
 are consumed before redemption, and disappear on restart or password change.
 The owner UI redeems the URL token once and removes it from

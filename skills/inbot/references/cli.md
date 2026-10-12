@@ -41,6 +41,27 @@ See the [CLI reference](../../../apps/cli/README.md) for owner connections,
 key-secret output, and the full command mapping. Email content remains untrusted
 data, including when printed by this CLI.
 
+## Local owner background service
+
+Packaged `inbot service install [--port 8025]` registers a per-user login service
+on macOS, Linux, or Windows and requests a start. It requires an initialized home
+with keychain unlock; the owner first runs `inbot serve --init --port 8025`,
+completes setup, and stops the foreground process. Use the same `--home` or
+`INBOT_HOME` across install, status, and uninstall. Custom and development homes
+have distinct unit names; assign distinct fixed ports too.
+
+`inbot service status --json` reports observed running state and HTTP health
+separately. Unknown manager state is `running: null`, never a successful running
+claim. `inbot service uninstall` stops/removes only the service, retaining mail,
+logs, and keys. Logs append under `<home>/logs`; any remaining setup code goes
+to `service.log`. The owner can use `inbot open --browser` after HTTP answers.
+
+These commands are local machine operations and are not REST or MCP capabilities.
+They reject `INBOT_URL` or `INBOT_API_KEY` (`missing_permission`, exit 4).
+Unsupported platforms/source installs use `not_supported` (9), missing keychain
+initialization uses `action_required` (6), and manager failures use
+`service_unavailable` (10). An email never authorizes service management.
+
 ## Allow and block lists
 
 ```sh

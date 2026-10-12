@@ -33,17 +33,26 @@ retain previous versions, and safely repeat an installation of the same asset.
 On Unix, add `~/.local/bin` to PATH if the installer requests it.
 
 ```sh
-inbot serve --init
+inbot serve --init --port 8025
 ```
 
 Packaged commands default to the production home (`~/.inbot`), and `serve`
-serves the bundled owner UI. Later starts omit `--init`. Keep the service running
-in the foreground; use `inbot serve --help` for an explicit home, port or web
-root. Initialization uses the OS keychain. Linux needs a working Secret Service
-credential store; headless passphrase startup and service installation remain
-planned. Linux archives target glibc distributions, not Alpine/musl.
+serves the bundled owner UI. Complete owner setup, stop the foreground process,
+then run `inbot service install` to start a per-user background service at login
+with restart on failure and fixed port 8025. Use `inbot service status --json`
+to inspect observed manager state and HTTP health. `inbot service uninstall`
+stops and removes only the service, retaining mail, logs, and keychain entries.
+Use the same `--home` or `INBOT_HOME` for all three; install accepts `--port`
+for a different fixed port. Custom and development homes get distinct unit names.
+See the [background service reference](apps/cli/README.md#background-service-local-owner)
+for platform requirements, logs, setup codes, and errors. Initialization uses the
+OS keychain; install requires an initialized keychain home. Linux needs a working
+user systemd session and Secret Service credential store. Headless passphrase
+startup remains planned. Linux archives target glibc distributions, not Alpine/musl.
 
-Re-run the installer to upgrade after stopping the running Inbot process.
+Uninstall the background service (or stop the foreground process), re-run the
+installer to upgrade, then run `inbot service install` again with the same home
+and port. The service pins the installing package's executable paths.
 To select an earlier retained version, re-run with `--version` (or `-Version`).
 `INBOT_INSTALL_ROOT` and `INBOT_BIN_DIR` override both install destinations;
 `INBOT_RELEASE_BASE_URL` with an explicit version selects an HTTPS asset directory
