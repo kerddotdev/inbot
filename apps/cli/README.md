@@ -33,7 +33,7 @@ Node runtime is required. Releases have not been published yet. See the root
 `install.sh` and `install.ps1`, supported platforms and local verification.
 
 ```sh
-inbot serve --init
+inbot serve --init --port 8025
 # Later starts:
 inbot serve
 # Override package defaults when needed:
@@ -43,9 +43,71 @@ inbot serve --home /absolute/path/to/home --web-root /absolute/path/to/ui
 Packaged owner commands use `~/.inbot` by default. Source-checkout commands still
 use development flavor and `~/.inbot-dev`. Use explicit `--flavor development`
 with `INBOT_TEST_MEMORY_KEYCHAIN=1` and a temporary `--home` in smoke tests.
-No installer registers a service; `service install|uninstall|status` remains
-planned. Keep the complete extracted package intact. The Unix installer uses a
+No installer automatically registers a service. Use the local owner commands below
+after initialization. Keep the complete extracted package intact. The Unix installer uses a
 shim, since directly symlinking the package-relative shell launcher is unsupported.
+
+## Background service (local owner)
+
+Initialize with `inbot serve --init --port 8025`, complete owner setup in the UI,
+then stop the foreground process before installing:
+
+```sh
+inbot service install
+inbot service install --home /absolute/path/to/home --port 9123 --json
+inbot service status --json
+inbot service uninstall
+```
+
+These commands manage the current user's machine directly, without REST or MCP.
+They reject `INBOT_URL` or `INBOT_API_KEY` with `missing_permission` (exit 4).
+Install requires a release package and an initialized `keys.json` with keychain
+unlock enabled. Missing, corrupt, or passphrase-only initialization returns
+`action_required` (exit 6); it never initializes or touches keychain entries.
+Unsupported platforms and source-checkout installs return `not_supported` (exit 9).
+Manager failures return `service_unavailable` (exit 10) with recovery guidance.
+
+Home selection is `--home`, `INBOT_HOME`, then the flavor default. Packaged commands
+default to production (`~/.inbot`); `--flavor development` selects `~/.inbot-dev`.
+The installed server always runs production flavor with the resolved absolute home,
+the installing package's absolute Node and CLI paths, and its bundled UI. `--port`
+is install-only, defaults to 8025, and must be 1-65535. Foreground `serve` retains
+its existing default of port 0. A different home needs a different fixed port.
+
+| Platform | Manager                                              | Default name     | Definition                                  |
+| -------- | ---------------------------------------------------- | ---------------- | ------------------------------------------- |
+| macOS    | LaunchAgent, `launchctl bootstrap/bootout gui/<uid>` | `dev.kerd.inbot` | `~/Library/LaunchAgents/<name>.plist`       |
+| Linux    | `systemctl --user`                                   | `inbot.service`  | `~/.config/systemd/user/<name>`             |
+| Windows  | Logon Scheduled Task, `schtasks`                     | `Inbot`          | `~/AppData/Local/Inbot/services/<name>.xml` |
+
+Only the default production home gets the plain name. Other homes append the first
+16 hex characters of SHA-256 of the resolved absolute home, before `.service` on
+Linux. Windows names normalize path casing. Development and custom homes coexist;
+use the same home flags for install, status, and uninstall. Definitions contain no
+credentials or environment secrets. Services start at login and restart on failure.
+Windows uses the current user's interactive token and least privileges, with no
+admin rights; retries run once per minute, up to 255 times. Linux requires a
+working user systemd session and Secret Service store at login; no lingering or
+system-wide configuration is changed.
+
+Reinstall stops the existing unit, rewrites it, and requests a fresh start. It does
+not claim running until the manager reports it. `status` reports `installed`,
+`registered`, `running`, `state`, `unit_path`, `port`, and `http_healthy`, plus the
+home, unit name, and log paths. `running` and `registered` are null and `state` is
+`unknown` when the manager cannot be observed. HTTP health separately probes the
+existing public `GET /v0/owner/status` and validates its shared schema. A healthy
+endpoint can belong to a foreground process; it is not proof that the managed
+service runs. Install may return before HTTP is ready; check status again.
+
+Stdout and stderr append to `<home>/logs/service.log` and `service.err.log`.
+Unix log permissions are 0600 and the log directory is 0700. If owner setup is
+still needed, its one-time setup code goes to the private stdout log. After HTTP
+answers, `inbot open --browser` with the same home prints/opens a single-use login
+link. Windows uses a small Node log host and an adjacent `.xml.ps1` helper to read
+numeric Task Scheduler states without depending on localized `schtasks` output.
+Uninstall stops and removes only the unit and its Windows helper, retaining the
+home, database, logs, and keychain. Upgrade the package, then reinstall the service
+to update its pinned executable paths before removing an old package version.
 
 ## Connect
 
@@ -90,6 +152,9 @@ positional; quote IDs containing shell metacharacters.
 | Command                  | Arguments                                                       | REST operation                                |
 | ------------------------ | --------------------------------------------------------------- | --------------------------------------------- |
 | `serve`                  | Existing server flags                                           | Existing server entry point                   |
+| `service install`        | Optional `--port`, home and JSON flags                          | Local per-user service manager                |
+| `service uninstall`      | Home and JSON flags                                             | Local per-user service manager                |
+| `service status`         | Home and JSON flags                                             | Local manager and public owner status probe   |
 | `open`                   | Optional `--browser`                                            | POST `/v0/owner/login-links`                  |
 | `inboxes list`           | Pagination flags                                                | GET `/v0/inboxes`                             |
 | `inboxes create`         | Body flags or JSON                                              | POST `/v0/inboxes`                            |

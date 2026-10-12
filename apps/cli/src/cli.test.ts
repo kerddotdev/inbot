@@ -989,6 +989,7 @@ base("groups overview help logically and keeps group help focused", async () => 
     "webhooks",
     "oauth",
     "remote",
+    "service",
     "events",
   ]);
   const lists = await readHelp(["lists", "--help"]);
