@@ -1,0 +1,88 @@
+name: Bug report
+description: Report broken behavior, a regression, a crash, or a state Inbot reported incorrectly.
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Search existing issues first and keep the report focused on one problem.
+        Do not report security vulnerabilities here. Follow [SECURITY.md](https://github.com/kerddotdev/inbot/blob/main/SECURITY.md) instead.
+        Redact mail content, addresses, tokens, keys, and private paths from everything you paste.
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched existing issues and did not find a duplicate.
+          required: true
+        - label: I removed secrets and private data from this report.
+          required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Owner web UI
+        - CLI or background service
+        - MCP or REST API
+        - Mail ingestion, sending, or quarantine
+        - Domains, transport, or remote access
+        - Website or documentation
+        - Build, CI, or release tooling
+        - Not sure
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Start Inbot with a temporary home and synthetic data
+        2. Describe the command or UI action
+        3. Observe the result
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Inbot version
+      description: Version from the release archive name or source package.json.
+      placeholder: 0.1.0
+    validations:
+      required: true
+
+  - type: input
+    id: host
+    attributes:
+      label: Host
+      description: Operating system, version, and CPU architecture.
+      placeholder: macOS 26.1, arm64
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Redacted logs or command output
+      description: Include only relevant output. Remove mail content, addresses, credentials, keys, and signed URLs.
+      render: shell

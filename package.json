@@ -2,7 +2,23 @@
   "name": "inbot-workspace",
   "version": "0.1.0",
   "private": true,
+  "description": "Self-hosted, privacy-first email for AI agents.",
+  "keywords": [
+    "ai-agents",
+    "email",
+    "encrypted",
+    "mcp",
+    "privacy",
+    "self-hosted"
+  ],
+  "homepage": "https://inbot.kerd.dev",
+  "bugs": "https://github.com/kerddotdev/inbot/issues",
   "license": "MIT",
+  "author": "Dániel Kerekes",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kerddotdev/inbot.git"
+  },
   "bin": {
     "inbot": "dist/apps/cli/src/main.js"
   },
@@ -48,7 +64,8 @@
   "packageManager": "pnpm@10.24.0",
   "pnpm": {
     "overrides": {
-      "@effect/platform-node-shared": "4.0.2"
+      "@effect/platform-node-shared": "4.0.2",
+      "exceljs@4.4.0>unzipper": "0.12.5"
     }
   }
 }
