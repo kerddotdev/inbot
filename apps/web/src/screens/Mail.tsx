@@ -82,7 +82,8 @@ function ThreadRow({ thread, selected }: { thread: ThreadItem; selected: boolean
       ) : null}
       {!tag && thread.attachments?.length ? (
         <Status tone="mute" icon="clip" className="mt-1 text-xs">
-          {thread.attachments.length} attachments
+          {thread.attachments.length}{" "}
+          {thread.attachments.length === 1 ? "attachment" : "attachments"}
         </Status>
       ) : null}
     </a>
@@ -483,7 +484,7 @@ function InboxMail({
             </h2>
             <span className="flex-1" />
             <IconButton icon="gear" label="Manage inbox" onClick={onManageInbox} />
-            <IconButton icon="pencil" label="New message" onClick={() => setComposing(true)} />
+            <IconButton icon="square-pen" label="New message" onClick={() => setComposing(true)} />
             <IconButton
               icon="refresh"
               label="Refresh"

@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { EventType } from "@inbot/contracts/src/event-types.js";
 import type { Webhook } from "@inbot/contracts/src/webhooks.js";
 import { api } from "../api";
+import { Select } from "../components/Select";
 import { Button, inputClasses, Status } from "../components/ui";
 import { ErrorNotice, LoadError } from "../feedback";
 import { webhooksQuery, inboxesQuery } from "../queries";
@@ -134,21 +135,19 @@ export function WebhooksSettings() {
               placeholder="https://your-server.example/events"
             />
           </label>
-          <label className="block">
-            <span className="mb-1.5 block">Inbox scope</span>
-            <select
-              className={inputClasses}
-              value={inboxId}
-              onChange={(event) => setInboxId(event.target.value)}
-            >
-              <option value="">All inboxes and owner domain events</option>
-              {inboxes.data?.map((inbox) => (
-                <option key={inbox.inbox_id} value={inbox.inbox_id}>
-                  {inbox.inbox_id}
-                </option>
-              ))}
-            </select>
-          </label>
+          <Select
+            label="Inbox scope"
+            labelClassName=""
+            value={inboxId}
+            onChange={setInboxId}
+            options={[
+              { value: "", label: "All inboxes and owner domain events" },
+              ...(inboxes.data ?? []).map((inbox) => ({
+                value: inbox.inbox_id,
+                label: inbox.inbox_id,
+              })),
+            ]}
+          />
           <fieldset>
             <legend className="mb-2">Events</legend>
             <div className="grid gap-2 sm:grid-cols-2">

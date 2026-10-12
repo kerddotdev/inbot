@@ -105,7 +105,14 @@ const paths = {
       <path d="M9 1.8v3h3" />
     </>
   ),
-  pencil: <path d="M10.5 3l2.5 2.5-7.5 7.5H3v-2.5z" />,
+  "square-pen": (
+    <>
+      <path d="M8 2H3.3A1.3 1.3 0 0 0 2 3.3v9.4A1.3 1.3 0 0 0 3.3 14h9.4a1.3 1.3 0 0 0 1.3-1.3V8" />
+      <path d="M12.25 1.75a1.41 1.41 0 0 1 2 2l-6 6a1.3 1.3 0 0 1-.57.34l-1.92.56a.33.33 0 0 1-.41-.41l.56-1.92a1.3 1.3 0 0 1 .34-.57z" />
+    </>
+  ),
+  check: <path d="M3.5 8.5l3 3 6-7" />,
+  "chevrons-up-down": <path d="M5.5 6L8 3.5 10.5 6M5.5 10L8 12.5 10.5 10" />,
   copy: (
     <>
       <rect x="5.5" y="5.5" width="7.5" height="7.5" rx="1.5" />
@@ -143,6 +150,19 @@ export function Icon({ name, small = false, className = "", ...rest }: IconProps
       {...rest}
     >
       {paths[name]}
+    </svg>
+  );
+}
+
+export function Mark({ className = "size-[18px]" }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 64 64" aria-hidden="true" className={`flex-none ${className}`}>
+      <circle cx="32" cy="13" r="5" className="fill-ink" />
+      <rect x="27" y="24" width="10" height="14" rx="2" className="fill-ink" />
+      <path
+        d="M8 34h10l5 10h18l5-10h10v16a6 6 0 0 1-6 6H14a6 6 0 0 1-6-6Z"
+        className="fill-accent"
+      />
     </svg>
   );
 }
