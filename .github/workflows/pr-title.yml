@@ -1,7 +1,7 @@
 name: PR title
 
 on:
-  pull_request_target:
+  pull_request:
     types: [opened, edited, reopened, synchronize]
 
 permissions:
@@ -17,7 +17,6 @@ jobs:
     runs-on: vectis-ubuntu
     timeout-minutes: 5
     steps:
-      # Reads only event data. Never check out or run code from the pull request here.
       - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |

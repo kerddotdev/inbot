@@ -16,18 +16,11 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
+import { releaseTargets as targets, writeReleaseChecksums } from "./release-checksum.mjs";
 import { stagePackageNotices } from "./package-notices.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const nodeVersion = "24.21.0";
-const targets = [
-  "darwin-arm64",
-  "darwin-x64",
-  "linux-x64",
-  "linux-arm64",
-  "win32-x64",
-  "win32-arm64",
-];
 const { values } = parseArgs({
   options: {
     target: { type: "string", multiple: true },
@@ -38,8 +31,6 @@ const { values } = parseArgs({
 const selected = values.target ?? targets;
 if (selected.length === 0 || selected.some((target) => !targets.includes(target)))
   throw new Error(`Supported targets: ${targets.join(", ")}`);
-if (process.platform === "win32")
-  throw new Error("Package on macOS or Linux with tar, zip and unzip.");
 if (process.versions.node !== nodeVersion)
   throw new Error(`Packaging requires Node ${nodeVersion}.`);
 const manifest = JSON.parse(await readFile(join(root, "package.json"), "utf8"));
@@ -48,6 +39,8 @@ if (typeof version !== "string" || !/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(v
   throw new Error("package.json must contain a release version.");
 if (process.env.GITHUB_REF_TYPE === "tag" && process.env.GITHUB_REF_NAME !== `v${version}`)
   throw new Error(`Release tag must be v${version}.`);
+if (process.platform === "win32")
+  throw new Error("Package on macOS or Linux with tar, zip and unzip.");
 const lock = await readFile(join(root, "pnpm-lock.yaml"), "utf8");
 const output = resolve(root, values.output);
 const cache = join(output, ".cache");
@@ -279,19 +272,7 @@ try {
     await rename(`${archive}.tmp`, archive);
     console.log(`Packaged ${archive}`);
   }
-  const archives = (await readdir(output))
-    .filter((name) =>
-      targets.some(
-        (target) =>
-          name === `inbot-${version}-${target}.${target.startsWith("win32-") ? "zip" : "tar.gz"}`,
-      ),
-    )
-    .sort();
-  const checksums = await Promise.all(
-    archives.map(async (name) => `${hash(await readFile(join(output, name)))}  ${name}\n`),
-  );
-  await writeFile(join(output, "SHA256SUMS.tmp"), checksums.join(""));
-  await rename(join(output, "SHA256SUMS.tmp"), join(output, "SHA256SUMS"));
+  await writeReleaseChecksums(output, version);
 } finally {
   await rm(temporary, { recursive: true, force: true });
 }

@@ -2,33 +2,47 @@ name: Release
 
 on:
   push:
-    tags: [v*]
-  workflow_dispatch:
+    tags: ["v*.*.*"]
 
 permissions:
   contents: read
 
 concurrency:
-  group: release-${{ github.ref }}
+  group: release
   cancel-in-progress: false
 
 jobs:
-  package:
+  preflight:
     runs-on: vectis-ubuntu
-    timeout-minutes: 30
+    timeout-minutes: 5
     outputs:
       version: ${{ steps.version.outputs.version }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: Check release version
         id: version
         run: |
           version=$(jq -r .version package.json)
-          if [ "$GITHUB_REF_TYPE" = tag ] && [ "$GITHUB_REF_NAME" != "v$version" ]; then
+          if [ "$GITHUB_REF_NAME" != "v$version" ]; then
             echo "Tag must match package.json: v$version" >&2
             exit 1
           fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
+
+  check:
+    needs: preflight
+    uses: ./.github/workflows/ci.yml
+
+  package:
+    needs: check
+    runs-on: vectis-ubuntu
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
         with:
           version: 10.24.0
@@ -37,8 +51,6 @@ jobs:
           node-version: 24.21.0
           cache: pnpm
       - run: pnpm install --frozen-lockfile --ignore-scripts
-      - run: pnpm typecheck
-      - run: pnpm exec vitest run apps/cli/src/packaged.test.ts
       - run: pnpm package
       - run: node scripts/smoke-release.mjs dist-release
       - name: Smoke Linux x64 on the ARM64 Vectis guest
@@ -57,7 +69,7 @@ jobs:
           INBOT_TEST_RELEASE_DIR: dist-release
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: release
+          name: unsigned-release
           path: |
             dist-release/*.tar.gz
             dist-release/*.zip
@@ -65,20 +77,63 @@ jobs:
           if-no-files-found: error
           compression-level: 0
 
-  smoke-macos:
+  sign-macos:
     needs: package
     runs-on: vectis-macos-26-arm64
-    timeout-minutes: 10
+    timeout-minutes: 90
+    environment: release
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 24.21.0
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          name: release
+          name: unsigned-release
           path: dist-release
-      - run: node scripts/smoke-release.mjs dist-release
+      - name: Import signing identity
+        env:
+          CERTIFICATE_P12: ${{ secrets.MACOS_CERTIFICATE_P12 }}
+          CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
+        run: |
+          umask 077
+          keychain="$RUNNER_TEMP/signing.keychain-db"
+          password=$(openssl rand -hex 24)
+          security create-keychain -p "$password" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$password" "$keychain"
+          printf %s "$CERTIFICATE_P12" | base64 --decode > "$RUNNER_TEMP/certificate.p12"
+          security import "$RUNNER_TEMP/certificate.p12" -k "$keychain" -P "$CERTIFICATE_PASSWORD" -T /usr/bin/codesign >/dev/null
+          rm "$RUNNER_TEMP/certificate.p12"
+          security set-key-partition-list -S apple-tool:,apple: -k "$password" "$keychain" >/dev/null
+          printf %s "$APPLE_API_KEY_P8" > "$RUNNER_TEMP/AuthKey.p8"
+          echo "APPLE_API_KEY=$RUNNER_TEMP/AuthKey.p8" >> "$GITHUB_ENV"
+      - name: Sign and notarize both macOS archives
+        run: node scripts/sign-macos.mjs dist-release --identity "$MACOS_SIGNING_IDENTITY" --keychain "$RUNNER_TEMP/signing.keychain-db" --notarize
+        env:
+          MACOS_SIGNING_IDENTITY: ${{ vars.MACOS_SIGNING_IDENTITY }}
+          APPLE_API_KEY_ID: ${{ vars.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ vars.APPLE_API_ISSUER }}
+      - name: Verify signatures and the signed macOS ARM64 runtime
+        run: |
+          node --test scripts/macos-signing.test.mjs
+          node scripts/smoke-release.mjs dist-release
+        env:
+          INBOT_TEST_SIGNED_RELEASE_DIR: dist-release
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: signed-macos
+          path: dist-release/*-darwin-*.tar.gz
+          if-no-files-found: error
+          compression-level: 0
+      - name: Remove signing material
+        if: always()
+        run: |
+          security delete-keychain "$RUNNER_TEMP/signing.keychain-db" 2>/dev/null || true
+          rm -f "$RUNNER_TEMP/certificate.p12" "$RUNNER_TEMP/AuthKey.p8"
 
   smoke-windows:
     needs: package
@@ -89,20 +144,22 @@ jobs:
         shell: powershell
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 24.21.0
           architecture: arm64
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          name: release
+          name: unsigned-release
           path: dist-release
       # Native addons need the Visual C++ runtime, which the clean Windows guest lacks.
       - name: Install the Visual C++ runtimes
         run: |
           foreach ($arch in "arm64", "x64") {
             $installer = Join-Path $env:RUNNER_TEMP "vc_redist.$arch.exe"
-            Invoke-WebRequest -Uri "https://aka.ms/vs/17/release/vc_redist.$arch.exe" -OutFile $installer
+            Invoke-WebRequest -Uri "https://aka.ms/vc14/vc_redist.$arch.exe" -OutFile $installer
             $process = Start-Process -FilePath $installer -ArgumentList "/install", "/quiet", "/norestart" -Wait -PassThru
             if ($process.ExitCode -notin 0, 3010) { exit $process.ExitCode }
           }
@@ -119,33 +176,63 @@ jobs:
         env:
           INBOT_TEST_RELEASE_DIR: dist-release
 
-  draft-release:
-    needs: [package, smoke-macos, smoke-windows]
+  publish:
+    needs: [preflight, package, sign-macos, smoke-windows]
     runs-on: vectis-ubuntu
     timeout-minutes: 10
+    environment: release
     permissions:
       contents: write
+      id-token: write
+      attestations: write
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.21.0
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          name: release
+          name: unsigned-release
           path: release
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: signed-macos
+          path: release
+      - name: Rebuild checksums for the final signed assets
+        run: node scripts/release-checksum.mjs release "$RELEASE_VERSION"
+        env:
+          RELEASE_VERSION: ${{ needs.preflight.outputs.version }}
+      - name: Extract curated release notes when available
+        run: node scripts/release-notes.mjs "$RELEASE_VERSION" "$RUNNER_TEMP/release-notes.md"
+        env:
+          RELEASE_VERSION: ${{ needs.preflight.outputs.version }}
       - name: Refuse to modify a published release
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
-          RELEASE_TAG: v${{ needs.package.outputs.version }}
+          RELEASE_TAG: ${{ github.ref_name }}
         with:
           script: |
             const releases = await github.paginate(github.rest.repos.listReleases, context.repo);
             if (releases.some(release => release.tag_name === process.env.RELEASE_TAG && !release.draft))
               throw new Error("This version is already published. Choose a new package version.");
+      - name: Attest the final release assets
+        uses: actions/attest-build-provenance@8beda2b7ed98355c0e97c0a63bec38ae472e66c4 # v4
+        with:
+          subject-path: |
+            release/*.tar.gz
+            release/*.zip
+            release/SHA256SUMS
       - uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
         with:
-          tag_name: v${{ needs.package.outputs.version }}
-          target_commitish: ${{ github.sha }}
-          name: Inbot ${{ needs.package.outputs.version }}
-          draft: true
+          tag_name: ${{ github.ref_name }}
+          name: Inbot ${{ needs.preflight.outputs.version }}
+          draft: false
+          body_path: ${{ runner.temp }}/release-notes.md
           generate_release_notes: true
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          make_latest: ${{ !contains(github.ref_name, '-') }}
           fail_on_unmatched_files: true
           files: |
             release/*.tar.gz

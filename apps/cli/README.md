@@ -34,6 +34,11 @@ Node runtime is required. Releases have not been published yet. See the root
 Windows archives include x64 and ARM64 builds; `install.ps1` selects the OS
 architecture. Its `-NoPathUpdate` switch leaves PATH unchanged for isolated
 installer checks or manual shim management.
+Windows installation checks native runtime loading before changing the install.
+If it fails, install or repair the Microsoft Visual C++ v14 Redistributable from
+the architecture-specific official URL printed by the installer, then rerun it.
+Use `powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\install.ps1` from
+a checkout.
 
 ```sh
 inbot serve --init --port 8025
