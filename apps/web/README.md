@@ -10,9 +10,9 @@ Implemented screens:
   session checking on load, and single-use login link redemption. Link tokens
   are removed from browser history before rendering. Cookie sessions use the
   server-issued CSRF token for unsafe requests; reload restores it through status.
-- Real inboxes, cursor-paginated threads and messages, plain-text message bodies,
-  mark read/unread, thread labels, new mail, and replies. HTML source is displayed
-  as escaped text, never executed. Sends retain an idempotency key when retrying
+- Real inboxes, cursor-paginated threads and messages, sanitized HTML or plain-text
+  message bodies, mark read/unread, thread labels, new mail, and replies. HTML
+  rendering follows the isolation and remote-content rules below. Sends retain an idempotency key when retrying
   the same composition and report queueing separately from provider delivery.
 - New inbox in the sidebar and empty Mail view creates an address from a username,
   domain, and optional display name. The domain picker loads registration details
@@ -27,7 +27,7 @@ Implemented screens:
   Pending operations disable controls; validation and duplicate-address errors
   show the server's message and fix. These actions use the existing inbox endpoints.
   Message and draft attachments download as files through signed download URLs;
-  they are never rendered inline.
+  message raster CID images can also be displayed inside the isolated HTML view.
 - API key listing, creation with inbox scope, explicit permissions and send policy,
   one-time secret display, editing of names, permissions and send policies, and
   revocation. Edits apply on the next request without rotating the secret. Key secrets are not cached or persisted.
@@ -89,3 +89,49 @@ an isolated encrypted server fixture, memory keychain, and fake transport.
 
 Thread messages offer Show quoted text only when the normalized full text contains
 more text than the extracted reply. Whitespace-only differences do not show it.
+
+## HTML messages
+
+HTML is preferred when `extracted_html ?? html` exists, including an explicitly
+empty extracted body. HTML and Plain text buttons switch formats; plain text
+uses `extracted_text ?? text`. Show full HTML message reveals the sanitized
+original when extraction changed it; Show extracted HTML switches back. Plain-text
+messages retain their styling.
+
+DOMPurify uses explicit HTML element and attribute allowlists. Scripts, event
+handlers, forms, embedded documents, SVG, unsafe links, base URLs, meta refresh,
+stylesheets and resource-bearing CSS are removed. Only a small set of inline
+formatting properties remains. The document has its own restrictive CSP and
+renders in a `srcdoc` iframe without script permission.
+Popup permissions allow user-activated links to open a usable new tab; every
+link uses `_blank` and `noopener noreferrer`. Referrers are suppressed.
+
+The sandbox grants same-origin access only so the host can measure the document
+and size the frame to its content. Scripts stay disabled by both the sandbox and
+the frame CSP, so the sanitized document never runs code. Never add
+`allow-scripts` to this frame: combined with same-origin access it would let mail
+content escape the sandbox. It stays
+on a light paper surface in both app themes, with a theme-token border and
+visible keyboard focus. The frame has a message title and reachable links.
+
+HTTP(S) images are blocked by default. Load remote images allows them for that
+message only, in memory until reload or the owner session ends; Block remote
+images reverses it. This can contact the sender's image host and reveal that the
+message was opened. External backgrounds, image sets (`srcset`), stylesheets,
+and relative image URLs remain blocked. Notices appear only for detected
+external sources. The host CSP permits HTTP(S) image protocols because `srcdoc`
+inherits it; the frame CSP and sanitizer enforce the per-message choice.
+
+CID images resolve only to the same message's `content_id` attachments through
+`api.messageAttachment`, including the signed local download and issuer checks.
+PNG, JPEG, GIF, WebP and AVIF attachments up to 10 MiB with matching response
+types are converted to in-memory data URLs. SVG and other attachments remain
+download-only. Direct raster data images are allowed; arbitrary blob and data
+URLs are removed. All attachments retain their download action, including inline
+images, so saving remains possible and failed previews never hide attachments.
+Download and unsafe-image errors include the existing code and actionable fix.
+
+Sanitization is a browser presentation step. REST, MCP and CLI still receive raw
+`html` and `extracted_html` as untrusted data. There are no new routes, permissions,
+events or tunnel exposures. Sanitizer tests cover active content, URLs, external
+images, consent, CID scope, CSS and image sets without asserting static UI markup.
