@@ -4,6 +4,12 @@
 HTTP API declaration. It contains no handlers, mail delivery, storage, or
 permission enforcement. Workspace consumers import relative paths to `src`.
 
+Local CLI `service install`, `service uninstall`, and `service status` are owner
+machine operations, with no REST endpoints, MCP tools, grants, or events. They
+reuse the existing error codes; the status health probe decodes `OwnerStatus`
+from the existing public `GET /v0/owner/status`. Service-manager state remains a
+local CLI result rather than an HTTP resource.
+
 The implemented subset uses `/v0` paths, snake_case fields,
 required response fields, cursor pagination, search highlights, and event
 payloads. `OpenApi.fromApi(InbotApi)` from `effect/http-api` generates its OpenAPI

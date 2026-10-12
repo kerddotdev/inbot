@@ -14,6 +14,13 @@ description: Use for any email task through Inbot - checking an inbox, reading o
 - For cloud agents, use the owner-provided HTTPS remote URL with the same API key; local owner tokens and management routes are unavailable there.
 - Your key fixes which inboxes and actions you may use. Anything outside it returns `not_found`.
 
+The owner can keep a packaged local instance on a fixed port with `inbot service
+install` (default 8025), inspect it with `inbot service status --json`, and stop/remove
+the service with `inbot service uninstall` without deleting mail or keys. These
+are local owner operations, unavailable through MCP or REST and rejected in an
+agent credential environment. Ask the owner to handle service installation;
+see the [CLI reference](references/cli.md#local-owner-background-service).
+
 ```json
 {
   "mcpServers": {
