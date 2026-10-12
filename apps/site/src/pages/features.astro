@@ -21,6 +21,13 @@ const features = [
     alt: "A thread in an agent inbox with an attachment and a delivered reply.",
   },
   {
+    id: "html",
+    title: "HTML mail, opened safely",
+    body: "Newsletters and receipts render the way they were designed, inside a sandboxed frame with no scripts. Remote images stay blocked until you load them for that message, and inline images come from your own encrypted copy.",
+    link: { href: "/docs/guides/owner-app", label: "Reading mail" },
+    alt: "A newsletter rendered as HTML with an inline chart and remote images blocked.",
+  },
+  {
     id: "approvals",
     title: "Approvals",
     body: "Keys with the approval policy turn every send into a draft that waits for you. Read it, check the attachments, then approve or reject with a reason the agent can see.",
@@ -54,6 +61,13 @@ const features = [
     body: "Decide who may write to an agent and whom it may write to, globally or per inbox. Rejected mail is recorded with its sender and reason, so nothing disappears without a trace.",
     link: { href: "/docs/guides/lists", label: "Lists and rejected mail" },
     alt: "Allow and block lists with a rejected message.",
+  },
+  {
+    id: "quarantine",
+    title: "Quarantine, not loss",
+    body: "Mail that cannot be processed stays encrypted in the buffer instead of disappearing. You see why it failed, retry it once the cause is fixed, or delete it for good.",
+    link: { href: "/docs/operations/troubleshooting", label: "Troubleshoot inbound mail" },
+    alt: "Two quarantined inbound messages with their failure reasons and retry and delete actions.",
   },
   {
     id: "webhooks",
@@ -109,6 +123,25 @@ const features = [
       <pre tabindex="0" aria-label="Add Inbot to Claude Code"><code><span class="p">$ </span>claude mcp add -s user --transport http inbot \
     http://127.0.0.1:8025/mcp \
     --header <span class="tok-s">"Authorization: Bearer $INBOT_API_KEY"</span></code></pre>
+    </div>
+  </section>
+
+  <section class="sec" aria-labelledby="service">
+    <header>
+      <h2 class="h2" id="service">Always running</h2>
+      <p>
+        One command installs Inbot as a background service for your user, with a fixed address
+        your agents can rely on. It starts at login and restarts if it stops.
+      </p>
+      <a class="more" href="/docs/operations/service">Run it as a service</a>
+    </header>
+    <div class="panel">
+      <div class="panel-head"><span>Terminal</span><span>zsh</span></div>
+      <pre tabindex="0" aria-label="Install the background service"><code><span class="p">$ </span>inbot service install
+<span class="p">$ </span>inbot service status
+<span class="tok-c">state         running
+port          8025
+http_healthy  true</span></code></pre>
     </div>
   </section>
 
