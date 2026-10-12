@@ -530,6 +530,19 @@
 .site-footer ul a:hover {
   color: var(--text);
 }
+.site-footer .legal {
+  grid-column: 1 / -1;
+  margin-top: 0;
+  max-width: none;
+  font-size: 0.8125rem;
+}
+.site-footer .legal a {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.site-footer .legal a:hover {
+  color: var(--text);
+}
 @media (max-width: 48rem) {
   .site-footer {
     grid-template-columns: repeat(2, minmax(0, 1fr));
