@@ -71,9 +71,9 @@ pnpm package
 pnpm package --target darwin-arm64 --target linux-x64
 ```
 
-The targets are `darwin-arm64`, `darwin-x64`, `linux-x64`, `linux-arm64` and
-`win32-x64`. Output is `dist-release/inbot-<version>-<target>.tar.gz` (Windows:
-`.zip`) plus `SHA256SUMS`. A single macOS or Linux machine can build all five.
+The targets are `darwin-arm64`, `darwin-x64`, `linux-x64`, `linux-arm64`,
+`win32-x64` and `win32-arm64`. Output is `dist-release/inbot-<version>-<target>.tar.gz` (Windows:
+`.zip`) plus `SHA256SUMS`. A single macOS or Linux machine can build all six.
 Each archive contains the pinned Node runtime verified against nodejs.org's
 `SHASUMS256.txt`, the compiled application and shared packages, the provisioner's
 `dist/worker/inbound.js`, the owner UI and frozen-lockfile production dependencies.
@@ -92,16 +92,23 @@ INBOT_TEST_RELEASE_DIR=dist-release pnpm test:packaging
 
 The smoke script extracts the host archive, checks the launcher and native addon
 imports, starts with a temporary explicit home and memory keychain, queries
-`/v0/owner/status` and the UI, then stops only its own captured PID. Installer
+`/v0/owner/status` and the UI, then stops only its own captured PID. Unix shutdown
+is graceful; Windows terminates the bundled Node process directly. Installer
 tests use temporary roots, cover idempotence, upgrades and checksum refusal, and
 optionally install the actual host archive from a local release directory.
+On Windows, run `node --test scripts/install-windows.test.mjs` with
+`INBOT_TEST_RELEASE_DIR` set to the release directory. These tests pass
+`-NoPathUpdate` so the installer leaves the user PATH untouched.
 
-The release workflow uses Vectis Ubuntu and macOS runners. A `v*` tag must match
+The release workflow uses Vectis Ubuntu, macOS and Windows runners. A `v*` tag must match
 `package.json`; manual dispatch uses the package version. After all-target
-packaging and Linux x64/macOS ARM64 smoke tests, it creates a **draft** GitHub
-release with the five archives and checksums. The ARM64 Ubuntu guest runs an
+packaging and Linux ARM64/x64, macOS ARM64 and Windows ARM64/x64 smoke tests, it creates a **draft** GitHub
+release with the six archives and checksums. The ARM64 Ubuntu guest runs an
 additional Linux x64 smoke through QEMU with Ubuntu cross-runtime libraries;
 this checks the actual x64 launcher and native addons without compiling them.
+The Windows 11 ARM64 guest checks the native ARM64 archive and the x64 archive
+under emulation, then verifies `install.ps1` against local fixture and release
+archives using temporary install roots. That job requires only Node, not pnpm.
 Published versions are never modified. Review and publication are manual.
 
 ## Development

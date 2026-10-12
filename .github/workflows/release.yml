@@ -80,8 +80,38 @@ jobs:
           path: dist-release
       - run: node scripts/smoke-release.mjs dist-release
 
+  smoke-windows:
+    needs: package
+    runs-on: vectis-windows-11-arm64
+    timeout-minutes: 15
+    defaults:
+      run:
+        shell: powershell
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.21.0
+          architecture: arm64
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: release
+          path: dist-release
+      - name: Smoke native Windows ARM64
+        run: node scripts/smoke-release.mjs dist-release
+        env:
+          INBOT_SMOKE_TARGET: win32-arm64
+      - name: Smoke Windows x64 under emulation
+        run: node scripts/smoke-release.mjs dist-release
+        env:
+          INBOT_SMOKE_TARGET: win32-x64
+      - name: Verify the PowerShell installer
+        run: node --test scripts/install-windows.test.mjs scripts/release-checksum.test.mjs
+        env:
+          INBOT_TEST_RELEASE_DIR: dist-release
+
   draft-release:
-    needs: [package, smoke-macos]
+    needs: [package, smoke-macos, smoke-windows]
     runs-on: vectis-ubuntu
     timeout-minutes: 10
     permissions:
