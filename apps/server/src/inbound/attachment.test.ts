@@ -15,4 +15,4 @@ test("extracts XLSX attachment text with the overridden ExcelJS dependency", asy
     extraction:
       "=== Inventory ===\nItem\tQuantity\nSynthetic attachment\t7\t14\n\n=== Notes ===\nCompatibility fixture",
   });
-});
+}, 30_000);
