@@ -19,10 +19,19 @@ sh install.sh --version 0.1.0
 ```
 
 ```powershell
-.\install.ps1
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\install.ps1
 # Or select a published version:
-.\install.ps1 -Version 0.1.0
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\install.ps1 -Version 0.1.0
 ```
+
+Once the repository is public, download and run the Windows installer in PowerShell:
+
+```powershell
+Invoke-WebRequest https://raw.githubusercontent.com/kerddotdev/inbot/main/install.ps1 -OutFile "$env:TEMP\inbot-install.ps1"; powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$env:TEMP\inbot-install.ps1"
+```
+
+Installers select the latest published stable release by default; prereleases require an explicit version.
+Windows checks the bundled Node and native addons before installation. If the Microsoft Visual C++ v14 runtime is missing or cannot load, it stops with an architecture-specific [official Microsoft download](https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist/) link. Install or repair that runtime, restart if requested, and rerun the installer. Installing the runtime can require administrator approval; the Inbot installer does not install it automatically.
 
 macOS and Linux install under `~/.local/share/inbot/app/<version>` with an
 `~/.local/bin/inbot` shim. Windows installs under
@@ -106,16 +115,11 @@ On Windows, run `node --test scripts/install-windows.test.mjs` with
 `INBOT_TEST_RELEASE_DIR` set to the release directory. These tests pass
 `-NoPathUpdate` so the installer leaves the user PATH untouched.
 
-The release workflow uses Vectis Ubuntu, macOS and Windows runners. A `v*` tag must match
-`package.json`; manual dispatch uses the package version. After all-target
-packaging and Linux ARM64/x64, macOS ARM64 and Windows ARM64/x64 smoke tests, it creates a **draft** GitHub
-release with the six archives and checksums. The ARM64 Ubuntu guest runs an
-additional Linux x64 smoke through QEMU with Ubuntu cross-runtime libraries;
-this checks the actual x64 launcher and native addons without compiling them.
-The Windows 11 ARM64 guest checks the native ARM64 archive and the x64 archive
-under emulation, then verifies `install.ps1` against local fixture and release
-archives using temporary install roots. That job requires only Node, not pnpm.
-Published versions are never modified. Review and publication are manual.
+The tag-only release workflow runs the full reusable CI on Vectis before packaging.
+It verifies Linux ARM64/x64 and Windows ARM64/x64 archives and installers, signs every Mach-O in both macOS archives with Developer ID and hardened runtime, notarizes both payloads, and smoke-tests the signed macOS ARM64 archive. Checksums are rebuilt after signing, and provenance attestations cover the final archives and checksums. The workflow publishes a non-draft release with generated notes and the matching curated `CHANGELOG.md` section when available. Tags containing a hyphen become prereleases. Published versions are never modified.
+
+CLI binaries cannot be stapled; Gatekeeper verifies their notarization online.
+See [RELEASING.md](RELEASING.md) for runners, signing, release notes and repository settings.
 
 ## Development
 

@@ -43,6 +43,9 @@
             "context": "check (macos)"
           },
           {
+            "context": "check (windows)"
+          },
+          {
             "context": "pr-title"
           }
         ]

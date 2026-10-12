@@ -7,6 +7,11 @@ an owner connection. Installers do not register a service. See the
 [installation guide](../../../README.md#install) for release availability.
 Windows release archives support x64 and ARM64; `install.ps1` selects the OS
 architecture. Use `-NoPathUpdate` only when managing the shim path explicitly.
+Windows installation checks native runtime loading before changing the install.
+If it fails, install or repair the Microsoft Visual C++ v14 Redistributable from
+the architecture-specific official URL printed by the installer, then rerun it.
+Use `powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\install.ps1` from
+a checkout.
 
 Set `INBOT_URL` to the service origin and `INBOT_API_KEY` to your scoped key.
 Both must be present; the CLI never falls back to owner credentials when only
