@@ -813,7 +813,11 @@ function spawnServer(home: string, args: readonly string[] = [], initialize = tr
 test("builds and starts the service in a child process with a test keychain and shuts down by its captured PID", async ({
   home,
 }) => {
-  const build = spawn("pnpm", ["build"], { cwd: process.cwd(), stdio: "pipe" });
+  // pnpm is a .cmd shim on Windows, which spawn cannot start without a shell.
+  const pnpm = process.env.npm_execpath;
+  const build = pnpm
+    ? spawn(process.execPath, [pnpm, "build"], { cwd: process.cwd(), stdio: "pipe" })
+    : spawn("pnpm", ["build"], { cwd: process.cwd(), stdio: "pipe" });
   let buildOutput = "";
   build.stdout?.on("data", (data: Buffer) => {
     buildOutput += data.toString();
