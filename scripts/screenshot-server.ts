@@ -22,6 +22,18 @@ const ops = `ops@${domain}`;
 const billing = `billing@${domain}`;
 const password = "inbot-screenshot-demo";
 const hour = 60 * 60 * 1000;
+const newsletterHtml = [
+  '<div style="max-width:600px;margin:0 auto;font-family:Helvetica,Arial,sans-serif;color:#1f2024">',
+  '<p style="font-size:13px;letter-spacing:.04em;text-transform:uppercase;color:#0b6f78;font-weight:700;margin:0 0 6px">Product Weekly</p>',
+  '<h1 style="font-size:28px;line-height:1.2;margin:0 0 16px">Measuring the first useful moment</h1>',
+  '<p style="font-size:16px;line-height:1.6;margin:0 0 20px">This week we are looking at the moment a new customer first gets something useful from a product. One team reduced setup abandonment by replacing a long checklist with a working example.</p>',
+  '<img src="cid:onboarding-chart@example.net" alt="Median minutes to the first useful result for three onboarding variants" width="560" style="display:block;width:100%;height:auto;border-radius:12px;margin:0 0 20px">',
+  '<p style="font-size:16px;line-height:1.6;margin:0 0 20px">Try comparing time to first result with your usual activation metric. The gap often reveals a step that is clear to the team but confusing to a new customer.</p>',
+  '<p style="margin:0 0 28px"><a href="https://example.net/weekly/first-useful-moment" style="display:inline-block;background:#0b6f78;color:#f3f8f8;text-decoration:none;font-weight:700;padding:12px 20px;border-radius:8px">Read the full issue</a></p>',
+  '<img src="https://example.net/weekly/open.png" width="1" height="1" alt="">',
+  '<p style="font-size:13px;color:#5a5d65;margin:0">The Product Weekly team</p>',
+  "</div>",
+].join("");
 type Demo = Awaited<ReturnType<typeof fixture>>;
 type Mail = {
   id: string;
@@ -33,6 +45,8 @@ type Mail = {
   timestamp: number;
   parent?: string;
   attachment?: SendAttachment;
+  html?: string;
+  inline?: { cid: string; content_type: string; content: string };
 };
 
 async function requireOk(response: Response, expectedStatus = 200) {
@@ -57,6 +71,42 @@ function mime(mail: Mail) {
       : []),
   ];
   const attachment = mail.attachment;
+  if (mail.html !== undefined) {
+    const related = `${boundary}-related`;
+    const inline = mail.inline;
+    return Buffer.from(
+      [
+        ...headers,
+        `Content-Type: multipart/alternative; boundary="${boundary}"`,
+        "",
+        `--${boundary}`,
+        "Content-Type: text/plain; charset=utf-8",
+        "",
+        mail.text,
+        `--${boundary}`,
+        ...(inline
+          ? [
+              `Content-Type: multipart/related; boundary="${related}"`,
+              "",
+              `--${related}`,
+              "Content-Type: text/html; charset=utf-8",
+              "",
+              mail.html,
+              `--${related}`,
+              `Content-Type: ${inline.content_type}`,
+              `Content-ID: <${inline.cid}>`,
+              "Content-Disposition: inline",
+              "Content-Transfer-Encoding: base64",
+              "",
+              inline.content,
+              `--${related}--`,
+            ]
+          : ["Content-Type: text/html; charset=utf-8", "", mail.html]),
+        `--${boundary}--`,
+        "",
+      ].join("\r\n"),
+    );
+  }
   return Buffer.from(
     [
       ...headers,
@@ -215,6 +265,9 @@ async function seed(demo: Demo) {
     ),
   };
   const pdf = invoice();
+  const chart = (await readFile(resolve("scripts/fixtures/onboarding-chart.png"))).toString(
+    "base64",
+  );
   const messages = [
     {
       id: "vendor-quote",
@@ -256,6 +309,12 @@ async function seed(demo: Demo) {
       sender: "newsletter@example.net",
       subject: "Product Weekly: measuring the first useful moment",
       text: "This week we are looking at the moment a new customer first gets something useful from a product.\n\nOne team reduced setup abandonment by replacing a long checklist with a working example. Another found that a helpful confirmation email mattered more than an extra tooltip.\n\nTry comparing time to first result with your usual activation metric. The gap often reveals a step that is clear to the team but confusing to a new customer.\n\nThe Product Weekly team",
+      html: newsletterHtml,
+      inline: {
+        cid: "onboarding-chart@example.net",
+        content_type: "image/png",
+        content: chart,
+      },
     },
     {
       id: "export-bug",
