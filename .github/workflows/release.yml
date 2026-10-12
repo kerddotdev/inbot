@@ -97,6 +97,15 @@ jobs:
         with:
           name: release
           path: dist-release
+      # Native addons need the Visual C++ runtime, which the clean Windows guest lacks.
+      - name: Install the Visual C++ runtimes
+        run: |
+          foreach ($arch in "arm64", "x64") {
+            $installer = Join-Path $env:RUNNER_TEMP "vc_redist.$arch.exe"
+            Invoke-WebRequest -Uri "https://aka.ms/vs/17/release/vc_redist.$arch.exe" -OutFile $installer
+            $process = Start-Process -FilePath $installer -ArgumentList "/install", "/quiet", "/norestart" -Wait -PassThru
+            if ($process.ExitCode -notin 0, 3010) { exit $process.ExitCode }
+          }
       - name: Smoke native Windows ARM64
         run: node scripts/smoke-release.mjs dist-release
         env:
