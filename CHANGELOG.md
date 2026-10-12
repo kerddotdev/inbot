@@ -1,8 +1,8 @@
 # Changelog
 
-Published changes are recorded in [GitHub releases](https://github.com/kerddotdev/inbot/releases), with notes generated from merged pull requests. This file summarizes the first release; its date is set when 0.1.0 is published.
+Published changes are recorded in [GitHub releases](https://github.com/kerddotdev/inbot/releases), with notes generated from merged pull requests. This file summarizes each release.
 
-## 0.1.0 (unreleased)
+## 0.1.0 - 2026-10-12
 
 - Self-hosted agent inboxes on custom domains, encrypted local SQLite storage, and OS-keychain-backed initialization and unlock.
 - Mailbox operations through a shared typed REST API, MCP server, and authenticated CLI, with mail search, batch operations, raw messages, and attachment downloads through REST and the CLI.
