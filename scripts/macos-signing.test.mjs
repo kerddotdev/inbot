@@ -27,7 +27,11 @@ test(
       const temporary = await mkdtemp(join(tmpdir(), "inbot-signed-test-"));
       try {
         await run("tar", ["-xzf", join(directory, archive), "-C", temporary]);
-        const entries = (await run("tar", ["-tzf", join(directory, archive)])).stdout.split("\n");
+        const entries = (
+          await run("tar", ["-tzf", join(directory, archive)], {
+            maxBuffer: 16 * 1024 * 1024,
+          })
+        ).stdout.split("\n");
         const binaries = entries.filter(
           (entry) => entry.endsWith(".node") || entry === "inbot/runtime/bin/node",
         );
