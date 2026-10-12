@@ -1,4 +1,4 @@
-import { cp, copyFile, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { cp, copyFile, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -12,6 +12,20 @@ await cp(join(root, "apps/site/dist"), site, { recursive: true });
 await cp(join(root, "apps/docs/dist"), docs, { recursive: true });
 await copyFile(join(root, "install.sh"), join(site, "install.sh"));
 await copyFile(join(root, "install.ps1"), join(site, "install.ps1"));
+
+async function normalizeDashes(directory) {
+  for (const entry of await readdir(directory, { withFileTypes: true })) {
+    const path = join(directory, entry.name);
+    if (entry.isDirectory()) await normalizeDashes(path);
+    else if (/\.(?:html|css|js|json|md|txt|xml|svg)$/.test(entry.name)) {
+      const text = await readFile(path, "utf8");
+      const normalized = text.replace(/[\u2013\u2014]/g, "-");
+      if (normalized !== text) await writeFile(path, normalized);
+    }
+  }
+}
+
+await normalizeDashes(site);
 
 const security = `/*
   X-Content-Type-Options: nosniff
