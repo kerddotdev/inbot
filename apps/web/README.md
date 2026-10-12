@@ -102,12 +102,15 @@ DOMPurify uses explicit HTML element and attribute allowlists. Scripts, event
 handlers, forms, embedded documents, SVG, unsafe links, base URLs, meta refresh,
 stylesheets and resource-bearing CSS are removed. Only a small set of inline
 formatting properties remains. The document has its own restrictive CSP and
-renders in a `srcdoc` iframe with neither script nor same-origin permission.
+renders in a `srcdoc` iframe without script permission.
 Popup permissions allow user-activated links to open a usable new tab; every
 link uses `_blank` and `noopener noreferrer`. Referrers are suppressed.
 
-The frame uses a bounded, scrollable viewport rather than reading its document
-or adding scripts, messages, or same-origin access to measure content. It stays
+The sandbox grants same-origin access only so the host can measure the document
+and size the frame to its content. Scripts stay disabled by both the sandbox and
+the frame CSP, so the sanitized document never runs code. Never add
+`allow-scripts` to this frame: combined with same-origin access it would let mail
+content escape the sandbox. It stays
 on a light paper surface in both app themes, with a theme-token border and
 visible keyboard focus. The frame has a message title and reachable links.
 

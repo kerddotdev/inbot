@@ -122,7 +122,7 @@ Downloads remain attachment responses with the same issuer, permission, scope an
 origin checks. REST message bodies are never sanitized for agents. The static web
 CSP permits HTTP(S) images so inherited `srcdoc` policies can support explicit
 per-message consent; each sanitized frame defaults to data images only and has
-no script or same-origin permission. See [HTML messages](../../../web/README.md#html-messages).
+no script permission. See [HTML messages](../../../web/README.md#html-messages).
 
 ## Owner mail transport
 
