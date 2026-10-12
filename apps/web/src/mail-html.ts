@@ -240,7 +240,7 @@ export function sanitizeMailHtml(
     blockedOtherContent,
     srcDoc: `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${csp}"><meta name="referrer" content="no-referrer"><style>
 html { color-scheme: light; background: #faf9f6; color: #1f2024; }
-body { margin: 16px; font: 16px/1.6 Georgia, serif; overflow-wrap: anywhere; }
+body { margin: 0; padding: 20px 22px; font: 16px/1.6 "Iowan Old Style", Georgia, serif; overflow-wrap: anywhere; }
 img { max-width: 100%; height: auto; } table { max-width: 100%; }
 pre { white-space: pre-wrap; } a { color: #0b6f78; }
 a:focus-visible { outline: 2px solid #0b6f78; outline-offset: 3px; }
