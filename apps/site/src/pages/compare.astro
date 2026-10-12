@@ -27,13 +27,18 @@ const products: Product[] = [
       storage: "Encrypted database on your machine. Mail waiting in Cloudflare is ciphertext only.",
       domain: "Yes, on a Cloudflare zone",
       mcp: "Local, and remote through your tunnel",
-      cli: "Yes, covering every REST resource",
+      cli: "Mail resources and local owner management; browser and OAuth protocol flows use their own interfaces.",
       events: "Signed webhooks and WebSocket",
-      approval: "Enforced per key: direct, approval or read_only",
+      approval: "Enforced for API key and OAuth grants: direct, approval or read_only",
       auth: "Scoped API keys and OAuth",
-      price: "Free software. Cloudflare Workers Paid, $5 a month.",
+      price: "Free software. Workers Paid starts at $5/month; 3,000 sends included, then $0.35/1,000. Domain, host and usage costs are separate.",
     },
-    sources: [],
+    sources: [
+      "https://inbot.kerd.dev/docs/get-started/install",
+      "https://inbot.kerd.dev/docs/concepts/security",
+      "https://developers.cloudflare.com/workers/platform/pricing/",
+      "https://developers.cloudflare.com/email-service/platform/pricing/",
+    ],
   },
   {
     name: "AgentMail",
@@ -41,18 +46,18 @@ const products: Product[] = [
     values: {
       runs: "Vendor cloud. Enterprise can run in your AWS account.",
       source: "Closed. MCP server is open source.",
-      storage: "Encrypted at rest by the vendor. Your own keys on Enterprise only.",
+      storage: "Vendor-managed encryption at rest and in transit.",
       domain: "Yes, on paid plans",
       mcp: "Hosted",
       cli: "Yes",
       events: "Webhooks and WebSocket",
-      approval: "Pattern with drafts and allowlists, not enforced",
+      approval: "Draft review workflow; a mandatory send-approval policy is not documented in the linked guide.",
       auth: "API keys, OAuth for MCP",
-      price: "Free for 3 inboxes. Paid from $20 a month.",
+      price: "Free: 3 inboxes, 3,000 emails/month, 100/day. Developer: $20/month for 10 inboxes and 10,000 emails; add-ons cost extra.",
     },
     sources: [
       "https://www.agentmail.to/pricing",
-      "https://docs.agentmail.to/knowledge-base/human-in-the-loop.md",
+      "https://docs.agentmail.to/knowledge-base/human-in-the-loop",
       "https://www.agentmail.to/legal/privacy",
     ],
   },
@@ -62,14 +67,14 @@ const products: Product[] = [
     values: {
       runs: "Vendor cloud",
       source: "Closed",
-      storage: "Hosted by the vendor, 30-day default retention",
+      storage: "Hosted by the vendor. Free plan retention: 30 days inbox, 7 days spam; configurable by policy.",
       domain: "Yes",
       mcp: "Hosted",
       cli: "Yes",
       events: "Webhooks",
-      approval: "Rules and quotas, no approval step",
+      approval: "Rules and quotas; a mandatory send-approval step is not documented in the linked overview.",
       auth: "API keys",
-      price: "Free for 3 accounts. Paid from $15 a month.",
+      price: "Free: 3 Agent Accounts and 3,000 emails/month. Essentials: $15/month for 10 accounts and 10,000 emails; overages cost extra.",
     },
     sources: ["https://developer.nylas.com/docs/v3/agent-accounts/", "https://www.nylas.com/pricing/"],
   },
@@ -81,12 +86,12 @@ const products: Product[] = [
       source: "Closed. MCP server and CLI are open source.",
       storage: "Hosted by the vendor, 30-day retention",
       domain: "Yes",
-      mcp: "Hosted and local. Inboxes in beta.",
+      mcp: "Hosted and local; beta inbox tools are hosted only and require access.",
       cli: "Yes",
       events: "Webhooks",
       approval: "Not documented",
       auth: "API keys, OAuth for MCP",
-      price: "Free for 3,000 emails a month. Paid from $20 a month.",
+      price: "Transactional email: 3,000/month free, 100/day. Pro: $20/month for 50,000; extra emails $0.90/1,000. Inbox beta access is separate.",
     },
     sources: ["https://resend.com/pricing", "https://resend.com/docs/mcp-server"],
   },
@@ -98,14 +103,14 @@ const products: Product[] = [
       source: "Closed. MCP server is open source.",
       storage: "Hosted by the vendor in the EU",
       domain: "Yes, on Pro",
-      mcp: "Hosted, with read-only and single-inbox URLs",
+      mcp: "Hosted, with OAuth or API key authentication",
       cli: "Yes",
       events: "Webhooks and WebSocket",
       approval: "Not documented",
       auth: "API keys, OAuth for MCP",
-      price: "Free for 3 inboxes. Paid from 9 EUR a month plus usage.",
+      price: "Free: 3 inboxes, 3,000 emails/month, 100/day. Pro: EUR 9/month for 10 inboxes and 10,000 emails, plus usage.",
     },
-    sources: ["https://openmail.sh/pricing", "https://docs.openmail.sh/integrations/mcp"],
+    sources: ["https://openmail.sh/pricing", "https://docs.openmail.sh/integrations/mcp.md"],
   },
   {
     name: "Cloudflare Agentic Inbox",
@@ -118,9 +123,9 @@ const products: Product[] = [
       mcp: "Built in",
       cli: "No dedicated CLI",
       events: "Not documented",
-      approval: "Its built-in agent asks first. MCP agents create drafts.",
+      approval: "External MCP agents create drafts for owner review.",
       auth: "Cloudflare Access for the owner",
-      price: "Free software. Workers Paid for sending.",
+      price: "Free software. Workers Paid starts at $5/month for sending, plus infrastructure usage.",
     },
     sources: ["https://github.com/cloudflare/agentic-inbox", "https://blog.cloudflare.com/email-for-agents/"],
   },
@@ -133,11 +138,11 @@ const products: Product[] = [
       storage: "Your server. No app-level encryption documented.",
       domain: "Yes",
       mcp: "Yes",
-      cli: "Not documented",
+      cli: "Setup CLI; a dedicated mail-resource CLI is not documented in the linked README.",
       events: "Webhooks",
-      approval: "Listed as a feature",
-      auth: "Not documented",
-      price: "Free software, plus your server",
+      approval: "Reviewer decisions are recorded; they do not execute an action.",
+      auth: "Identity tokens with scopes; separate operator credentials and remote MCP OAuth.",
+      price: "Free software; server, domain and mail-provider or relay costs are separate.",
     },
     sources: ["https://github.com/openagentemail/openagentemail"],
   },
@@ -154,12 +159,14 @@ const products: Product[] = [
       events: "Signed webhooks",
       approval: "Not built in",
       auth: "Bearer key",
-      price: "Free software. Workers Paid for sending.",
+      price: "Free software. Workers Paid starts at $5/month for sending, plus infrastructure usage.",
     },
-    sources: ["https://sandeep.dev/blog/open-source-agentmail-alternative-cloudflare-workers"],
+    sources: [
+      "https://github.com/panda-sandeep/dearagent",
+      "https://sandeep.dev/blog/open-source-agentmail-alternative-cloudflare-workers",
+    ],
   },
 ];
-const others = products.slice(1);
 const [inbot] = products;
 const groups = [
   {
@@ -276,14 +283,15 @@ const groups = [
     <header>
       <h2 class="h2" id="sources">Sources</h2>
       <p>
-        Checked against each vendor's own pages on October 12, 2026. Prices and features change, so
-        if something here is out of date, open an issue.
+        Pricing and linked documentation checked on <time datetime="2026-10-12">October 12, 2026</time>.
+        Paid prices use monthly billing. Usage, domains and infrastructure can add costs.
+        Undocumented features are not assumed absent; report a correction if these sources have changed.
       </p>
       <a class="more" href="https://github.com/kerddotdev/inbot/issues">Report a correction</a>
     </header>
     <dl class="sources">
       {
-        others.map((product) => (
+        products.map((product) => (
           <div>
             <dt>{product.name}</dt>
             {product.sources.map((url) => (
