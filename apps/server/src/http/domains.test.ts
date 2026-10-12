@@ -1,7 +1,7 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Schema } from "effect";
+import { Effect, Schema } from "effect";
 import { expect, test } from "vitest";
 import {
   Domain,
@@ -11,10 +11,16 @@ import {
 import { ErrorResponse } from "../../../../packages/contracts/src/errors.js";
 import { fixture } from "./test-fixture.js";
 import { client } from "../mcp/test-client.js";
+import { observeSelfTest } from "../provision/selftest.js";
 
 test("provisions a subdomain in a custom fake zone", async () => {
   const home = await mkdtemp(join(tmpdir(), "inbot-domains-custom-zone-"));
-  const api = await fixture(home, { zoneName: "example.com" });
+  const api = await fixture(home, {
+    zoneName: "example.com",
+    dns: {
+      check: (records) => Effect.succeed(records.map((record) => ({ ...record, status: "VALID" }))),
+    },
+  });
   try {
     await api.run(api.transport.set({ account_id: "fake-account", api_token: "synthetic-token" }));
     const domain = await api.run(api.provisioner.create({ domain: "agents.example.com" }));
@@ -26,6 +32,22 @@ test("provisions a subdomain in a custom fake zone", async () => {
     expect(api.cloud.dns.some((record) => record.name === "cf2024-1._domainkey.example.com")).toBe(
       true,
     );
+    api.cloud.state.onSelfTest = async (name, token) => {
+      const address = `inbot-selftest@${name}`;
+      expect(
+        await api.run(
+          observeSelfTest(
+            api.store,
+            { mail_from: address, rcpt_to: [address] },
+            Buffer.from(`From: ${address}\r\nX-Inbot-Selftest: ${token}\r\n\r\nSynthetic probe.`),
+            "2026-10-10T12:00:00Z",
+          ),
+        ),
+      ).toBe(true);
+    };
+    const verified = await api.run(api.provisioner.verify(domain.domain_id));
+    expect(verified.status).toBe("VERIFIED");
+    expect(verified.records.every((record) => record.status === "VALID")).toBe(true);
   } finally {
     await api.close();
     await rm(home, { recursive: true, force: true });

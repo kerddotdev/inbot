@@ -20,6 +20,7 @@ import { Store } from "../store.js";
 import { InboundConfig } from "../inbound/config.js";
 import { InboundBuffer, memoryBuffer } from "../inbound/cloudflare.js";
 import { fakeCloudflare } from "../provision/fake-cloudflare.js";
+import type { PublicDns } from "../provision/dns.js";
 import { makeProvisioner, Provisioner } from "../provision/provisioner.js";
 import { RemoteAccess, makeRemote } from "../remote/remote.js";
 import { startHttpServer } from "./server.js";
@@ -31,6 +32,7 @@ export async function fixture(
   options: {
     readonly webRoot?: string;
     readonly zoneName?: string;
+    readonly dns?: PublicDns["Service"];
     readonly transportFetch?: typeof globalThis.fetch;
     readonly outboundSend?: OutboundProviderService["send"];
   } = {},
@@ -113,7 +115,7 @@ export async function fixture(
       store: Context.get(baseServices, Store),
       api: cloud.service,
       buffer: buffer.service,
-      dns: { check: (records) => Effect.succeed(records) },
+      dns: options.dns ?? { check: (records) => Effect.succeed(records) },
       inbound: Context.get(baseServices, InboundConfig),
       transport: Context.get(baseServices, TransportConfig),
       mailbox: Context.get(baseServices, Mailbox),
