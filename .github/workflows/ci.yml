@@ -27,13 +27,30 @@ jobs:
             runner: vectis-ubuntu
           - os: macos
             runner: vectis-macos-26-arm64
+          - os: windows
+            runner: vectis-windows-11-arm64
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # The pnpm installer needs npm, which the Windows guest only has after setup-node.
+      - if: matrix.os == 'windows'
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.21.0
+          architecture: arm64
       - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 24.21.0
+          architecture: arm64
           cache: pnpm
+      # Native addons need the ARM64 Visual C++ runtime, which the clean Windows guest lacks.
+      - if: matrix.os == 'windows'
+        shell: powershell
+        run: |
+          $installer = Join-Path $env:RUNNER_TEMP "vc_redist.arm64.exe"
+          Invoke-WebRequest -Uri https://aka.ms/vs/17/release/vc_redist.arm64.exe -OutFile $installer
+          $process = Start-Process -FilePath $installer -ArgumentList "/install", "/quiet", "/norestart" -Wait -PassThru
+          if ($process.ExitCode -notin 0, 3010) { exit $process.ExitCode }
       - run: pnpm install --frozen-lockfile
       - run: pnpm check
       - run: pnpm build

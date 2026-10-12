@@ -813,7 +813,12 @@ function spawnServer(home: string, args: readonly string[] = [], initialize = tr
 test("builds and starts the service in a child process with a test keychain and shuts down by its captured PID", async ({
   home,
 }) => {
-  const build = spawn("pnpm", ["build"], { cwd: process.cwd(), stdio: "pipe" });
+  // pnpm is a .cmd shim on Windows, which spawn can only start through a shell.
+  const build = spawn("pnpm", ["build"], {
+    cwd: process.cwd(),
+    stdio: "pipe",
+    shell: process.platform === "win32",
+  });
   let buildOutput = "";
   build.stdout?.on("data", (data: Buffer) => {
     buildOutput += data.toString();
@@ -880,9 +885,13 @@ test("builds and starts the service in a child process with a test keychain and 
     const pid = child.pid;
     if (pid === undefined) throw new Error("Expected the spawned server PID");
     process.kill(pid, "SIGTERM");
-    expect(await exited).toEqual({ code: 0, signal: null });
+    // Windows has no catchable SIGTERM: process.kill terminates the process immediately.
+    if (process.platform === "win32") await exited;
+    else {
+      expect(await exited).toEqual({ code: 0, signal: null });
+      expect(processServer.stderr()).toBe("");
+    }
     expect(lines).toHaveLength(2);
-    expect(processServer.stderr()).toBe("");
     expect(await readFile(join(home, "connection.json"), "utf8")).toBeTruthy();
   } finally {
     if (timer !== undefined) clearTimeout(timer);
