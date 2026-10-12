@@ -7,6 +7,7 @@
   --side: #ecebe4;
   --list: #f6f5f1;
   --raise: #f1efea;
+  --menu: var(--win);
   --text: #1f2024;
   --text2: #5a5d65;
   --line: rgba(31, 32, 36, 0.13);
@@ -29,6 +30,7 @@
     --side: #2a2c30;
     --list: #1f2023;
     --raise: #2c2e32;
+    --menu: var(--raise);
     --text: #e9e9eb;
     --text2: #a2a5ad;
     --line: rgba(233, 233, 235, 0.13);
@@ -50,6 +52,7 @@
   --side: #2a2c30;
   --list: #1f2023;
   --raise: #2c2e32;
+  --menu: var(--raise);
   --text: #e9e9eb;
   --text2: #a2a5ad;
   --line: rgba(233, 233, 235, 0.13);
@@ -69,6 +72,7 @@
   --color-side: var(--side);
   --color-list: var(--list);
   --color-raise: var(--raise);
+  --color-menu: var(--menu);
   --color-ink: var(--text);
   --color-ink2: var(--text2);
   --color-line: var(--line);
@@ -86,6 +90,14 @@
   --font-mono: ui-monospace, "SF Mono", Menlo, monospace;
   --animate-rise: rise 0.3s ease-out both;
   --animate-fade: fade 0.25s ease-out both;
+  --animate-pop: pop 0.14s ease-out both;
+}
+
+@keyframes pop {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+  }
 }
 
 @keyframes rise {

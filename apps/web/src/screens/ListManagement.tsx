@@ -3,6 +3,7 @@ import { useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Direction, ListType } from "@inbot/contracts/src/lists.js";
 import { api, type ListSelection } from "../api";
+import { Select } from "../components/Select";
 import { Button, inputClasses, Status } from "../components/ui";
 import { ErrorNotice, LoadError } from "../feedback";
 import { inboxesQuery, listEntriesQuery } from "../queries";
@@ -159,50 +160,37 @@ export function ListManagement() {
         <LoadError error={inboxes.error} retry={() => void inboxes.refetch()} />
       ) : null}
       <div className="mt-5 grid gap-4 sm:grid-cols-3">
-        <label className="block">
-          <span className="mb-1.5 block font-medium">Scope</span>
-          <select
-            className={inputClasses}
-            value={inboxId}
-            onChange={(event) => setInboxId(event.target.value)}
-          >
-            <option value="">Global</option>
-            {inboxes.data?.map((inbox) => (
-              <option key={inbox.inbox_id} value={inbox.inbox_id}>
-                {inbox.inbox_id}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="block">
-          <span className="mb-1.5 block font-medium">Direction</span>
-          <select
-            className={inputClasses}
-            value={direction}
-            onChange={(event) => {
-              const value = event.target.value;
-              if (value === "receive" || value === "send" || value === "reply") setDirection(value);
-            }}
-          >
-            <option value="receive">Receive</option>
-            <option value="send">Send</option>
-            <option value="reply">Reply</option>
-          </select>
-        </label>
-        <label className="block">
-          <span className="mb-1.5 block font-medium">List</span>
-          <select
-            className={inputClasses}
-            value={type}
-            onChange={(event) => {
-              const value = event.target.value;
-              if (value === "allow" || value === "block") setType(value);
-            }}
-          >
-            <option value="block">Block</option>
-            <option value="allow">Allow</option>
-          </select>
-        </label>
+        <Select
+          label="Scope"
+          value={inboxId}
+          onChange={setInboxId}
+          options={[
+            { value: "", label: "Global" },
+            ...(inboxes.data ?? []).map((inbox) => ({
+              value: inbox.inbox_id,
+              label: inbox.inbox_id,
+            })),
+          ]}
+        />
+        <Select
+          label="Direction"
+          value={direction}
+          onChange={setDirection}
+          options={[
+            { value: "receive", label: "Receive" },
+            { value: "send", label: "Send" },
+            { value: "reply", label: "Reply" },
+          ]}
+        />
+        <Select
+          label="List"
+          value={type}
+          onChange={setType}
+          options={[
+            { value: "block", label: "Block" },
+            { value: "allow", label: "Allow" },
+          ]}
+        />
       </div>
       <EntryList key={`${inboxId}/${direction}/${type}`} selection={selection} />
       <RejectedMail key={inboxId} {...(inboxId ? { inboxId } : {})} />

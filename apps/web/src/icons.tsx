@@ -106,6 +106,8 @@ const paths = {
     </>
   ),
   pencil: <path d="M10.5 3l2.5 2.5-7.5 7.5H3v-2.5z" />,
+  check: <path d="M3.5 8.5l3 3 6-7" />,
+  "chevrons-up-down": <path d="M5.5 6L8 3.5 10.5 6M5.5 10L8 12.5 10.5 10" />,
   copy: (
     <>
       <rect x="5.5" y="5.5" width="7.5" height="7.5" rx="1.5" />
