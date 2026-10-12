@@ -9,7 +9,7 @@ const policies = [
       ["sent", "accepted by Cloudflare"],
       ["delivered", "reported back"],
     ],
-    note: "Mail leaves as soon as the agent sends it. Allow and block lists still apply.",
+    note: "Mail is queued without owner approval. Sent means Cloudflare accepted it; delivered needs a separate report. Allow and block lists still apply.",
   },
   {
     value: "approval",

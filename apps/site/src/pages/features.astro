@@ -23,7 +23,7 @@ const features = [
   {
     id: "html",
     title: "HTML mail, opened safely",
-    body: "Newsletters and receipts render the way they were designed, inside a sandboxed frame with no scripts. Remote images stay blocked until you load them for that message, and inline images come from your own encrypted copy.",
+    body: "HTML mail is sanitized and displayed inside a sandboxed frame with no scripts. Remote images stay blocked until you load them for that message, and supported raster inline images come from the same message's encrypted attachments.",
     link: { href: "/docs/guides/owner-app", label: "Reading mail" },
     alt: "A newsletter rendered as HTML with an inline chart and remote images blocked.",
   },
@@ -44,14 +44,14 @@ const features = [
   {
     id: "domains",
     title: "Domains, set up for you",
-    body: "Paste a Cloudflare token and Inbot provisions a subdomain for receiving and sending: routing, DKIM, SPF and DMARC. Each record shows its real status, and teardown removes what Inbot created.",
+    body: "Save a Cloudflare token, preview the plan, then apply it to provision a subdomain for receiving and sending: routing, DKIM, SPF and DMARC. Verification waits for public DNS and an encrypted test message to arrive. Teardown removes what Inbot created.",
     link: { href: "/docs/guides/domains", label: "Add a domain" },
     alt: "A verified domain with its DNS records and their status.",
   },
   {
     id: "remote",
     title: "Remote access and OAuth",
-    body: "One switch creates a Cloudflare Tunnel and a hostname for your instance. Cloud agents such as claude.ai connect with OAuth, and you approve each connection with the same grant editor.",
+    body: "Enable remote access to provision a Cloudflare Tunnel and hostname, then confirm the connector download. Remote agents connect with OAuth or a scoped API key, and you approve OAuth connections with the same grant editor.",
     link: { href: "/docs/guides/remote-access", label: "Set up remote access" },
     alt: "Remote access enabled with a public hostname and a connected tunnel.",
   },
@@ -65,7 +65,7 @@ const features = [
   {
     id: "quarantine",
     title: "Quarantine, not loss",
-    body: "Mail that cannot be processed stays encrypted in the buffer instead of disappearing. You see why it failed, retry it once the cause is fixed, or delete it for good.",
+    body: "Mail that cannot be processed stays encrypted in the buffer. Inspect the failure, retry a retained buffer object once the cause is fixed, or delete it permanently. Invalid Queue metadata can be deleted but cannot be retried.",
     link: { href: "/docs/operations/troubleshooting", label: "Troubleshoot inbound mail" },
     alt: "Two quarantined inbound messages with their failure reasons and retry and delete actions.",
   },
@@ -128,10 +128,12 @@ const features = [
 
   <section class="sec" aria-labelledby="service">
     <header>
-      <h2 class="h2" id="service">Always running</h2>
+      <h2 class="h2" id="service">Runs in the background</h2>
       <p>
         One command installs Inbot as a background service for your user, with a fixed address
-        your agents can rely on. It starts at login and restarts if it stops.
+        your agents can rely on. After initialization and owner setup, it starts at login
+        and the service manager retries crashes. Your machine must stay awake and your user
+        session must be available; it is not a system-wide service.
       </p>
       <a class="more" href="/docs/operations/service">Run it as a service</a>
     </header>
