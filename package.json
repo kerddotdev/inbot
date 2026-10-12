@@ -29,6 +29,7 @@
     "typecheck": "tsc --noEmit && tsc -p apps/worker/tsconfig.json && tsc -p apps/worker/tsconfig.test.json && pnpm --filter @inbot/web typecheck",
     "web:dev": "pnpm --filter @inbot/web dev",
     "web:build": "pnpm --filter @inbot/web build",
+    "screenshots:serve": "esbuild scripts/screenshot-server.ts --bundle --platform=node --packages=external --format=esm --outfile=node_modules/.cache/inbot-screenshot-server.mjs && node node_modules/.cache/inbot-screenshot-server.mjs",
     "docs:dev": "pnpm build && pnpm --filter @inbot/docs dev",
     "docs:build": "pnpm build && pnpm --filter @inbot/docs build",
     "test": "vitest run",

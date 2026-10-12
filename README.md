@@ -100,6 +100,16 @@ Inbot is **zero-knowledge at rest, not end-to-end encrypted**. Cloudflare sees i
 - [Build from source](https://inbot.kerd.dev/docs/development/build): local development with an isolated home.
 - [Packaging and releases](https://inbot.kerd.dev/docs/development/packaging): release archives and verification.
 
+### Owner UI screenshots
+
+For owner UI screenshots, run `pnpm web:build` followed by `pnpm screenshots:serve`
+from the repository root. This development-only server uses a fresh temporary home,
+an in-memory keychain, fake Cloudflare/mail/DNS/tunnel providers, and realistic
+synthetic mail and settings. It prints its PID, base URL, a single-use owner login
+link, and the demo password `inbot-screenshot-demo`. It serves the real owner UI
+build and removes its temporary home on Ctrl+C. API changes in the demo are local;
+outbound mail and webhook delivery loops are disabled.
+
 ## Contributing and security
 
 Read [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request. Report vulnerabilities privately as described in [SECURITY.md](SECURITY.md).
