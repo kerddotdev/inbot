@@ -10,6 +10,8 @@ import { commands, flagName, type Command, type FieldKind } from "./commands.js"
 import { CliError, usage } from "./errors.js";
 import { humanOutput, record } from "./output.js";
 import { packageVersion } from "./version.js";
+import { runServiceCommand, serviceHelp } from "./service-command.js";
+import type { ServiceRuntime } from "./service.js";
 
 export interface CliIO {
   readonly env: Environment;
@@ -17,6 +19,7 @@ export interface CliIO {
   readonly stdout: (text: string) => void;
   readonly stderr: (text: string) => void;
   readonly openBrowser?: (url: string) => Promise<void>;
+  readonly serviceRuntime?: ServiceRuntime;
 }
 const globals: ParseArgsOptionsConfig = {
   home: { type: "string" },
@@ -56,7 +59,7 @@ function help(command?: Command, group?: string): string {
       group === undefined
         ? commands
         : commands.filter((entry) => entry.name.startsWith(`${group} `));
-    return `Usage: inbot <command> [options] | inbot --version\n\n${group === undefined ? "  serve                Run the existing server (inbot serve --help).\n" : ""}${available.map((entry) => `  ${entry.name.padEnd(20)} ${entry.description}`).join("\n")}${group === undefined ? "\n  events --follow      Stream accessible events (--json, --last-event-id)." : ""}\n\nGlobal options: --home <directory>, --flavor development|production, --json, --help\nOwner: read connection.json from the server home. Agent: set INBOT_URL and INBOT_API_KEY.\n`;
+    return `Usage: inbot <command> [options] | inbot --version\n\n${group === undefined ? "  serve                Run the existing server (inbot serve --help).\n" : ""}${available.map((entry) => `  ${entry.name.padEnd(20)} ${entry.description}`).join("\n")}${group === undefined ? `\n${serviceHelp}  events --follow      Stream accessible events (--json, --last-event-id).` : ""}\n\nGlobal options: --home <directory>, --flavor development|production, --json, --help\nOwner: read connection.json from the server home. Agent: set INBOT_URL and INBOT_API_KEY.\n`;
   }
   const flags = commandOptions(command);
   return `Usage: inbot ${command.name}${(command.params ?? []).map((param) => ` <${param}>`).join("")} [options]\n\n${command.description}\n\n${Object.entries(
@@ -120,6 +123,13 @@ export async function runCli(args: readonly string[], io: CliIO): Promise<number
     const first = positional[0];
     const second = positional[1];
     const group = first?.value;
+    if (group === "service") {
+      await runServiceCommand(
+        args.filter((_, index) => index !== first?.index),
+        io,
+      );
+      return 0;
+    }
     if (group === "events") {
       await followEvents(
         args.filter((_, index) => index !== first?.index),
