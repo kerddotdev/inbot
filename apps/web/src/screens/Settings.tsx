@@ -1,3 +1,4 @@
+import { Quarantine } from "./Quarantine";
 import { WebhooksSettings } from "./WebhooksSettings";
 import {
   cloudflareTokenPermissions,
@@ -241,6 +242,7 @@ export function Settings() {
       </fieldset>
       <MailTransport />
       <ListManagement />
+      <Quarantine />
       <WebhooksSettings />
     </Page>
   );

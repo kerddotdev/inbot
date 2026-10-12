@@ -1,3 +1,4 @@
+import * as Quarantine from "@inbot/contracts/src/quarantine.js";
 import { Schema } from "effect";
 import * as OAuth from "@inbot/contracts/src/oauth.js";
 import * as Remote from "@inbot/contracts/src/remote.js";
@@ -271,6 +272,17 @@ export class ApiClient {
     this.request(inboxPath(id), Inboxes.Inbox, { method: "PATCH", body });
 
   deleteInbox = (id: string) => this.request(inboxPath(id), Schema.Undefined, { method: "DELETE" });
+
+  quarantine = (token: string | null, signal: AbortSignal) =>
+    this.request(`/v0/owner/quarantine${pageQuery(token)}`, Quarantine.ListQuarantineResponse, {
+      signal,
+    });
+  retryQuarantine = (id: string) =>
+    this.request(`/v0/owner/quarantine/${segment(id)}/retry`, Quarantine.RetryQuarantineResponse, {
+      method: "POST",
+    });
+  deleteQuarantine = (id: string) =>
+    this.request(`/v0/owner/quarantine/${segment(id)}`, Schema.Undefined, { method: "DELETE" });
 
   rejections = (inboxId: string | undefined, token: string | null, signal: AbortSignal) =>
     this.request(

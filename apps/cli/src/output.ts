@@ -51,6 +51,7 @@ export function humanOutput(value: unknown): string {
     drafts: ["draft_id", "inbox_id", "subject", "approval_state", "send_status"],
     grants: ["grant_id", "client_name", "redirect_host", "resource", "send_policy", "inbox_ids"],
     api_keys: ["api_key_id", "name", "send_policy", "inbox_id", "inbox_ids"],
+    items: ["quarantine_id", "source_kind", "reason_code", "first_seen", "status", "attempts"],
     rejections: [
       "rejection_id",
       "received_at",
