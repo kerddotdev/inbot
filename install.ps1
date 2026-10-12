@@ -62,7 +62,7 @@ try {
     try {
         foreach ($Entry in $Zip.Entries) {
             if (-not $Entry.FullName.StartsWith('inbot/') -or $Entry.FullName -match '(^|[/\\])\.\.($|[/\\])|\\|:') {
-                throw 'Archive contains an unsafe path.'
+                throw "Archive contains an unsafe path: $($Entry.FullName)"
             }
         }
     } finally { $Zip.Dispose() }

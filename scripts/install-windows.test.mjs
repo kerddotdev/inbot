@@ -95,7 +95,17 @@ test(
         );
         const archive = `inbot-${version}-${target}.zip`;
         await powershell(
-          "Compress-Archive -LiteralPath $env:INBOT_TEST_BUNDLE -DestinationPath $env:INBOT_TEST_ARCHIVE",
+          String.raw`
+            $ErrorActionPreference = 'Stop'
+            Add-Type -AssemblyName System.IO.Compression.FileSystem
+            $zip = [System.IO.Compression.ZipFile]::Open($env:INBOT_TEST_ARCHIVE, 'Create')
+            try {
+              foreach ($file in Get-ChildItem -LiteralPath $env:INBOT_TEST_BUNDLE -Recurse -File) {
+                $name = 'inbot/' + $file.FullName.Substring($env:INBOT_TEST_BUNDLE.Length + 1).Replace('\', '/')
+                [System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile($zip, $file.FullName, $name) | Out-Null
+              }
+            } finally { $zip.Dispose() }
+          `,
           {
             ...process.env,
             INBOT_TEST_BUNDLE: bundle,
@@ -111,6 +121,7 @@ test(
       await writeFile(join(release, "SHA256SUMS"), sums.join(""));
       const env = installEnv(temporary, release);
       const first = await install("0.1.0", env);
+      assert.match(first.stdout, /Checking the bundled Node and native modules/);
       assert.match(first.stdout, /PATH was not changed/);
       assert.equal((await runShim("--version", env)).stdout.trim(), "0.1.0");
       await install("0.1.0", env);
@@ -143,6 +154,49 @@ test(
       await assert.rejects(install("../../escape", env), (error) =>
         /Invalid release version/.test(error.stderr),
       );
+    } finally {
+      await rm(temporary, { recursive: true, force: true });
+    }
+  },
+);
+
+test(
+  "PowerShell installer rejects unsafe archive paths before installing",
+  { skip: !windows },
+  async () => {
+    const temporary = await mkdtemp(join(tmpdir(), "inbot-windows-unsafe-"));
+    try {
+      const release = join(temporary, "release");
+      await mkdir(release);
+      const archive = `inbot-0.1.0-${target}.zip`;
+      const archivePath = join(release, archive);
+      const env = installEnv(temporary, release);
+      for (const entry of [
+        "inbot/../escape",
+        "inbot\\runtime\\node.exe",
+        "other/file",
+        "inbot/file:stream",
+      ]) {
+        await powershell(
+          `
+          $ErrorActionPreference = 'Stop'
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $zip = [System.IO.Compression.ZipFile]::Open($env:INBOT_TEST_ARCHIVE, 'Create')
+          try { $zip.CreateEntry($env:INBOT_TEST_ENTRY) | Out-Null } finally { $zip.Dispose() }
+        `,
+          { ...process.env, INBOT_TEST_ARCHIVE: archivePath, INBOT_TEST_ENTRY: entry },
+        );
+        const digest = createHash("sha256")
+          .update(await readFile(archivePath))
+          .digest("hex");
+        await writeFile(join(release, "SHA256SUMS"), `${digest}  ${archive}\n`);
+        await assert.rejects(install("0.1.0", env), (error) =>
+          error.stderr.includes(`Archive contains an unsafe path: ${entry}`),
+        );
+        await assert.rejects(readdir(env.INBOT_INSTALL_ROOT), { code: "ENOENT" });
+        await assert.rejects(readFile(env.INBOT_TEST_SHIM), { code: "ENOENT" });
+        await rm(archivePath);
+      }
     } finally {
       await rm(temporary, { recursive: true, force: true });
     }
