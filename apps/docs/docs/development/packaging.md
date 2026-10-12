@@ -35,7 +35,7 @@ The smoke test extracts the archive for your machine, checks the launcher and na
 
 ## Release workflow
 
-The GitHub release workflow runs on Vectis runners when a `v*.*.*` tag is pushed. The tag must match `package.json`. It runs the full CI checks, builds all six targets, and validates Linux ARM64 natively, Linux x64 under QEMU on the ARM64 Ubuntu runner, macOS ARM64, Windows 11 ARM64 natively and Windows x64 under emulation on the Windows 11 ARM64 runner. macOS Intel is signed and notarized but has no dedicated runtime smoke job. macOS is the most validated platform; these CI checks do not establish real mail delivery on every platform.
+The GitHub release workflow runs on Vectis runners when a `v*.*.*` tag is pushed. The tag must match `package.json`. It runs the full CI checks, builds all six targets, and validates Linux ARM64 natively, macOS ARM64, Windows 11 ARM64 natively and Windows x64 under emulation on the Windows 11 ARM64 runner. Linux x64 archives get archive content checks only, and macOS Intel is signed and notarized, but neither has a dedicated runtime smoke job. macOS is the most validated platform; these CI checks do not establish real mail delivery on every platform.
 
 Both macOS archives are Developer ID signed and notarized. Checksums are rebuilt after the signed archives replace the unsigned ones. The workflow attests the final archives and `SHA256SUMS`, then publishes a public GitHub release with curated notes when available and generated notes. Stable tags become the latest release; version tags containing a hyphen are marked as prereleases. An already published version is never modified.
 

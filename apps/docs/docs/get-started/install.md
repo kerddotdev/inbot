@@ -14,7 +14,7 @@ Install the latest [published release](https://github.com/kerddotdev/inbot/relea
 | Mail provider    | A Cloudflare account with an active zone for your domain and Workers Paid for sending. See [Mail transport](/guides/transport).                                 |
 | Windows runtime  | The latest Microsoft Visual C++ v14 Redistributable for your architecture. The installer checks native modules and reports a download link if they cannot load. |
 
-macOS is the most validated platform. Windows 11 x64 and ARM64 are supported and validated in CI: ARM64 runs natively, while x64 release archives are smoke-tested under emulation on the Windows 11 ARM64 runner. Linux ARM64 runs natively and x64 archives are tested under QEMU. macOS Intel archives are signed and notarized but have no dedicated runtime smoke job. These are synthetic startup and native-module checks, not evidence of real mail delivery on every platform.
+macOS is the most validated platform. Windows 11 x64 and ARM64 are supported and validated in CI: ARM64 runs natively, while x64 release archives are smoke-tested under emulation on the Windows 11 ARM64 runner. Linux ARM64 runs natively; Linux x64 archives get archive content checks but no runtime smoke job. macOS Intel archives are signed and notarized but have no dedicated runtime smoke job. These are synthetic startup and native-module checks, not evidence of real mail delivery on every platform.
 
 ## macOS and Linux
 

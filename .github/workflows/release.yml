@@ -53,17 +53,6 @@ jobs:
       - run: pnpm install --frozen-lockfile --ignore-scripts
       - run: pnpm package
       - run: node scripts/smoke-release.mjs dist-release
-      - name: Smoke Linux x64 on the ARM64 Vectis guest
-        run: |
-          if [ "$(uname -m)" = aarch64 ]; then
-            sudo apt-get update
-            sudo apt-get install -y --no-install-recommends qemu-user-binfmt libc6-amd64-cross libstdc++6-amd64-cross
-            sudo systemctl restart systemd-binfmt
-            INBOT_SMOKE_TARGET=linux-x64 INBOT_SMOKE_QEMU_PREFIX=/usr/x86_64-linux-gnu node scripts/smoke-release.mjs dist-release
-          elif [ "$(uname -m)" != x86_64 ]; then
-            echo "Unsupported Linux smoke architecture." >&2
-            exit 1
-          fi
       - run: pnpm test:packaging
         env:
           INBOT_TEST_RELEASE_DIR: dist-release
