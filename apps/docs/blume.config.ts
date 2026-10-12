@@ -16,6 +16,7 @@ export default defineConfig({
     code: { theme: { light: "github-light", dark: "github-dark" } },
   },
   navigation: {
+    repo: "https://github.com/kerddotdev/inbot",
     sidebar: [
       { label: "Overview", root: "index" },
       {

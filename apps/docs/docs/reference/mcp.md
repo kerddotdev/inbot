@@ -92,7 +92,7 @@ An agent manages only the webhooks its own key created. `request` takes the REST
 
 ## Not available over MCP
 
-Owner actions are deliberately absent: domains, API keys, the transport, remote access, owner sessions, draft approval and rejection, `send_unknown` resolution, rejected mail, quarantine and OAuth management. Message deletion, batch operations, organization-wide draft reads, raw message downloads, message-scoped attachments and draft attachment downloads are available only over REST. MCP `get_attachment` reads a thread attachment and returns a signed five-minute capability that needs no bearer. It rechecks the issuer's current grant and activity and is bound to the issuing origin; never share or log it.
+Owner actions are deliberately absent: domains, API keys, the transport, remote access, owner sessions, draft approval and rejection, `send_unknown` resolution, rejected mail, quarantine and OAuth management. Message deletion, batch operations, instance-wide draft reads, raw message downloads, message-scoped attachments and draft attachment downloads are available only over REST. MCP `get_attachment` reads a thread attachment and returns a signed five-minute capability that needs no bearer. It rechecks the issuer's current grant and activity and is bound to the issuing origin; never share or log it.
 
 ## Send policies in MCP
 

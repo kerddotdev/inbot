@@ -26,7 +26,7 @@ unset INBOT_API_KEY
 
 ## Install the Inbot skill
 
-From an Inbot source checkout, copy the complete folder, including its references, to your personal skills directory:
+Download or clone the [public repository](https://github.com/kerddotdev/inbot), then copy its complete [`skills/inbot`](https://github.com/kerddotdev/inbot/tree/main/skills/inbot) folder, including the references, to your personal skills directory. This does not require building Inbot:
 
 ```sh
 mkdir -p ~/.claude/skills

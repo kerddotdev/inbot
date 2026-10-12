@@ -76,6 +76,18 @@ Message content, credentials and keys are never written to logs.
 - Webhooks only reach public HTTPS addresses, checked on every attempt, except owner webhooks to loopback.
 - Remote access uses a separate listener with a fixed route allowlist. See [Remote access](/guides/remote-access#what-is-reachable).
 
+## Release integrity
+
+Release installers verify the archive against the release's `SHA256SUMS` before extraction. macOS archives contain Developer ID signed executables and native modules and are notarized by Apple. Linux and Windows archives are checksum-verified; they are not claimed to have Apple signing or notarization.
+
+The final release archives and checksums have GitHub build provenance attestations. After downloading an archive, verify its provenance with the [GitHub CLI](https://cli.github.com/manual/gh_attestation_verify):
+
+```sh
+gh attestation verify ./inbot-<version>-<target>.tar.gz --repo kerddotdev/inbot
+```
+
+Use the `.zip` filename on Windows. The installers do not run this attestation check for you. Checksums detect corruption relative to the downloaded manifest; provenance ties the asset to the repository's build workflow. Neither is an independent security audit. See [Packaging and releases](/development/packaging) for the release pipeline.
+
 ## Limits
 
 Be clear about what this model does not cover:
@@ -85,4 +97,4 @@ Be clear about what this model does not cover:
 - **Sender identity depends on Cloudflare's authentication results.** A single SPF, DKIM or DMARC pass, even for an attacker's own domain, clears the `unauthenticated` label. Allow and block lists match addresses that can be forged.
 - **Backups are not managed.** Losing `keys.json` or the keychain item makes the database unreadable, and there is no passphrase recovery yet.
 - **Delivery reports can be missed** in the first minutes after a domain is set up, and while the service is offline for longer than five minutes.
-- **Validation is ongoing.** The test suite uses fakes for Cloudflare, DNS and the keychain. Behavior against real Cloudflare accounts, real mail delivery and every supported operating system is less proven.
+- **Test coverage has boundaries.** CI checks use synthetic data and fakes for Cloudflare, DNS and the keychain. Archive smoke tests validate startup and native modules, not real mail delivery or every OS credential store. macOS is the most validated platform; Windows 11 ARM64 runs natively in CI, with x64 release smoke tests under emulation.

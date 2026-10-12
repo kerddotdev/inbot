@@ -49,7 +49,7 @@ Creating inboxes and drafts also accepts a `client_id`: repeating a create with 
 
 ## Threads
 
-Each route exists inbox-scoped (`/inboxes/{inbox_id}/threads/...`) and organization-wide (`/threads/...`). Organization routes resolve the thread within the caller's scope.
+Each route exists inbox-scoped (`/inboxes/{inbox_id}/threads/...`) and instance-wide (`/threads/...`). Instance-wide routes resolve the thread within the caller's scope.
 
 | Route                                                     | Access           | Notes                                                                                                                                                   |
 | --------------------------------------------------------- | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -99,7 +99,7 @@ The caller's send policy applies to every sending route: `approval` returns `403
 
 ## Drafts
 
-Inbox-scoped routes are `/inboxes/{inbox_id}/drafts/...`; listing and reading also work organization-wide under `/drafts`.
+Inbox-scoped routes are `/inboxes/{inbox_id}/drafts/...`; listing and reading also work instance-wide under `/drafts`.
 
 | Route                                                   | Access         | Notes                                                                                                                                                                                                          |
 | ------------------------------------------------------- | -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -138,17 +138,17 @@ The same four routes exist under `/inboxes/{inbox_id}/lists/...` for inbox lists
 
 ## Webhooks
 
-Organization routes are `/webhooks/...`; inbox routes are `/inboxes/{inbox_id}/webhooks/...`.
+Instance-wide routes are `/webhooks/...`; inbox routes are `/inboxes/{inbox_id}/webhooks/...`.
 
-| Route                                     | Access           | Notes                                                                                                 |
-| ----------------------------------------- | ---------------- | ----------------------------------------------------------------------------------------------------- |
-| `GET .../webhooks`                        | `webhook_read`   |                                                                                                       |
-| `POST .../webhooks`                       | `webhook_create` | `url`, `event_types`, `headers`, and `inbox_ids` on organization webhooks. Returns the `secret` once. |
-| `GET .../webhooks/{webhook_id}`           | `webhook_read`   | Includes `enabled`, `failure_count`, `disabled_reason`, `last_error_code`, `last_success_at`          |
-| `PATCH .../webhooks/{webhook_id}`         | `webhook_update` | `event_types`, `enabled`, and `add_inbox_ids`, `remove_inbox_ids` on organization webhooks            |
-| `DELETE .../webhooks/{webhook_id}`        | `webhook_delete` |                                                                                                       |
-| `GET .../webhooks/{webhook_id}/headers`   | `webhook_read`   | Header names only                                                                                     |
-| `PATCH .../webhooks/{webhook_id}/headers` | `webhook_update` | `{ headers?, remove_headers? }`. Returns `204`.                                                       |
+| Route                                     | Access           | Notes                                                                                                  |
+| ----------------------------------------- | ---------------- | ------------------------------------------------------------------------------------------------------ |
+| `GET .../webhooks`                        | `webhook_read`   |                                                                                                        |
+| `POST .../webhooks`                       | `webhook_create` | `url`, `event_types`, `headers`, and `inbox_ids` on instance-wide webhooks. Returns the `secret` once. |
+| `GET .../webhooks/{webhook_id}`           | `webhook_read`   | Includes `enabled`, `failure_count`, `disabled_reason`, `last_error_code`, `last_success_at`           |
+| `PATCH .../webhooks/{webhook_id}`         | `webhook_update` | `event_types`, `enabled`, and `add_inbox_ids`, `remove_inbox_ids` on instance-wide webhooks            |
+| `DELETE .../webhooks/{webhook_id}`        | `webhook_delete` |                                                                                                        |
+| `GET .../webhooks/{webhook_id}/headers`   | `webhook_read`   | Header names only                                                                                      |
+| `PATCH .../webhooks/{webhook_id}/headers` | `webhook_update` | `{ headers?, remove_headers? }`. Returns `204`.                                                        |
 
 Agents see only webhooks their own key created. See [Webhooks and events](/guides/webhooks).
 

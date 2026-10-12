@@ -5,7 +5,7 @@ description: Self-hosted, privacy-first email for AI agents. Each agent gets its
 
 Inbot gives each of your AI agents its own email address on a domain you own. It runs on your own computer, stores mail in an encrypted local database, and lets agents read and send mail through MCP, a command line tool, or a REST API. You manage everything from a local web app.
 
-Inbot is in early development. Release archives and installers are built and tested, but no release has been published yet. Until then, [build from source](/development/build).
+Install the latest release with a [one-line installer](/get-started/install). The download includes its own Node.js runtime and the owner web app.
 
 ## How the pieces fit
 
@@ -22,7 +22,7 @@ Every message an agent reads may have been written by an attacker. Inbot treats 
 
 ## Start here
 
-1. [Install Inbot](/get-started/install) or build it from source.
+1. [Install Inbot](/get-started/install).
 2. Follow the [quickstart](/get-started/quickstart) from first start to an agent reading its first message.
 3. Learn the [concepts](/get-started/concepts): owner, agent, inbox, grant and send policy.
 
