@@ -10,13 +10,13 @@ export const ListsApi = HttpApiGroup.make("lists")
     HttpApiEndpoint.get("inboxes_lists_list", "/v0/inboxes/:inbox_id/lists/:direction/:type", {
       params: { inbox_id: Common.InboxId, direction: Lists.Direction, type: Lists.ListType },
       query: Common.CursorQuery,
-      success: Lists.PodListListEntriesResponse,
+      success: Lists.InboxListEntriesResponse,
       error: Errors.ListErrors,
     }).annotate(RequiredPermission, "list_entry_read"),
     HttpApiEndpoint.post("inboxes_lists_create", "/v0/inboxes/:inbox_id/lists/:direction/:type", {
       params: { inbox_id: Common.InboxId, direction: Lists.Direction, type: Lists.ListType },
       payload: Lists.CreateListEntryRequest,
-      success: Lists.PodListEntry,
+      success: Lists.InboxListEntry,
       error: Errors.WriteErrors,
     }).annotate(RequiredPermission, "list_entry_create"),
     HttpApiEndpoint.get(
@@ -29,7 +29,7 @@ export const ListsApi = HttpApiGroup.make("lists")
           type: Lists.ListType,
           entry: Schema.String,
         },
-        success: Lists.PodListEntry,
+        success: Lists.InboxListEntry,
         error: Errors.ReadErrors,
       },
     ).annotate(RequiredPermission, "list_entry_read"),

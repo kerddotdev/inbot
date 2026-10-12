@@ -42,7 +42,7 @@ retain the issuing access token's hash and audience, including `/mcp`; owner ses
 capabilities stop working on session revocation. A supplied bearer must authenticate
 the issuing principal. Keep URLs private. File bytes are not embedded in tool results.
 
-Thread tools may omit `inboxId` for a scoped organization lookup. Default page size is 10; `limit` can override it.
+Thread tools may omit `inboxId` for a scoped global lookup. Default page size is 10; `limit` can override it.
 
 | Tools                                                                                                               | readOnlyHint | destructiveHint | idempotentHint | Permission       |
 | ------------------------------------------------------------------------------------------------------------------- | ------------ | --------------- | -------------- | ---------------- |
@@ -80,7 +80,7 @@ Owner-only capabilities never enter the MCP registry.
 
 `create_draft`, `list_drafts`, `get_draft`, `update_draft`, `send_draft`, and
 `delete_draft` call the same draft service and shared operations as REST.
-`list_drafts` may omit `inboxId` for a scoped organization list. The other tools
+`list_drafts` may omit `inboxId` for a scoped global list. The other tools
 require `inboxId` and existing-draft tools require `draftId`. Draft recipients use
 arrays; `replyTo`, `inReplyTo`, `forwardOf`, `replyAll`, `sendAt`, `clientId`,
 `addAttachments`, and `removeAttachments` map to the shared wire fields.
@@ -106,7 +106,7 @@ scheduling guarantees.
 
 Both REST and MCP call `AgentOperations`, which uses the same Mailbox/Outbox/Drafts
 methods and authorization helpers. Scope checks precede permission checks and
-conceal foreign resources with `not_found`. Organization pagination and search
+conceal foreign resources with `not_found`. Global pagination and search
 apply the key's fixed inbox allowlist before reading. Hidden-label permissions
 control listing flags and direct resources, including parents, threads, and
 attachment downloads. Missing transport cannot enqueue through either surface; approval proposals can

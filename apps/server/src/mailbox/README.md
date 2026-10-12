@@ -37,7 +37,7 @@ contract codes and actionable fixes. Storage failures remain `DatabaseError`.
   grant's scope and enforce permissions. Inbox-scoped reads require an existing
   inbox. Direct resource reads can return hidden mail; caller permissions still
   apply.
-  `resolveThreadInbox(thread_id, scope)` resolves organization routes inside
+  `resolveThreadInbox(thread_id, scope)` resolves global routes inside
   their allowed scope without exposing other inboxes.
 
 ## Storage and threading
@@ -113,8 +113,7 @@ causing gaps or duplicates across search pages.
 
 ## Compatibility values
 
-`Inbox.pod_id` is the fixed local value `local`; Inbot has no pods. Metadata,
-headers, address arrays, labels, and attachment arrays default to empty values.
+Metadata, headers, address arrays, labels, and attachment arrays default to empty values.
 Absent optional bodies and timestamps remain absent. Message size defaults to
 raw MIME byte length; attachment size is measured from content and an explicit
 size must agree. Parsed `calendar_event_id` can be retained without implementing

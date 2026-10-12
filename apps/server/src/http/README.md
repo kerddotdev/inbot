@@ -70,17 +70,17 @@ methods. The exact `@effect/platform-node` dependency and its shared adapter
 override are 4.0.2, matching the installed Effect version.
 
 - Inboxes: list, search, create, get, update, delete.
-- Threads: inbox and organization list, search, get, update, delete, attachment.
+- Threads: inbox and global list, search, get, update, delete, attachment.
 - Messages: list, search, get, update, delete, batch-get, batch-update, raw,
   attachment, send, reply, reply-all, forward.
-- Drafts: inbox CRUD, send, attachment; organization list, get, attachment;
+- Drafts: inbox CRUD, send, attachment; global list, get, attachment;
   owner-only approve and reject.
 - Domains: owner-only register, list, get, update, delete, verify, BIND zone-file,
   apply, and teardown. See [provisioning](../provision/README.md) for safety and states.
 - Mail transport: owner-only `GET`, `PUT`, and `DELETE /v0/owner/transport`.
 - Lists: global and inbox allow/block CRUD for `receive`, `send`, and `reply`.
   See [list policy and enforcement](../lists/README.md).
-- API keys: owner-only organization CRUD and inbox-scoped create, list, update,
+- API keys: owner-only global CRUD and inbox-scoped create, list, update,
   delete. The contract has no inbox-scoped key-get route.
 
 Send endpoints return `{ message_id, thread_id }` after the outbox transaction
@@ -181,8 +181,8 @@ be updated. Unknown payload fields and permission flags fail validation.
 checked before permissions to conceal out-of-scope resources. Both `inbox_id`
 and `inbox_ids` intersect when present; missing scope allows all inboxes and
 an empty array allows none. Out-of-scope routes return the same 404 as absent
-resources. Organization listings and searches apply scope in SQL before
-pagination, and continuation tokens bind that scope. Organization thread ids
+resources. Global listings and searches apply scope in SQL before
+pagination, and continuation tokens bind that scope. Global thread ids
 resolve through a scoped Mailbox lookup.
 
 Agents can create inboxes with `inbox_create`. Creation must also fit the
@@ -246,7 +246,7 @@ composition limits are validated again when they are sent or approved.
 
 Draft operations require their respective `draft_read`, `draft_create`,
 `draft_update`, `draft_send`, or `draft_delete` permission and the inbox scope.
-Organization lookups and page tokens retain scope and hidden-label filtering.
+Global lookups and page tokens retain scope and hidden-label filtering.
 Reply/forward creation also requires `message_read` and a visible source.
 `client_id` is idempotent within an inbox while its draft exists. Null clears an
 editable field; recipient arrays also accept `[]`. Attachment metadata has
@@ -454,7 +454,7 @@ Reads need `list_entry_read`, creation `list_entry_create`, deletion `list_entry
 
 Webhook routes enforce `webhook_read/create/update/delete`, key ownership and
 inbox scope. Creation alone returns `secret`; subsequent metadata omits it.
-Header reads return names only. Unsupported pod filters fail `not_supported`.
+Header reads return names only.
 `message_read`/`draft_read` and hidden-label permissions govern event payloads.
 Domain events require the owner. Disabled state and failures are visible in GET.
 Agents require public HTTPS webhook targets; only owners can use loopback HTTP.

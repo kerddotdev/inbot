@@ -67,8 +67,8 @@ The optional `Idempotency-Key` header is declared on send, reply, reply-all,
 forward, and draft-send operations. Persistence, replay, and conflict detection
 belong to the service.
 
-Compatibility fields such as `pod_id`, `organization_id`, `calendar_event_id`,
-and `tracking_enabled` remain in resource shapes for wire compatibility.
+Compatibility fields such as `calendar_event_id` and `tracking_enabled` remain
+in resource shapes for wire compatibility.
 They do not implement those resource families. Event types are limited to the
 supported mail and domain events. Open tracking requests (`track_opens`) and
 tracking events are not modeled. Providers, domains, keys, and webhook secrets

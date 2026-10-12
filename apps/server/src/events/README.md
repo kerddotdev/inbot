@@ -68,7 +68,7 @@ Owner webhooks are independent of browser session lifetime.
 Global `/v0/webhooks` and inbox `/v0/inboxes/:inbox_id/webhooks` routes implement
 list, create, get, update and delete. `/headers` GET lists custom header names;
 PATCH sets/removes values without returning them. The URL is fixed at creation;
-replace a webhook to change it. Pod filters return `not_supported`.
+replace a webhook to change it.
 
 The creation response includes `secret`; list/get/update omit it. Save it then.
 Encrypted storage holds the secret and custom headers. Signature and transport
@@ -166,8 +166,8 @@ Send one JSON subscription per connection:
 { "type": "subscribe", "event_types": ["message.received"], "inbox_ids": ["agent@example.test"] }
 ```
 
-Omit filters for every authorized event. Empty arrays mean no matches. Pod
-filters and repeated subscriptions close with 1008. The server acknowledges with
+Omit filters for every authorized event. Empty arrays mean no matches. Unknown
+subscription fields and repeated subscriptions close with 1008. The server acknowledges with
 `{"type":"subscribed",...}` and streams contract `Event` objects. Only resource
 read permissions and matching scope grant access; webhook permissions alone do not.
 

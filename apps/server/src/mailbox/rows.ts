@@ -28,10 +28,7 @@ function wireRow(value: unknown, jsonFields: readonly string[]): Record<string, 
 }
 
 export function inboxRow(value: unknown) {
-  return Schema.decodeUnknownSync(Inbox)({
-    ...wireRow(value, ["metadata"]),
-    pod_id: "local",
-  });
+  return Schema.decodeUnknownSync(Inbox)(wireRow(value, ["metadata"]));
 }
 
 export function getInbox(db: Database.Database, inboxId: string) {

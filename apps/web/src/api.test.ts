@@ -16,7 +16,6 @@ const json = (body: unknown, init?: ResponseInit) => Response.json(body, init);
 
 test("inbox mutations decode the shared contract, encode addresses, and use restored CSRF", async () => {
   const inbox = {
-    pod_id: "local",
     inbox_id: "agent+mail@example.test",
     email: "agent+mail@example.test",
     display_name: "Agent",
@@ -476,13 +475,12 @@ test("decodes provisioning plans with warnings and unknown records, and preserve
 test("list management encodes entries, decodes scoped responses, paginates and includes CSRF", async () => {
   const entry = {
     entry: "User+tag@example.test",
-    organization_id: "local",
     entry_type: "email",
     direction: "send",
     list_type: "block",
     created_at: stamp,
   };
-  const scoped = { ...entry, pod_id: "local", inbox_id: "agent@example.test" };
+  const scoped = { ...entry, inbox_id: "agent@example.test" };
   const fetcher = vi
     .fn<typeof fetch>()
     .mockResolvedValueOnce(

@@ -6,9 +6,7 @@ export const Webhook = Schema.Struct({
   webhook_id: WebhookId,
   url: Schema.String,
   event_types: Schema.optionalKey(Schema.Array(EventType)),
-  pod_ids: Schema.optionalKey(Schema.Array(Schema.String)),
   inbox_ids: Schema.optionalKey(Schema.Array(Schema.String)),
-  pod_id: Schema.optionalKey(Schema.String),
   inbox_id: Schema.optionalKey(Schema.String),
   secret: Schema.optionalKey(Schema.String),
   failure_count: Schema.optionalKey(Schema.Int),
@@ -64,7 +62,6 @@ export const CreateWebhookRequest = Schema.Struct({
   client_id: Schema.optionalKey(Schema.String),
   headers: Schema.optionalKey(WebhookHeaders),
   inbox_ids: Schema.optionalKey(Schema.Array(Schema.String)),
-  pod_ids: Schema.optionalKey(Schema.Array(Schema.String)),
 }).annotate({ identifier: "CreateWebhookRequest" });
 export type CreateWebhookRequest = typeof CreateWebhookRequest.Type;
 
@@ -73,7 +70,5 @@ export const UpdateWebhookRequest = Schema.Struct({
   enabled: Schema.optionalKey(Schema.Boolean),
   add_inbox_ids: Schema.optionalKey(Schema.Array(Schema.String)),
   remove_inbox_ids: Schema.optionalKey(Schema.Array(Schema.String)),
-  add_pod_ids: Schema.optionalKey(Schema.Array(Schema.String)),
-  remove_pod_ids: Schema.optionalKey(Schema.Array(Schema.String)),
 }).annotate({ identifier: "UpdateWebhookRequest" });
 export type UpdateWebhookRequest = typeof UpdateWebhookRequest.Type;

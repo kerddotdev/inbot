@@ -40,7 +40,6 @@ function expectRoundTrip<A, I>(schema: Schema.Codec<A, I>, fixture: unknown) {
 
 const timestamp = "2026-10-10T09:12:34.123Z";
 const inbox = {
-  pod_id: "local",
   inbox_id: "assistant@agents.example.com",
   email: "assistant@agents.example.com",
   display_name: "Assistant",
@@ -125,7 +124,6 @@ const draft = {
   updated_at: timestamp,
 };
 const domain = {
-  pod_id: "local",
   domain_id: "agents.example.com",
   domain: "agents.example.com",
   status: "PENDING",
@@ -160,8 +158,6 @@ const webhook = {
   url: "https://receiver.example.com/events",
   event_types: ["message.received", "message.delivered"],
   inbox_ids: [inbox.inbox_id],
-  pod_ids: ["local"],
-  pod_id: "local",
   inbox_id: inbox.inbox_id,
   secret: "whsec_synthetic_fixture",
   enabled: true,
@@ -266,7 +262,6 @@ describe("wire fidelity", () => {
   it("round-trips WebSocket subscribe and subscribed messages", () => {
     const filters = {
       inbox_ids: [inbox.inbox_id],
-      pod_ids: ["local"],
       event_types: ["message.sent"],
     };
     expectRoundTrip(Subscribe, { type: "subscribe", ...filters });
@@ -275,7 +270,7 @@ describe("wire fidelity", () => {
     expectRoundTrip(Subscribed, { type: "subscribed" });
   });
 
-  it("round-trips raw attachment download metadata and organization list entries", () => {
+  it("round-trips raw attachment download metadata and global list entries", () => {
     expectRoundTrip(AttachmentResponse, {
       ...attachment,
       download_url: "https://downloads.example.com/attachment",
@@ -284,7 +279,6 @@ describe("wire fidelity", () => {
     });
     expectRoundTrip(ListEntry, {
       entry: "example.com",
-      organization_id: "local",
       reason: "Trusted sender",
       direction: "receive",
       list_type: "allow",
