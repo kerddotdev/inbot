@@ -134,7 +134,7 @@ WantedBy=default.target
 <Triggers><LogonTrigger><Enabled>true</Enabled><UserId>${xml(input.username)}</UserId></LogonTrigger></Triggers>
 <Principals><Principal id="Owner"><UserId>${xml(input.username)}</UserId><LogonType>InteractiveToken</LogonType><RunLevel>LeastPrivilege</RunLevel></Principal></Principals>
 <Settings><MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy><DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries><StopIfGoingOnBatteries>false</StopIfGoingOnBatteries><ExecutionTimeLimit>PT0S</ExecutionTimeLimit><RestartOnFailure><Interval>PT1M</Interval><Count>255</Count></RestartOnFailure></Settings>
-<Actions Context="Owner"><Exec><Command>${xml(input.executable)}</Command><Arguments>${xml([host, ...args].map(windowsArgument).join(" "))}</Arguments><WorkingDirectory>${xml(input.home)}</WorkingDirectory></Exec></Actions>
+<Actions Context="Owner"><Exec><Command>%SystemRoot%\\System32\\conhost.exe</Command><Arguments>--headless ${xml([input.executable, host, ...args].map(windowsArgument).join(" "))}</Arguments><WorkingDirectory>${xml(input.home)}</WorkingDirectory></Exec></Actions>
 </Task>
 `;
 }
