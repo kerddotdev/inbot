@@ -53,10 +53,10 @@ Press Ctrl-C or send SIGTERM. The service stops its background loops before clos
 
 `inbot service` registers `inbot serve` with your operating system's per-user service manager, so Inbot starts at login and restarts after a failure. Mail keeps arriving while the service is down, because it waits in Cloudflare and is fetched when the service starts again; see [Architecture](/concepts/architecture#inbound).
 
-| Platform | Manager                                           | Default name     | Definition                                 |
-| -------- | ------------------------------------------------- | ---------------- | ------------------------------------------ |
-| macOS    | LaunchAgent (`launchctl bootstrap` and `bootout`) | `dev.kerd.inbot` | `~/Library/LaunchAgents/<name>.plist`      |
-| Linux    | systemd user unit (`systemctl --user`)            | `inbot.service`  | `~/.config/systemd/user/<name>`            |
+| Platform | Manager                                           | Default name     | Definition                                  |
+| -------- | ------------------------------------------------- | ---------------- | ------------------------------------------- |
+| macOS    | LaunchAgent (`launchctl bootstrap` and `bootout`) | `dev.kerd.inbot` | `~/Library/LaunchAgents/<name>.plist`       |
+| Linux    | systemd user unit (`systemctl --user`)            | `inbot.service`  | `~/.config/systemd/user/<name>`             |
 | Windows  | Scheduled Task that runs at logon (`schtasks`)    | `Inbot`          | `~/AppData/Local/Inbot/services/<name>.xml` |
 
 The commands manage your own user account directly. They need no administrator rights, do not use REST or MCP, and do not change system-wide configuration or enable lingering. If `INBOT_URL` or `INBOT_API_KEY` is set, they fail with `missing_permission` (exit 4), because service management is a local owner operation.
@@ -77,12 +77,12 @@ Installing requires:
 - A release package. A source checkout is refused with `not_supported` (exit 9), as are unsupported platforms.
 - A home that was already initialized with the OS keychain. A missing, corrupt or passphrase-only home returns `action_required` (exit 6). Install never initializes a home and never touches keychain items.
 
-| Option                          | Meaning                                                                       |
-| ------------------------------- | ----------------------------------------------------------------------------- |
-| `--home <directory>`            | Home to run. Falls back to `INBOT_HOME`, then `~/.inbot`.                     |
+| Option                             | Meaning                                                                               |
+| ---------------------------------- | ------------------------------------------------------------------------------------- |
+| `--home <directory>`               | Home to run. Falls back to `INBOT_HOME`, then `~/.inbot`.                             |
 | `--flavor development\|production` | Selects the default home when none is given. Packaged commands default to production. |
-| `--port <1-65535>`              | Install only. The fixed port the service listens on. Defaults to `8025`.      |
-| `--json`                        | Print the result as JSON.                                                     |
+| `--port <1-65535>`                 | Install only. The fixed port the service listens on. Defaults to `8025`.              |
+| `--json`                           | Print the result as JSON.                                                             |
 
 The installed service always runs the production flavor with the resolved absolute home, the installing package's absolute Node.js and CLI paths, and its bundled web app. Installing again stops the existing unit, rewrites it and requests a fresh start. The definition contains no credentials or secrets.
 
@@ -124,11 +124,11 @@ The unit pins the absolute paths of the Node.js runtime and CLI that you install
 
 ### Service errors
 
-| Code                  | Exit | Cause                                                                                       |
-| --------------------- | ---- | ------------------------------------------------------------------------------------------- |
-| `missing_permission`  | 4    | `INBOT_URL` or `INBOT_API_KEY` is set.                                                      |
-| `action_required`     | 6    | The home is missing, not initialized, corrupt, or does not use keychain unlock.             |
-| `not_supported`       | 9    | Source checkout or unsupported platform.                                                    |
+| Code                  | Exit | Cause                                                                                               |
+| --------------------- | ---- | --------------------------------------------------------------------------------------------------- |
+| `missing_permission`  | 4    | `INBOT_URL` or `INBOT_API_KEY` is set.                                                              |
+| `action_required`     | 6    | The home is missing, not initialized, corrupt, or does not use keychain unlock.                     |
+| `not_supported`       | 9    | Source checkout or unsupported platform.                                                            |
 | `service_unavailable` | 10   | The service manager failed. Linux needs a working user systemd session and Secret Service at login. |
 
 ## Check health

@@ -32,7 +32,7 @@ Events are written to an encrypted, durable log in the same transaction as the s
 | `message.failed`                                                                             | `failure`: identifiers, `reason`                                                                   | `message_read`                                 |
 | `draft.created`, `draft.approval_required`, `draft.approved`, `draft.rejected`, `draft.sent` | `draft`: `inbox_id`, `draft_id`, `timestamp`, and `message_id`, `thread_id` once sent. No content. | `draft_read`                                   |
 | `domain.verified`                                                                            | `domain`                                                                                           | Owner only                                     |
-| `inbound.quarantined`, `inbound.released`, `inbound.deleted`                                | `quarantine`: `quarantine_id`, `reason_code`, `timestamp`. No content.                             | Owner only                                     |
+| `inbound.quarantined`, `inbound.released`, `inbound.deleted`                                 | `quarantine`: `quarantine_id`, `reason_code`, `timestamp`. No content.                             | Owner only                                     |
 | `oauth.authorized`, `oauth.revoked`, `oauth.tokens_revoked`                                  | `oauth`: `grant_id`, `client_id`, `timestamp`                                                      | Owner only                                     |
 
 Identifiers are `inbox_id`, `thread_id` and `message_id`.

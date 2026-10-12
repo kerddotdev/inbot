@@ -75,7 +75,7 @@ Enable or disable the tunnel for a hostname, after confirming the connector down
 - Items that were acknowledged from the Queue as invalid keep metadata only. They cannot be retried, and delete removes just the metadata.
 - If cleanup is interrupted, the item shows `release_pending` or `delete_pending` (**Finish cleanup** for a pending release) until it completes.
 
-Quarantine is owner-only: agent keys and OAuth tokens cannot use it, it is not reachable through the tunnel, and it is not an MCP tool. The CLI equivalents are `inbot quarantine list`, `retry <quarantine_id>` and `delete <quarantine_id>`; list takes `--limit` and `--page-token`, and every command takes `--json`. Retry and delete need the Cloudflare buffer configuration that received the mail; without it they return `action_required`.
+Quarantine is owner-only: agent keys and OAuth tokens cannot use it, it is not reachable through the tunnel, and it is not an MCP tool. The CLI equivalents are `inbot quarantine list`, `retry <quarantine_id>` and `delete <quarantine_id>`; list takes `--limit` and `--page-token`, and every command takes `--json`. Buffer-object retry and delete need the Cloudflare buffer configuration that received the mail; without it they return `action_required`. Queue metadata deletion does not need buffer configuration.
 
 ## Live updates
 

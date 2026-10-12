@@ -21,17 +21,17 @@ Additional startup codes are `home_unavailable`, `key_storage_unavailable`, `dat
 
 ## Background service
 
-| Symptom                                              | Cause and fix                                                                                                                                                        |
-| ---------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `inbot service install` returns `action_required`    | The home is not initialized for keychain unlock. Run `inbot serve --init`, finish setup, stop it, then install again.                                                |
-| `inbot service install` returns `not_supported`      | Services need a release package on macOS, Linux or Windows. Source checkouts are refused.                                                                            |
-| `inbot service install` returns `missing_permission` | `INBOT_URL` or `INBOT_API_KEY` is set. Unset both and run it as the owner.                                                                                           |
-| `service_unavailable` on Linux                       | `systemctl --user` needs a working user systemd session, and the keychain needs Secret Service at login.                                                             |
-| Status shows `state: unknown`                        | The service manager could not be observed, so Inbot does not claim it is running. Check the manager directly and the logs.                                           |
-| `http_healthy` is true but `running` is false        | A foreground `inbot serve` may be answering on that port. Stop it, then check status again.                                                                          |
-| The service does not start                           | Read `<home>/logs/service.err.log` and `service.log`. Startup failures are printed there as `server.failed`. Two installed homes need two different ports.                       |
-| No setup code to enter                               | A pending setup code is written to `<home>/logs/service.log`. Alternatively run `inbot open --browser` for a login link.                                             |
-| The service fails after an upgrade                   | The unit pins the old package's paths. Run `inbot service install` again.                                                                                            |
+| Symptom                                              | Cause and fix                                                                                                                                              |
+| ---------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `inbot service install` returns `action_required`    | The home is not initialized for keychain unlock. Run `inbot serve --init`, finish setup, stop it, then install again.                                      |
+| `inbot service install` returns `not_supported`      | Services need a release package on macOS, Linux or Windows. Source checkouts are refused.                                                                  |
+| `inbot service install` returns `missing_permission` | `INBOT_URL` or `INBOT_API_KEY` is set. Unset both and run it as the owner.                                                                                 |
+| `service_unavailable` on Linux                       | `systemctl --user` needs a working user systemd session, and the keychain needs Secret Service at login.                                                   |
+| Status shows `state: unknown`                        | The service manager could not be observed, so Inbot does not claim it is running. Check the manager directly and the logs.                                 |
+| `http_healthy` is true but `running` is false        | A foreground `inbot serve` may be answering on that port. Stop it, then check status again.                                                                |
+| The service does not start                           | Read `<home>/logs/service.err.log` and `service.log`. Startup failures are printed there as `server.failed`. Two installed homes need two different ports. |
+| No setup code to enter                               | A pending setup code is written to `<home>/logs/service.log`. Alternatively run `inbot open --browser` for a login link.                                   |
+| The service fails after an upgrade                   | The unit pins the old package's paths. Run `inbot service install` again.                                                                                  |
 
 ## Sign-in
 
@@ -68,25 +68,25 @@ Additional startup codes are `home_unavailable`, `key_storage_unavailable`, `dat
 
 ## Receiving
 
-| Symptom                                          | Cause and fix                                                                                                                                                                                                |
-| ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Mail to an address never arrives                 | The address needs an inbox; there is no catch-all. The domain must be `VERIFIED`, and the inbox must be `active`.                                                                                            |
-| Mail arrives late                                | Mail waits in Cloudflare while the service is down. A missed Queue pointer is picked up by reconciliation within 15 minutes.                                                                                 |
-| A sender's mail disappears                       | Check **Settings > Allow and block lists > Rejected mail**. A non-empty allow list rejects everyone not on it.                                                                                               |
-| An agent cannot see a message the app shows      | The message has a hidden label such as `unauthenticated`, and the key lacks the matching `label_*_read` permission.                                                                                          |
+| Symptom                                          | Cause and fix                                                                                                                                                                                                                        |
+| ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Mail to an address never arrives                 | The address needs an inbox; there is no catch-all. The domain must be `VERIFIED`, and the inbox must be `active`.                                                                                                                    |
+| Mail arrives late                                | Mail waits in Cloudflare while the service is down. A missed Queue pointer is picked up by reconciliation within 15 minutes.                                                                                                         |
+| A sender's mail disappears                       | Check **Settings > Allow and block lists > Rejected mail**. A non-empty allow list rejects everyone not on it.                                                                                                                       |
+| An agent cannot see a message the app shows      | The message has a hidden label such as `unauthenticated`, and the key lacks the matching `label_*_read` permission.                                                                                                                  |
 | Teardown refuses because the bucket is not empty | Inbound mail is still waiting. Keep the service running until it is fetched. Objects that failed permanently are quarantined. Retry or delete them in **Settings > Quarantine** or with `inbot quarantine`, then retry the teardown. |
 
 ## Quarantine
 
-| Symptom                                           | Cause and fix                                                                                                                                                                    |
-| ------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| A message never arrived and there is no rejection | Check **Settings > Quarantine** or `inbot quarantine list`. Mail that can never be processed, such as corrupt ciphertext or invalid MIME, is kept there with a reason code.     |
-| Retry returns `quarantined`                       | The object failed permanently again. The ciphertext is kept and the reason is updated.                                                                                           |
-| Retry says `released`, but no message appears     | Release means processing and cleanup finished. The receive allow and block lists still apply, so the mail may have been rejected; check **Rejected mail**.                       |
-| Retry returns `not_supported`                     | Queue items hold metadata only. Retry the separately listed buffer object, or delete the Queue item.                                                                             |
-| `action_required` on retry or delete              | The Cloudflare buffer configuration is missing or differs from the one that received the mail, or a deletion is still pending. Restore the original configuration, then try again. |
-| An item shows `release_pending` or `delete_pending` | Cleanup was interrupted. Retry a `release_pending` item to finish it; repeat the delete for a `delete_pending` item. Reconciliation also finishes interrupted deletions.                                                               |
-| `page_token_stale` when paging                    | The list changed. Start again without a page token.                                                                                                                              |
+| Symptom                                             | Cause and fix                                                                                                                                                                      |
+| --------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A message never arrived and there is no rejection   | Check **Settings > Quarantine** or `inbot quarantine list`. Mail that can never be processed, such as corrupt ciphertext or invalid MIME, is kept there with a reason code.        |
+| Retry returns `quarantined`                         | The object failed permanently again. The ciphertext is kept and the reason is updated.                                                                                             |
+| Retry says `released`, but no message appears       | Release means processing and cleanup finished. The receive allow and block lists still apply, so the mail may have been rejected; check **Rejected mail**.                         |
+| Retry returns `not_supported`                       | Queue items hold metadata only. Retry the separately listed buffer object, or delete the Queue item.                                                                               |
+| `action_required` on retry or delete                | The Cloudflare buffer configuration is missing or differs from the one that received the mail, or a deletion is still pending. Restore the original configuration, then try again. |
+| An item shows `release_pending` or `delete_pending` | Cleanup was interrupted. Retry a `release_pending` item to finish it; repeat the delete for a `delete_pending` item. Reconciliation also finishes interrupted deletions.           |
+| `page_token_stale` when paging                      | The list changed. Start again without a page token.                                                                                                                                |
 
 ## Domains
 

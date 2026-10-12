@@ -33,7 +33,7 @@
     --side: #2a2c30;
     --list: #1f2023;
     --raise: #2c2e32;
-  --menu: var(--raise);
+    --menu: var(--raise);
     --text: #e9e9eb;
     --text2: #a2a5ad;
     --line: rgba(233, 233, 235, 0.13);

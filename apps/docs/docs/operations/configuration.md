@@ -29,14 +29,14 @@ Installed packages run as `production`. A source checkout runs as `development`,
 
 ## Environment variables
 
-| Variable                                                        | Used by        | Meaning                                                                                                                                              |
-| --------------------------------------------------------------- | -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `INBOT_HOME`                                                    | Service, CLI   | Home directory when `--home` is absent                                                                                                               |
-| `INBOT_URL`                                                     | CLI            | Service origin for an agent, without `/v0`, for example `http://127.0.0.1:8025`                                                                      |
-| `INBOT_API_KEY`                                                 | CLI            | Agent API key. Must be set together with `INBOT_URL`; the pair takes precedence over the owner connection.                                           |
-| `INBOT_CLOUDFLARE_API_TOKEN`                                     | CLI            | Cloudflare API token read by `inbot transport configure` when `--token-stdin` is not used. See [Mail transport](/guides/transport#configure-it-with-the-cli). |
-| `INBOT_INSTALL_ROOT`, `INBOT_BIN_DIR`, `INBOT_RELEASE_BASE_URL` | Installers     | See [Install Inbot](/get-started/install)                                                                                                            |
-| `INBOT_TEST_MEMORY_KEYCHAIN=1`                                  | Service, tests | Test only. Keeps the key in memory instead of the OS keychain. Requires an explicit `--home`, the development flavor, and refuses the default homes. |
+| Variable                                                        | Used by        | Meaning                                                                                                                                                       |
+| --------------------------------------------------------------- | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `INBOT_HOME`                                                    | Service, CLI   | Home directory when `--home` is absent                                                                                                                        |
+| `INBOT_URL`                                                     | CLI            | Service origin for an agent, without `/v0`, for example `http://127.0.0.1:8025`                                                                               |
+| `INBOT_API_KEY`                                                 | CLI            | Agent API key. Must be set together with `INBOT_URL`; the pair takes precedence over the owner connection.                                                    |
+| `INBOT_CLOUDFLARE_API_TOKEN`                                    | CLI            | Cloudflare API token read by `inbot transport configure` when `--token-stdin` is not used. See [Mail transport](/guides/transport#configure-it-with-the-cli). |
+| `INBOT_INSTALL_ROOT`, `INBOT_BIN_DIR`, `INBOT_RELEASE_BASE_URL` | Installers     | See [Install Inbot](/get-started/install)                                                                                                                     |
+| `INBOT_TEST_MEMORY_KEYCHAIN=1`                                  | Service, tests | Test only. Keeps the key in memory instead of the OS keychain. Requires an explicit `--home`, the development flavor, and refuses the default homes.          |
 
 The remote access connector runs with only `PATH` (and `SystemRoot` on Windows) from the environment.
 
@@ -51,7 +51,7 @@ The home is created with mode `0700`. Files containing secrets are written atomi
 | `connection.json`          | `{ "url", "token" }`: the loopback URL and owner bearer token, rewritten on every start                      |
 | `bin/`                     | Created only when remote access is enabled: the verified `cloudflared` download and per-run connector tokens |
 
-| `logs/`                    | Created by `inbot service install`: `service.log` and `service.err.log` from the background service         |
+| `logs/` | Created by `inbot service install`: `service.log` and `service.err.log` from the background service |
 
 There is no lock file. Do not run two services on the same home.
 
@@ -59,14 +59,14 @@ There is no lock file. Do not run two services on the same home.
 
 These are configured at runtime, not with flags:
 
-| Setting                      | Where to change it                                                                                    |
-| ---------------------------- | ----------------------------------------------------------------------------------------------------- |
-| Cloudflare token and account | Settings > Mail transport, `inbot transport`, or `PUT /v0/owner/transport`. See [Mail transport](/guides/transport).     |
-| Domains and inbox routing    | Domains page, `inbot domains`, or `/v0/domains`. See [Domains](/guides/domains).                                       |
-| API keys and OAuth grants    | API keys page, `inbot api-keys`, `inbot oauth`. See [Inboxes and API keys](/guides/inboxes-and-keys). |
-| Allow and block lists        | Settings > Allow and block lists, `inbot lists`. See [Allow and block lists](/guides/lists).          |
-| Webhooks                     | Settings > Webhooks, `inbot webhooks`. See [Webhooks and events](/guides/webhooks).                   |
-| Remote access                | Remote access page, `inbot remote`. See [Remote access](/guides/remote-access).                       |
-| Appearance                   | Settings > Appearance, stored in the browser only                                                     |
+| Setting                      | Where to change it                                                                                                   |
+| ---------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| Cloudflare token and account | Settings > Mail transport, `inbot transport`, or `PUT /v0/owner/transport`. See [Mail transport](/guides/transport). |
+| Domains and inbox routing    | Domains page, `inbot domains`, or `/v0/domains`. See [Domains](/guides/domains).                                     |
+| API keys and OAuth grants    | API keys page, `inbot api-keys`, `inbot oauth`. See [Inboxes and API keys](/guides/inboxes-and-keys).                |
+| Allow and block lists        | Settings > Allow and block lists, `inbot lists`. See [Allow and block lists](/guides/lists).                         |
+| Webhooks                     | Settings > Webhooks, `inbot webhooks`. See [Webhooks and events](/guides/webhooks).                                  |
+| Remote access                | Remote access page, `inbot remote`. See [Remote access](/guides/remote-access).                                      |
+| Appearance                   | Settings > Appearance, stored in the browser only                                                                    |
 
 Transport changes take effect on the next loop cycle without a restart.

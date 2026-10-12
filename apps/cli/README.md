@@ -508,10 +508,12 @@ The remaining eight declared endpoints are deliberately browser-only:
 `POST /v0/owner/login-links/redeem`, `POST /v0/owner/logout`,
 `GET /v0/owner/sessions`, `DELETE /v0/owner/sessions/:id`, and
 `POST /v0/owner/password`. Existing `open` still creates a single-use login link.
-OAuth protocol/consent internals and quarantine are intentionally outside this
-work. The HTTP capability download route is consumed by attachment/raw commands;
-`/v0/ws` is covered by `events --follow`. There is no CLI-reference generator in
-this branch; help derives from the command table.
+OAuth protocol and consent flows use their dedicated browser and protocol
+interfaces. Local owner quarantine commands are documented below. The HTTP
+capability download route is consumed by attachment/raw commands; `/v0/ws` is
+covered by `events --follow`. Help derives from the command table, and
+`apps/docs/generate-cli-reference.mjs` generates the docs CLI reference from
+compiled help during every documentation build.
 
 ## Owner quarantine
 

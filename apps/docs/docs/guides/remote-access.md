@@ -50,12 +50,12 @@ The tunnel connects to a second loopback listener that always enforces this poli
 | OAuth discovery under `/.well-known/`, and `/oauth/register`, `/oauth/token`, `/oauth/revoke`                    |
 | Owner sign-in: `/v0/owner/status`, `login`, `logout`, `password`, `sessions`, `/oauth/authorize` and the web app |
 
-| Blocked over the tunnel, even with an owner browser session                                  |
-| -------------------------------------------------------------------------------------------- |
+| Blocked over the tunnel, even with an owner browser session                                              |
+| -------------------------------------------------------------------------------------------------------- |
 | `/v0/owner/setup`, login links, transport, remote access, OAuth management, rejected mail and quarantine |
-| `/v0/domains` and `/v0/api-keys`, including inbox-scoped API key routes                      |
-| Resolving `send_unknown` messages                                                            |
-| `/mcp/*` subpaths, and any other `/oauth` or `/.well-known` path                             |
+| `/v0/domains` and `/v0/api-keys`, including inbox-scoped API key routes                                  |
+| Resolving `send_unknown` messages                                                                        |
+| `/mcp/*` subpaths, and any other `/oauth` or `/.well-known` path                                         |
 
 Paths with encoded separators, traversal, `//`, `;`, `#`, NUL or backslashes are rejected before routing.
 

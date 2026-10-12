@@ -203,11 +203,11 @@ pagination, and stable exit codes, or the [agent CLI guidance](skills/inbot/refe
 
 ## Current limitations
 
-- Service installation and automatic updates are unavailable; `serve` runs in the foreground.
+- Automatic updates are unavailable. Packaged builds support per-user background services; source checkouts run `serve` in the foreground.
 - Unlock uses the OS keychain. No CLI, API or web passphrase unlock is available.
-- The owner app displays HTML as escaped source or plain text, without inline attachment rendering.
-- Quarantined inbound ciphertext has durable reason metadata but no review, retry or release screen or command.
-- CLI coverage is a subset of REST and MCP: inbox updates, thread updates/deletion, message listing/search, raw and attachment downloads, API key reads by ID, domain and transport management have no CLI commands.
+- The owner app sanitizes HTML in a sandboxed frame, displays same-message raster CID images, and requires per-message consent for remote images. Agents receive HTML as stored.
+- Local owners can review, retry or permanently delete quarantined inbound mail through REST, the CLI and Settings. Acknowledged invalid Queue items retain metadata only and cannot be retried.
+- The CLI covers REST resource operations, including search, updates, deletion, batch operations, downloads, domains and transport. Owner browser authentication and OAuth protocol/consent flows use their dedicated interfaces.
 - Inbound ciphertext survives host downtime, but provider delivery reports have only five-minute Queue retention and unmatched reports are not reconciled.
 - There is no password reset, export or managed backup. See [service operations](apps/docs/docs/operations/service.md).
 
