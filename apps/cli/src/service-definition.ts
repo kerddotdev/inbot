@@ -82,6 +82,7 @@ export function renderService(input: ServiceDefinition): string {
   if (!input.username || hasControlCharacters(input.username))
     usage("A local user identity is required.");
   const { name } = serviceIdentity(input);
+  const host = path.join(path.dirname(input.cli), "service-host.js");
   const args = [
     input.cli,
     "serve",
@@ -101,7 +102,7 @@ export function renderService(input: ServiceDefinition): string {
 <!-- InbotPort: ${input.port} -->
 <plist version="1.0"><dict>
 <key>Label</key><string>${xml(name)}</string>
-<key>ProgramArguments</key><array>${[input.executable, ...args].map((value) => `<string>${xml(value)}</string>`).join("")}</array>
+<key>ProgramArguments</key><array>${[input.executable, host, ...args].map((value) => `<string>${xml(value)}</string>`).join("")}</array>
 <key>WorkingDirectory</key><string>${xml(input.home)}</string>
 <key>RunAtLoad</key><true/>
 <key>KeepAlive</key><dict><key>SuccessfulExit</key><false/></dict>
@@ -117,7 +118,7 @@ export function renderService(input: ServiceDefinition): string {
 Description=Inbot owner mail service
 [Service]
 Type=simple
-ExecStart=${[input.executable, ...args].map(systemdArgument).join(" ")}
+ExecStart=${[input.executable, host, ...args].map(systemdArgument).join(" ")}
 WorkingDirectory=/
 Restart=on-failure
 RestartSec=10
@@ -127,7 +128,6 @@ StandardError=append:${err.replaceAll("%", "%%")}
 [Install]
 WantedBy=default.target
 `;
-  const host = path.join(path.dirname(input.cli), "service-host.js");
   return `<?xml version="1.0" encoding="UTF-8"?>
 <!-- InbotPort: ${input.port} -->
 <Task version="1.3" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">

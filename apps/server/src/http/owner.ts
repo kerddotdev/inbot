@@ -1,3 +1,4 @@
+import type { UpdateState } from "../update/state.js";
 import { Effect } from "effect";
 import { HttpServerRequest, HttpServerResponse } from "effect/http";
 import { HttpApiBuilder } from "effect/http-api";
@@ -14,7 +15,7 @@ import {
   type BrowserSession,
 } from "./owner-session.js";
 
-export function ownerHandlers(origin: string) {
+export function ownerHandlers(origin: string, updates: UpdateState) {
   return HttpApiBuilder.group(ServerApi, "owner", (handlers) =>
     Effect.gen(function* () {
       const sessions = yield* OwnerSessions;
@@ -42,6 +43,10 @@ export function ownerHandlers(origin: string) {
         (request) => request.headers["user-agent"] ?? "",
       );
       return handlers
+        .handle("owner_updates", () => respond(Effect.tryPromise(() => updates.read())))
+        .handle("owner_setUpdates", ({ payload }) =>
+          respond(Effect.tryPromise(() => updates.configure(payload))),
+        )
         .handle("owner_listRejections", ({ query }) => respond(lists.rejections(query)))
         .handle("owner_deleteRejection", ({ params }) =>
           respond(lists.deleteRejection(params.rejection_id)),

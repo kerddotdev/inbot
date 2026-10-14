@@ -121,8 +121,45 @@ to launch the package's Node log host without a console window. An adjacent
 `.xml.ps1` helper reads numeric Task Scheduler states without depending on
 localized `schtasks` output.
 Uninstall stops and removes only the unit and its Windows helper, retaining the
-home, database, logs, and keychain. Upgrade the package, then reinstall the service
-to update its pinned executable paths before removing an old package version.
+home, database, logs, and keychain. The service host follows the selected installer
+launcher on each manager restart. Keep the package containing that host until a
+manual update or service reinstall refreshes the pinned bootstrap paths.
+
+## Update installed releases
+
+```sh
+inbot update --check --json
+inbot update
+inbot update --version 0.2.0
+inbot update --auto off
+inbot update --auto on
+```
+
+These are local owner commands and reject `INBOT_URL` or `INBOT_API_KEY`.
+`--check` only returns `{current, latest, update_available}`. Updates discover the
+installation from the bundled executable, select stable GitHub releases by default,
+verify SHA-256 and (on macOS) the bundled Node signature and Team ID `7LA5DMHTL9`,
+and atomically replace the installer shim. `--version` permits an explicit newer
+prerelease. Downgrades, unknown layouts and source checkouts are refused. Old
+packages remain; an existing version with a different archive hash is refused.
+An installed service is reinstalled with its existing port and the new runtime.
+The result includes observed service state, not an assumed successful startup.
+Use the same `--home` as the service. Restart foreground servers yourself.
+
+Automatic updates run only in installed background services, default to enabled,
+and check 30-60 seconds after startup and every 3.5-4 hours after each completed
+check. They download first, wait for the normal shutdown path to finish, switch
+the launcher, then exit with a restart status for the service manager. The new
+process reports `updated` only after startup succeeds. Failures and check times
+persist in `<home>/update-status.json`; the preference is in `<home>/updates.json`.
+`--auto on|off` requires the local owner server and uses `PUT /v0/owner/updates`;
+`GET /v0/owner/updates` returns status. These routes are blocked on the tunnel and
+never become MCP tools. Settings uses the same schemas and service methods.
+
+A 0.1.0 installation needs one installer upgrade and `service install` to adopt
+this command and service host. Rollback after a database migration is unsupported.
+The updater verifies checksums and macOS signatures, not provenance attestations;
+verify attestations separately as described in the packaging documentation.
 
 ## Connect
 

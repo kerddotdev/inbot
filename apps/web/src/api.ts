@@ -1,3 +1,4 @@
+import { UpdateStatus } from "@inbot/contracts/src/updates.js";
 import * as Quarantine from "@inbot/contracts/src/quarantine.js";
 import { Schema } from "effect";
 import * as OAuth from "@inbot/contracts/src/oauth.js";
@@ -72,6 +73,12 @@ export class ApiClient {
     };
   }
 
+  updates(signal?: AbortSignal) {
+    return this.request("/v0/owner/updates", UpdateStatus, signal === undefined ? {} : { signal });
+  }
+  configureUpdates(enabled: boolean) {
+    return this.request("/v0/owner/updates", UpdateStatus, { method: "PUT", body: { enabled } });
+  }
   oauthClients(signal?: AbortSignal) {
     return this.request(
       "/v0/owner/oauth/clients",

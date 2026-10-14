@@ -1,3 +1,5 @@
+import { updateState, type UpdateState } from "../update/state.js";
+import { packageVersion } from "../../../cli/src/version.js";
 import { Quarantine } from "../inbound/quarantine.js";
 import { InboundBuffer } from "../inbound/cloudflare.js";
 import { QuarantineHandlers } from "./quarantine.js";
@@ -60,6 +62,7 @@ import { AuthLive, OwnerOnlyLive, WireErrorsLive } from "./middleware.js";
 
 export function startHttpServer(
   options: {
+    readonly updates?: UpdateState;
     readonly port?: number;
     readonly ready?: (url: string) => void;
     readonly runOutbox?: boolean;
@@ -180,7 +183,11 @@ export function startHttpServer(
     const handlers = Layer.mergeAll(
       HandlersLive,
       QuarantineHandlers,
-      ownerHandlers(url),
+      ownerHandlers(
+        url,
+        options.updates ??
+          updateState(home.path, yield* Effect.promise(() => packageVersion()), false),
+      ),
       RemoteHandlers,
       OAuthHandlers,
     ).pipe(Layer.provide(Layer.mergeAll(AuthLive, OwnerOnlyLive, WireErrorsLive)));

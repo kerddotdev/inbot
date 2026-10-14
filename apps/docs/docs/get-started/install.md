@@ -97,11 +97,33 @@ The installer verifies checksums before extraction. macOS archives contain Devel
 
 ## Update
 
-Stop the foreground service, or run `inbot service uninstall` if you installed the background service. Re-run the one-line installer to select the latest release, then check `inbot --version`. Your home and database are not touched by the installer.
+Installed releases can update themselves:
 
-If you use the background service, run `inbot service install` again with the same home and port: the service definition pins the previous package's executable paths. Otherwise restart `inbot serve` without `--init`.
+```sh
+inbot update --check --json
+inbot update
+# Select a newer release explicitly, including a prerelease:
+inbot update --version 0.2.0
+```
 
-Previous versions remain under `app/<version>`. To select one, use `--version <version>` or `-Version <version>`. This changes the launcher; it does not roll back database migrations, so an older version may not be compatible with an upgraded home. Repeat installs of the same version and checksum reuse the archive; a different archive under an existing version is refused. There is no automatic update and no `inbot update` command.
+`--check` only reports `current`, `latest`, and `update_available`. Updates use stable releases by default and never downgrade. The updater detects the install root from its bundled runtime, verifies the archive, installs it under `app/<version>`, and atomically switches the launcher. It retains previous versions and refuses a different archive under an existing version. Source checkouts and manually extracted archives cannot update themselves. For older custom installations, keep the installer's bin directory on PATH so the updater can identify its launcher.
+
+If the background service is installed, `inbot update` reinstalls it on the new runtime using the same home and port and reports the observed manager state and HTTP health. Use the same `--home` as your service. A requested restart is not proof that the new server is healthy; inspect `inbot service status` if health has not answered yet. Foreground servers must be stopped and restarted manually.
+
+Automatic updates default to on for installed background services. Checks begin 30-60 seconds after startup, then recur with jitter every 3.5-4 hours after the previous check completes. After downloading and verifying an update, the server uses its normal shutdown path to close mail runners, HTTP listeners and storage before switching versions. The service manager restarts it on the selected version. Foreground servers and source checkouts never run the automatic updater.
+
+Turn automatic updates off or on in Settings, or with the local owner CLI while the server is running:
+
+```sh
+inbot update --auto off
+inbot update --auto on
+```
+
+Settings shows the current version, latest known release, last check time, last result and failures. The preference is saved in the home and survives restarts. It is not available to agent credentials, MCP, or through the tunnel. The local owner REST API exposes only the preference and status, not an installation command.
+
+Upgrading from 0.1.0 requires running the installer once because that release does not include `inbot update`. Then run `inbot service install` again with the same home and port to enable the update-aware service host. The service host follows the installer launcher on manager restarts; retain the older package referenced by the service definition until a manual update or reinstall refreshes that definition.
+
+Newer versions run database migrations on startup. **Rollback to an older version is not supported after a migration.** Retaining an old package is not a database rollback mechanism. Back up your home before manually upgrading; see [Back up your home](/operations/service#back-up-your-home).
 
 ## Uninstall
 

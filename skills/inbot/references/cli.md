@@ -161,3 +161,5 @@ The local owner can edit a key with `inbot api-keys update <api_key_id>` using
 `--name`, `--permissions` and `--send-policy`. Permissions replace the set;
 scope and expiry are immutable. New web key and OAuth forms default to Full
 access with approval and no selected inboxes; CLI callers supply explicit grants.
+
+Release updates and automatic-update preferences are local owner operations. Agents cannot use `inbot update`, its `--auto` option, or `/v0/owner/updates`; no update installation tool is exposed through MCP.

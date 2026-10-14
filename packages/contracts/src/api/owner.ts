@@ -1,3 +1,4 @@
+import { UpdatePreference, UpdateStatus } from "../updates.js";
 import { Schema } from "effect";
 import { HttpApi, HttpApiEndpoint, HttpApiGroup, HttpApiSchema } from "effect/http-api";
 import { ListRejectionsQuery, ListRejectionsResponse } from "../lists.js";
@@ -6,6 +7,19 @@ import { WriteErrors } from "../errors.js";
 import { BearerAuth, OwnerOnly } from "../security.js";
 
 export const OwnerApiGroup = HttpApiGroup.make("owner").add(
+  HttpApiEndpoint.get("owner_updates", "/v0/owner/updates", {
+    success: UpdateStatus,
+    error: WriteErrors,
+  })
+    .middleware(OwnerOnly)
+    .middleware(BearerAuth),
+  HttpApiEndpoint.put("owner_setUpdates", "/v0/owner/updates", {
+    payload: UpdatePreference,
+    success: UpdateStatus,
+    error: WriteErrors,
+  })
+    .middleware(OwnerOnly)
+    .middleware(BearerAuth),
   HttpApiEndpoint.get("owner_listRejections", "/v0/owner/lists/rejections", {
     query: ListRejectionsQuery,
     success: ListRejectionsResponse,
