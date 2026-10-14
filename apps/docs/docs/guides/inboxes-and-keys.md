@@ -58,9 +58,9 @@ Anything outside the scope returns `not_found`, exactly like something that does
 
 ### Choose permissions
 
-New API key and OAuth consent forms default to **Full access** with **Approval**, with no inboxes selected. Full access grants inbox reading, mail reading/updating/replying/sending, and draft reading/creating/updating/deleting/sending; it does not grant owner administration, inbox management, hidden-label access, list or webhook management.
+New API key and OAuth consent forms default to **Full access** with **Approval**, with no inboxes selected. Full access grants inbox reading, mail reading/updating/replying/sending, draft reading/creating/updating/deleting/sending, and all credential permissions; it does not grant owner administration, inbox management, hidden-label access, list or webhook management.
 
-**Read only** grants inbox, message and draft reads and selects the read-only policy. **Read and draft** adds draft create, update and delete. Expand **Choose individual permissions** for a custom set. These are web form defaults, not implicit API permissions: CLI and REST callers must supply their own permission set.
+**Read only** grants inbox, message, draft and credential metadata reads and selects the read-only policy. **Read and draft** adds draft create, update and delete. Expand **Choose individual permissions** for a custom set. These are web form defaults, not implicit API permissions: CLI and REST callers must supply their own permission set.
 
 Grant only what the agent needs. Common sets:
 
@@ -70,7 +70,7 @@ Grant only what the agent needs. Common sets:
 | Answers with review | `inbox_read`, `message_read`, `message_reply`, `message_update`, `draft_read`   | `approval`  |
 | Sends on its own    | `inbox_read`, `message_read`, `message_send`, `message_reply`, `message_update` | `direct`    |
 
-[Permissions](/reference/permissions) lists all 25 permissions and what each route requires.
+[Permissions](/reference/permissions) lists all 33 permissions and what each route requires.
 
 ### Choose a send policy
 
@@ -81,6 +81,17 @@ Grant only what the agent needs. Common sets:
 | `read_only` | Sending and scheduling are refused with `missing_permission`. Drafts can still be written if granted.                                                            |
 
 The policy is enforced by the service on every surface. An agent cannot talk its way past it, and nothing in an email can change it.
+
+### Choose a use policy
+
+Keys that may use credentials also have a `use_policy`, set with `--use-policy approval|direct` on `inbot api-keys create` and `update`, or in the grant editor. It is independent of the send policy.
+
+| Policy     | Effect                                                                                                                              |
+| ---------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `approval` | The default. Each browser fill and each `inbot run` resolution waits for you in the credential use requests, and uses one approval. |
+| `direct`   | Fill and `inbot run` proceed immediately.                                                                                           |
+
+Capture, metadata changes, password generation and TOTP codes are not gated. See the [credential vault](/guides/vault#approve-credential-use). The grant editor's **Full access** preset includes every `credential_*` permission, including `credential_run`, and the read presets include `credential_read`; check the individual permissions before you hand a key to an agent.
 
 ### Expiry and revocation
 

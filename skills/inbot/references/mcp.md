@@ -28,6 +28,27 @@ What to do:
 
 Out-of-scope inboxes, threads, messages, drafts, and attachments return `not_found`, the same as absent ones. Scope is checked before permissions, so `missing_permission` only appears for resources you can otherwise see. Resources carrying a hidden label you may not read (`spam`, `blocked`, `unauthenticated`, `trash`) also return `not_found`. See [security.md](security.md).
 
+## Credential tools
+
+Details and rules are in [vault.md](vault.md). Results contain metadata, `fields` and `refs`, never values. `request` takes the REST body in snake_case.
+
+| Tool                       | Key params                                                                                           | Permission           |
+| -------------------------- | ---------------------------------------------------------------------------------------------------- | -------------------- |
+| `list_credentials`         | `inboxId?`, `q`, `limit`, `pageToken`                                                                | `credential_read`    |
+| `get_credential`           | `inboxId`, `credentialId`                                                                            | `credential_read`    |
+| `create_credential`        | `inboxId`, `request`: `name`, `url`, `origins`, `username`, `fields`, `generate`                     | `credential_create`  |
+| `update_credential`        | `inboxId`, `credentialId`, `request`: create fields and `remove_fields`                              | `credential_update`  |
+| `delete_credential`        | `inboxId`, `credentialId`                                                                            | `credential_delete`  |
+| `generate_password`        | `inboxId`, `credentialId`, `field`, `mode`, `length`, `rules`                                        | `credential_update`  |
+| `get_totp_code`            | `inboxId`, `credentialId`                                                                            | `credential_totp`    |
+| `fill_credential`          | `inboxId`, `credentialId`, `cdp_endpoint`, `selector`, `field`, `url`, `target_id`, `idempotencyKey` | `credential_fill`    |
+| `capture_credential`       | `inboxId`, `credentialId`, `cdp_endpoint`, `selector`, `field`, `url`, `target_id`                   | `credential_fill`    |
+| `request_credential`       | `inboxId`, `request`: `name`, `url`, `username`, `fields`, `reason`                                  | `credential_request` |
+| `get_credential_request`   | `inboxId`, `requestId`                                                                               | `credential_request` |
+| `list_credential_requests` | `state`, `limit`, `pageToken`                                                                        | `credential_request` |
+
+`fill_credential` is not idempotent. Under `use_policy: approval` it needs `idempotencyKey` and returns `approval_required` first. Reveal, `inbot run` resolution, use decisions, request fulfillment, import/export and host settings have no MCP tool.
+
 ## Inbox tools
 
 | Tool             | Purpose                                         | Key params                                                                       | Nature            | Permission     |

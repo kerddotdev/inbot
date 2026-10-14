@@ -156,17 +156,69 @@ Agents see only webhooks their own key created. See [Webhooks and events](/guide
 
 `GET /v0/ws` upgrades to a WebSocket. See [Events](/reference/events#websocket). There is no REST route for reading the event log.
 
+## Credentials
+
+The credential vault. Paths are under `/v0`; `inbox_id` is the inbox address. Responses contain metadata and references, never values, except the owner-only routes marked below. See [Credential vault](/guides/vault).
+
+| Route                                                    | Access              | Notes                                                                                                                                                                   |
+| -------------------------------------------------------- | ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /inboxes/{inbox_id}/credentials`                    | `credential_read`   | `limit`, `page_token`, `ascending`, `q` (name, URL and username)                                                                                                        |
+| `GET /credentials`                                       | `credential_read`   | Across accessible inboxes; adds `inbox_id` filter                                                                                                                       |
+| `POST /inboxes/{inbox_id}/credentials`                   | `credential_create` | `name` required; `url`, `origins`, `username`, `fields`, `generate` optional                                                                                            |
+| `GET /inboxes/{inbox_id}/credentials/{credential_id}`    | `credential_read`   |                                                                                                                                                                         |
+| `PATCH /inboxes/{inbox_id}/credentials/{credential_id}`  | `credential_update` | At least one field. `remove_fields` is applied first.                                                                                                                   |
+| `DELETE .../credentials/{credential_id}`                 | `credential_delete` | Deletes the fields too                                                                                                                                                  |
+| `POST .../credentials/{credential_id}/generate`          | `credential_update` | `{ field?, mode?, length?, rules? }`; `field` defaults to `password` and cannot be `totp`                                                                               |
+| `GET .../credentials/{credential_id}/totp`               | `credential_totp`   | `{ code, expires_at, period }`                                                                                                                                          |
+| `POST .../credentials/{credential_id}/fill`              | `credential_fill`   | `{ cdp_endpoint, selector, field, url?, target_id? }`. Send `Idempotency-Key` under `use_policy: approval`. Returns `{ credential_id, field, origin, url }`.            |
+| `POST .../credentials/{credential_id}/capture`           | `credential_fill`   | Same body; returns the credential with references                                                                                                                       |
+| `POST /credentials/resolve`                              | `credential_run`    | `{ refs, public_key }` returns `{ ciphertext }`, age-encrypted to the key. Loopback only. Send `Idempotency-Key` under `use_policy: approval`. Blocked over the tunnel. |
+| `GET .../credentials/{credential_id}/fields`             | Owner, local only   | Reveals values, including the TOTP URI. `Cache-Control: no-store`. Blocked over the tunnel.                                                                             |
+| `GET /credentials/export`                                | Owner, local only   | Unencrypted Bitwarden JSON; optional `inbox_id`. `Cache-Control: no-store`. Blocked over the tunnel.                                                                    |
+| `POST /credentials/import`                               | Owner, local only   | Bitwarden JSON up to 5 MiB; `inbox_id` required, `on_duplicate=skip\|create`. Returns `{ imported, skipped, reasons, credentials }`. Blocked over the tunnel.           |
+| `GET /owner/vault/settings`, `PUT /owner/vault/settings` | Owner, local only   | `{ remote_cdp_hosts }`, at most 32 lowercase hostnames or `*.suffix` patterns                                                                                           |
+
+A credential has `credential_id`, `inbox_id`, `name`, `url`, `origins`, `username`, `fields` (names), `refs` (field name to reference), `created_at`, `updated_at` and `last_used_at`. Origins are the URL's origin followed by the extra origins. URLs need HTTPS, except HTTP on `localhost`, `127.0.0.1` and `[::1]`.
+
+`403 approval_required` on fill or resolve means the use is pending the owner. Its message carries the request ID. Retry the identical request with the same `Idempotency-Key` after approval.
+
+### Credential use requests
+
+Owner only. Agent keys and OAuth tokens receive `403`.
+
+| Route                                                | Access                                       | Notes                                                                                       |
+| ---------------------------------------------------- | -------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| `GET /credential-use-requests`                       | Owner, browser session works over the tunnel | `state` (`pending`, `approved`, `rejected`, `consumed`), `limit`, `page_token`, `ascending` |
+| `POST /credential-use-requests/{request_id}/approve` | Owner, browser session works over the tunnel | Permits one use within 15 minutes                                                           |
+| `POST /credential-use-requests/{request_id}/reject`  | Owner, browser session works over the tunnel | Rejects a pending request                                                                   |
+
+A request has `request_id`, `api_key_id`, `api_key_name`, `inbox_id`, `kind` (`fill` or `run`), `credentials` (ID, name and field names), an optional `url_hint` that is only the agent's claim, `state`, `created_at`, `decided_at` and `expires_at`. Pending requests expire after 24 hours.
+
+### Credential requests
+
+An agent asks the owner for values. The owner answers locally.
+
+| Route                                                      | Access                                       | Notes                                                                                                    |
+| ---------------------------------------------------------- | -------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| `POST /inboxes/{inbox_id}/credential-requests`             | `credential_request`                         | `{ name, url?, username?, fields, reason }`; one to eight unique `fields`, `reason` up to 500 characters |
+| `GET /inboxes/{inbox_id}/credential-requests/{request_id}` | `credential_request`                         | Agents see only their own key's requests                                                                 |
+| `GET /credential-requests`                                 | `credential_request`                         | `state` (`pending`, `fulfilled`, `declined`, `expired`), `limit`, `page_token`, `ascending`              |
+| `POST /credential-requests/{request_id}/fulfill`           | Owner, local only                            | `{ fields, username? }` with exactly the requested field names. Blocked over the tunnel.                 |
+| `POST /credential-requests/{request_id}/decline`           | Owner; browser session works over the tunnel | No body. Repeating it is safe.                                                                           |
+
+Requests expire after seven days. A fulfilled request includes the credential metadata and references. Owners also see `requested_by`.
+
 ## API keys
 
 Owner only.
 
-| Route                           | Notes                                                                                                                     |
-| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| `GET /api-keys`                 |                                                                                                                           |
-| `POST /api-keys`                | `permissions` and `send_policy` required; `inbox_id`, `inbox_ids`, `name`, `expires_at` optional. Returns `api_key` once. |
-| `GET /api-keys/{api_key_id}`    |                                                                                                                           |
-| `PATCH /api-keys/{api_key_id}`  | Only `name`, `permissions`, `send_policy` can change                                                                      |
-| `DELETE /api-keys/{api_key_id}` | Revokes immediately                                                                                                       |
+| Route                           | Notes                                                                                                                                                                       |
+| ------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /api-keys`                 |                                                                                                                                                                             |
+| `POST /api-keys`                | `permissions` and `send_policy` required; `use_policy` (`approval` by default or `direct`), `inbox_id`, `inbox_ids`, `name`, `expires_at` optional. Returns `api_key` once. |
+| `GET /api-keys/{api_key_id}`    |                                                                                                                                                                             |
+| `PATCH /api-keys/{api_key_id}`  | Only `name`, `permissions`, `send_policy`, `use_policy` can change                                                                                                          |
+| `DELETE /api-keys/{api_key_id}` | Revokes immediately                                                                                                                                                         |
 
 `GET`, `POST`, `PATCH` and `DELETE` also exist under `/inboxes/{inbox_id}/api-keys`, where the route fixes `inbox_id`.
 

@@ -42,24 +42,34 @@ Each creation step is recorded before it happens, so after a timeout or restart,
 
 The tunnel connects to a second loopback listener that always enforces this policy. It requires the `Host` to be your hostname and any `Origin` to be `https://<hostname>`, and it rejects the local owner bearer token on every path.
 
-| Reachable over the tunnel                                                                                        |
-| ---------------------------------------------------------------------------------------------------------------- |
-| `/mcp`                                                                                                           |
-| `/v0/ws`                                                                                                         |
-| Agent REST routes under `/v0`: inboxes, threads, messages, drafts, attachments, downloads, lists and webhooks    |
-| OAuth discovery under `/.well-known/`, and `/oauth/register`, `/oauth/token`, `/oauth/revoke`                    |
-| Owner sign-in: `/v0/owner/status`, `login`, `logout`, `password`, `sessions`, `/oauth/authorize` and the web app |
+| Reachable over the tunnel                                                                                                                                                |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `/mcp`                                                                                                                                                                   |
+| `/v0/ws`                                                                                                                                                                 |
+| Agent REST routes under `/v0`: inboxes, threads, messages, drafts, attachments, downloads, lists, webhooks, credentials, credential requests and credential use requests |
+| OAuth discovery under `/.well-known/`, and `/oauth/register`, `/oauth/token`, `/oauth/revoke`                                                                            |
+| Owner sign-in: `/v0/owner/status`, `login`, `logout`, `password`, `sessions`, `/oauth/authorize` and the web app                                                         |
 
-| Blocked over the tunnel, even with an owner browser session                                              |
-| -------------------------------------------------------------------------------------------------------- |
-| `/v0/owner/setup`, login links, transport, remote access, OAuth management, rejected mail and quarantine |
-| `/v0/domains` and `/v0/api-keys`, including inbox-scoped API key routes                                  |
-| Resolving `send_unknown` messages                                                                        |
-| `/mcp/*` subpaths, and any other `/oauth` or `/.well-known` path                                         |
+| Blocked over the tunnel, even with an owner browser session                                                                                                                            |
+| -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `/v0/owner/setup`, login links, transport, remote access, OAuth management, rejected mail and quarantine                                                                               |
+| `/v0/domains` and `/v0/api-keys`, including inbox-scoped API key routes                                                                                                                |
+| Resolving `send_unknown` messages                                                                                                                                                      |
+| Revealing credential values (`.../credentials/{id}/fields`), `/v0/credentials/resolve`, `/v0/credentials/export`, `/v0/credentials/import`, and `/v0/credential-requests/{id}/fulfill` |
+| `/mcp/*` subpaths, and any other `/oauth` or `/.well-known` path                                                                                                                       |
 
 Paths with encoded separators, traversal, `//`, `;`, `#`, NUL or backslashes are rejected before routing.
 
 The owner can sign in to the web app over the tunnel. The session cookie becomes `__Host-inbot_session` with `Secure`, and unsafe requests still need the CSRF token. This lets you approve drafts and OAuth clients away from home, while keys, domains and transport stay manageable only on the machine itself.
+
+## Credentials over the tunnel
+
+The [credential vault](/guides/vault) splits by whether a route carries a plaintext value.
+
+- **Reachable:** agent credential routes (metadata, generation, TOTP, fill and capture), credential requests from agents, and the owner decisions that carry no value: listing and approving or rejecting credential use, and declining a credential request. Owner decisions need a browser session, like draft approval.
+- **Blocked:** revealing values, import, export, fulfilling requests and `inbot run` resolution. Cloudflare terminates TLS for the tunnel, so values must not cross it in plaintext. Fulfill and reveal from the Inbot host. The browser host allowlist lives under `/v0/owner/vault/settings`, which is also local only.
+
+Fill and capture through the tunnel add rules for the browser endpoint. It must be HTTPS or WSS, on a host in the owner's `remote_cdp_hosts` list, and resolve only to public addresses. With the default empty list, remote fill and capture are off. Approval still applies first when the key's `use_policy` is `approval`.
 
 ## Connect a cloud agent
 

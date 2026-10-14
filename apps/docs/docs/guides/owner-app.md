@@ -44,6 +44,12 @@ This sanitizing happens only in the browser. Agents still receive the stored `ht
 
 Lists every draft waiting for your decision, across all inboxes. Open one to review recipients, text and attachment download buttons, then approve or reject it with an optional reason. Approving a scheduled draft keeps it scheduled. See [Drafts and approvals](/guides/approvals).
 
+The same list shows pending **credential use** requests (approve or reject one browser fill or local command) and **credential requests**, where an agent asks you for a login. Enter the values to create the credential, or decline. The agent's reason is shown as plain text. See [Credential vault](/guides/vault).
+
+## Vault
+
+Lists every credential across inboxes, with search and an inbox filter. A credential shows its URL, allowed origins, username, field names and the refs agents use. **Reveal** fetches the values on demand and hides them again after a minute; a `totp` field shows the current one-time code with a countdown. You can create credentials, edit metadata and fields, generate a new password, delete, and import or export Bitwarden JSON. Reveal, import and export work only on the Inbot host, not through the tunnel. See [Credential vault](/guides/vault).
+
 ## Domains
 
 Register a mail subdomain, preview the provisioning plan, apply it, watch DNS records and verification, export a BIND zone file, confirm supported domain features, tear down and delete. Teardown and deletion ask for confirmation. See [Domains](/guides/domains).
@@ -58,13 +64,14 @@ Enable or disable the tunnel for a hostname, after confirming the connector down
 
 ## Settings
 
-| Section               | What it does                                                                                                                      |
-| --------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| Appearance            | System, light or dark theme, stored in this browser                                                                               |
-| Mail transport        | Create, verify, save and clear the Cloudflare token. See [Mail transport](/guides/transport).                                     |
-| Allow and block lists | Manage global and inbox lists, and review rejected mail. See [Allow and block lists](/guides/lists).                              |
-| Quarantine            | Review inbound mail that could not be processed, retry buffer objects and delete them permanently. See [Quarantine](#quarantine). |
-| Webhooks              | Create webhooks, copy the one-time secret, see failures, enable, disable and delete. See [Webhooks and events](/guides/webhooks). |
+| Section               | What it does                                                                                                                            |
+| --------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| Appearance            | System, light or dark theme, stored in this browser                                                                                     |
+| Mail transport        | Create, verify, save and clear the Cloudflare token. See [Mail transport](/guides/transport).                                           |
+| Allow and block lists | Manage global and inbox lists, and review rejected mail. See [Allow and block lists](/guides/lists).                                    |
+| Quarantine            | Review inbound mail that could not be processed, retry buffer objects and delete them permanently. See [Quarantine](#quarantine).       |
+| Webhooks              | Create webhooks, copy the one-time secret, see failures, enable, disable and delete. See [Webhooks and events](/guides/webhooks).       |
+| Remote browser hosts  | Hosts that remote agents may have Inbot fill passwords into. An empty list disables remote fill. See [Credential vault](/guides/vault). |
 
 ## Quarantine
 

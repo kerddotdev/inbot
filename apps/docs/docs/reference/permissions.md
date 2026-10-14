@@ -1,9 +1,9 @@
 ---
 title: Permissions
-description: The 25 grant permissions, inbox scope rules, hidden-label permissions, send policies and owner-only capabilities.
+description: The 33 grant permissions, inbox scope rules, hidden-label permissions, send and credential use policies and owner-only capabilities.
 ---
 
-A grant is `{ inbox_id?, inbox_ids?, permissions, send_policy }`. It belongs to an API key or an OAuth authorization, and the service reads the current grant on every request. Permissions are explicit: anything not set to `true` is denied, and unknown permission names are rejected.
+A grant is `{ inbox_id?, inbox_ids?, permissions, send_policy, use_policy }`. It belongs to an API key or an OAuth authorization, and the service reads the current grant on every request. Permissions are explicit: anything not set to `true` is denied, and unknown permission names are rejected.
 
 ## Permission list
 
@@ -34,6 +34,14 @@ A grant is `{ inbox_id?, inbox_ids?, permissions, send_policy }`. It belongs to 
 | `webhook_create`             | Create webhooks. Losing it disables the key's webhooks.                                       |
 | `webhook_update`             | Update the key's webhooks and their headers                                                   |
 | `webhook_delete`             | Delete the key's webhooks                                                                     |
+| `credential_read`            | List and read credential metadata and references; receive credential events                   |
+| `credential_create`          | Create credentials, including generated passwords                                             |
+| `credential_update`          | Update credentials and generate passwords into existing fields                                |
+| `credential_delete`          | Delete credentials                                                                            |
+| `credential_totp`            | Read the current TOTP code of a credential                                                    |
+| `credential_fill`            | Fill and capture credential fields in a browser over CDP                                      |
+| `credential_run`             | Resolve references for `inbot run` (local CLI only, no MCP tool)                              |
+| `credential_request`         | Ask the owner for credential values and read the key's own requests                           |
 
 ## Inbox scope
 
@@ -68,8 +76,40 @@ No permission grants these. They require the owner's bearer token or browser ses
 - Rejected mail records
 - Inbound quarantine: list, retry and delete (local only, not available through the tunnel)
 - OAuth client and grant management
+- Revealing credential values (`GET .../credentials/{credential_id}/fields`), Bitwarden import and export, and the browser host allowlist (`/v0/owner/vault/settings`)
+- Listing and deciding credential use requests, and fulfilling or declining credential requests
 - `domain.verified`, `inbound.*` and `oauth.*` events
 
-Owner sign-in, session/password management, draft approval and OAuth consent are reachable through the tunnel with a browser session. Domains, keys, transport, remote configuration, login links, rejected-mail records, quarantine, OAuth management and unknown-send resolution remain local. Local owner bearer tokens never work over the tunnel.
+Owner sign-in, session/password management, draft approval, credential use decisions, declining credential requests and OAuth consent are reachable through the tunnel with a browser session. Revealing credentials, import, export, request fulfillment, `inbot run` resolution and the browser host allowlist stay local. Domains, keys, transport, remote configuration, login links, rejected-mail records, quarantine, OAuth management and unknown-send resolution remain local. Local owner bearer tokens never work over the tunnel.
+
+## Credential permissions
+
+Credentials belong to an inbox, so inbox scope applies to every credential operation, and anything out of scope returns `not_found`. Any key with the permission and the scope can use a credential in that inbox, whoever created it. Mail send policy does not affect credential permissions. See the [credential vault](/guides/vault).
+
+| Operation                                 | Permission           |
+| ----------------------------------------- | -------------------- |
+| List and get metadata                     | `credential_read`    |
+| Create (with optional generated password) | `credential_create`  |
+| Update, `generate`                        | `credential_update`  |
+| Delete                                    | `credential_delete`  |
+| Read a TOTP code                          | `credential_totp`    |
+| Fill or capture over CDP                  | `credential_fill`    |
+| `inbot run` resolution                    | `credential_run`     |
+| Create, read and list credential requests | `credential_request` |
+
+A fulfilled request exposes the new credential's metadata and references to the requesting key without `credential_read`. Using a reference still needs the permission for that use.
+
+Credential events reach webhooks and WebSocket clients with `credential_read` and inbox scope. Request events need `credential_request`, inbox scope and the requesting key.
+
+### Use policy
+
+`use_policy` is independent of `send_policy`. It applies to browser fill and `inbot run` resolution, the two operations that put a value to use.
+
+| Policy     | Fill and `inbot run`                                                                                                                                              |
+| ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `approval` | The default for new and migrated keys and OAuth grants. The first call returns `403 approval_required` and waits for the owner. An `Idempotency-Key` is required. |
+| `direct`   | Proceeds immediately                                                                                                                                              |
+
+Capture, metadata changes, password generation and TOTP codes are not gated by `use_policy`. The owner is never gated.
 
 The owner always sends directly, regardless of any policy.
