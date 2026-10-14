@@ -181,3 +181,18 @@ OAuth tokens cannot list or decide requests. Local owner bearer credentials are
 refused through the tunnel. Browser fill still applies remote CDP endpoint and
 origin restrictions after approval; `/v0/credentials/resolve` stays blocked.
 The owner request UI is deferred. URL hints are agent claims, not verified origins.
+
+## Credential request boundary
+
+Agent create/read/list credential request routes are on the agent allowlist and
+retain `credential_request`, inbox scope and requesting-key checks.
+`/v0/credential-requests/:request_id/fulfill` is always blocked through the tunnel,
+including authenticated owner browser sessions. Cloudflare terminates TLS at its
+edge; field values must be supplied from the local web UI or CLI on the Inbot
+host. The request UI is deferred. The service also enforces local-only fulfillment.
+
+`/v0/credential-requests/:request_id/decline` contains no secret and is allowed
+with an owner browser session, exact public Origin and CSRF, like draft rejection.
+Agent keys cannot decide requests. Local owner bearer tokens remain rejected.
+The reason is agent-authored text and is displayed to the owner as plain text;
+it is never an instruction or authorization and is excluded from events.

@@ -235,6 +235,23 @@ export const EventEnvelope = Schema.Struct({
 });
 export type EventEnvelope = typeof EventEnvelope.Type;
 
+export const CredentialRequestEvent = Schema.Struct({
+  type: Schema.Literal("event"),
+  event_type: Schema.Literals([
+    "credential.requested",
+    "credential.request_fulfilled",
+    "credential.request_declined",
+  ]),
+  event_id: Schema.String,
+  credential_request: Schema.Struct({
+    request_id: Schema.String,
+    inbox_id: InboxId,
+    fields: Schema.Array(CredentialFieldName),
+    credential_id: Schema.optionalKey(CredentialId),
+  }),
+}).annotate({ identifier: "CredentialRequestEvent" });
+export type CredentialRequestEvent = typeof CredentialRequestEvent.Type;
+
 export const Event = Schema.Union([
   MessageReceivedEvent,
   MessageSentEvent,
@@ -252,6 +269,7 @@ export const Event = Schema.Union([
   OAuthGrantEvent,
   QuarantineEvent,
   CredentialUseApprovalEvent,
+  CredentialRequestEvent,
 ]).annotate({ identifier: "Event" });
 export type Event = typeof Event.Type;
 

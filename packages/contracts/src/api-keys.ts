@@ -34,6 +34,7 @@ export const Permissions = Schema.Struct({
   credential_totp: Schema.optionalKey(Schema.Boolean),
   credential_fill: Schema.optionalKey(Schema.Boolean),
   credential_run: Schema.optionalKey(Schema.Boolean),
+  credential_request: Schema.optionalKey(Schema.Boolean),
 }).annotate({ identifier: "Permissions" });
 export type Permissions = typeof Permissions.Type;
 export type Permission = keyof Permissions;

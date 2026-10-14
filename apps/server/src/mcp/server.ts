@@ -8,6 +8,8 @@ import * as Drafts from "../../../../packages/contracts/src/drafts.js";
 import * as WebhookContracts from "../../../../packages/contracts/src/webhooks.js";
 import { Webhooks } from "../events/webhooks.js";
 import * as VaultContracts from "../../../../packages/contracts/src/vault.js";
+import * as CredentialRequestContracts from "../../../../packages/contracts/src/credential-requests.js";
+import { CredentialRequests } from "../vault/requests.js";
 import { Vault } from "../vault/vault.js";
 import * as Threads from "../../../../packages/contracts/src/threads.js";
 import * as Lists from "../../../../packages/contracts/src/lists.js";
@@ -131,6 +133,7 @@ export const McpTools = (origin: string) =>
       const sessions = yield* OwnerSessions;
       const webhooks = yield* Webhooks;
       const vault = yield* Vault;
+      const credentialRequests = yield* CredentialRequests;
 
       function register<S extends Schema.Top & { readonly DecodingServices: never }, A, E>(
         name: string,
@@ -735,6 +738,37 @@ export const McpTools = (origin: string) =>
           operations.updateMessage(input.inboxId, input.messageId, {
             ...(input.addLabels === undefined ? {} : { add_labels: input.addLabels }),
             ...(input.removeLabels === undefined ? {} : { remove_labels: input.removeLabels }),
+          }),
+      );
+      yield* register(
+        "request_credential",
+        "Ask the owner to enter credential values in Inbot. You receive metadata and refs only, never values. Poll get_credential_request later; do not busy-loop. Requires credential_request.",
+        Schema.Struct({
+          ...inbox,
+          request: CredentialRequestContracts.CreateCredentialRequestRequest,
+        }),
+        create,
+        ({ inboxId, request }) => credentialRequests.create(request, inboxId),
+      );
+      yield* register(
+        "get_credential_request",
+        "Read your own credential request. The owner enters values; fulfilled requests contain refs only. Check back later while pending; do not busy-loop. Requires credential_request.",
+        Schema.Struct({ ...inbox, requestId: CredentialRequestContracts.CredentialRequestId }),
+        read,
+        ({ inboxId, requestId }) => credentialRequests.get(requestId, inboxId),
+      );
+      yield* register(
+        "list_credential_requests",
+        "List your own scoped credential requests. The owner enters values; you receive metadata and refs only. Check pending requests later; do not busy-loop. Requires credential_request.",
+        Schema.Struct({
+          ...page,
+          state: CredentialRequestContracts.ListCredentialRequestsQuery.fields.state,
+        }),
+        read,
+        ({ state, ...query }) =>
+          credentialRequests.list({
+            ...pageQuery(query),
+            ...(state === undefined ? {} : { state }),
           }),
       );
     }),

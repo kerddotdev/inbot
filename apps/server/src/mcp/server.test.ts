@@ -1,3 +1,7 @@
+import {
+  CredentialRequest,
+  ListCredentialRequestsResponse,
+} from "../../../../packages/contracts/src/credential-requests.js";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -130,6 +134,9 @@ test("initializes with an API key and lists mailbox, list and webhook tools with
       "delete_webhook",
       "get_webhook_headers",
       "update_webhook_headers",
+      "request_credential",
+      "get_credential_request",
+      "list_credential_requests",
     ].sort(),
   );
   for (const tool of tools) {
@@ -704,4 +711,84 @@ test("fills and captures without exposing values in MCP content and enforces cre
   } finally {
     await browser.close();
   }
+});
+
+test("requests owner-entered credentials, isolates keys and returns refs without exposing owner tools or values", async ({
+  api,
+}) => {
+  const key = await api.run(
+    api.keys.create({
+      inbox_ids: [inboxId],
+      permissions: { credential_request: true },
+      send_policy: "read_only",
+    }),
+  );
+  const other = await api.run(
+    api.keys.create({
+      inbox_ids: [inboxId],
+      permissions: { credential_request: true },
+      send_policy: "read_only",
+    }),
+  );
+  const mcp = await client(api, key.api_key);
+  const second = await client(api, other.api_key);
+  const { tools } = await mcp.list();
+  expect(tools.some((tool) => /fulfill|decline/.test(tool.name))).toBe(false);
+  const request = Schema.decodeUnknownSync(CredentialRequest)(
+    (
+      await mcp.call("request_credential", {
+        inboxId,
+        request: { name: "Owner account", fields: ["api_key"], reason: "Existing account needed" },
+      })
+    ).structuredContent,
+  );
+  expect(request.state).toBe("pending");
+  failure(
+    await second.call("get_credential_request", { inboxId, requestId: request.request_id }),
+    "not_found",
+  );
+  expect(
+    Schema.decodeUnknownSync(ListCredentialRequestsResponse)(
+      (await second.call("list_credential_requests", {})).structuredContent,
+    ).credential_requests,
+  ).toEqual([]);
+  const secret = "mcp-request-distinctive-secret-q8A";
+  expect(
+    (
+      await api.request(`/v0/credential-requests/${request.request_id}/fulfill`, {
+        method: "POST",
+        body: { fields: { api_key: secret } },
+      })
+    ).status,
+  ).toBe(200);
+  const result = await mcp.call("get_credential_request", {
+    inboxId,
+    requestId: request.request_id,
+  });
+  const fulfilled = Schema.decodeUnknownSync(CredentialRequest)(result.structuredContent);
+  expect(fulfilled).toMatchObject({
+    state: "fulfilled",
+    credential: {
+      fields: ["api_key"],
+      refs: { api_key: expect.stringMatching(/^inbot:\/\/credentials\//) },
+    },
+  });
+  expect(fulfilled.requested_by).toBeUndefined();
+  const listed = await mcp.call("list_credential_requests", { state: "fulfilled", limit: 1 });
+  expect(
+    Schema.decodeUnknownSync(ListCredentialRequestsResponse)(listed.structuredContent)
+      .credential_requests,
+  ).toEqual([fulfilled]);
+  expect(JSON.stringify([request, result, listed])).not.toContain(secret);
+  const deniedKey = await api.run(
+    api.keys.create({ inbox_ids: [inboxId], permissions: {}, send_policy: "read_only" }),
+  );
+  const denied = await client(api, deniedKey.api_key);
+  failure(
+    await denied.call("request_credential", {
+      inboxId,
+      request: { name: "Denied", fields: ["password"], reason: "Needed" },
+    }),
+    "missing_permission",
+  );
 });

@@ -44,29 +44,31 @@ the issuing principal. Keep URLs private. File bytes are not embedded in tool re
 
 Thread tools may omit `inboxId` for a scoped global lookup. Default page size is 10; `limit` can override it.
 
-| Tools                                                                                                               | readOnlyHint | destructiveHint | idempotentHint | Permission          |
-| ------------------------------------------------------------------------------------------------------------------- | ------------ | --------------- | -------------- | ------------------- |
-| `list_inboxes`, `search_inboxes`, `get_inbox`                                                                       | true         | false           | true           | `inbox_read`        |
-| `list_threads`, `search_threads`, `get_thread`, `get_attachment`, `list_messages`, `search_messages`, `get_message` | true         | false           | true           | `message_read`      |
-| `create_inbox`                                                                                                      | false        | false           | false          | `inbox_create`      |
-| `update_inbox`                                                                                                      | false        | false           | true           | `inbox_update`      |
-| `delete_inbox`                                                                                                      | false        | true            | true           | `inbox_delete`      |
-| `update_thread`, `update_message`                                                                                   | false        | false           | true           | `message_update`    |
-| `delete_thread`                                                                                                     | false        | true            | true           | `message_delete`    |
-| `send_message`, `forward_message`                                                                                   | false        | false           | false          | `message_send`      |
-| `create_draft`                                                                                                      | false        | false           | false          | `draft_create`      |
-| `list_drafts`, `get_draft`                                                                                          | true         | false           | true           | `draft_read`        |
-| `update_draft`                                                                                                      | false        | false           | true           | `draft_update`      |
-| `send_draft`                                                                                                        | false        | false           | false          | `draft_send`        |
-| `delete_draft`                                                                                                      | false        | true            | true           | `draft_delete`      |
-| `reply_to_message`                                                                                                  | false        | false           | false          | `message_reply`     |
-| `list_credentials`, `get_credential`                                                                                | true         | false           | true           | `credential_read`   |
-| `create_credential`                                                                                                 | false        | false           | false          | `credential_create` |
-| `update_credential`, `generate_password`                                                                            | false        | false           | false          | `credential_update` |
-| `delete_credential`                                                                                                 | false        | true            | true           | `credential_delete` |
-| `fill_credential`, `capture_credential`                                                                             | false        | false           | false          | `credential_fill`   |
-| `get_totp_code`                                                                                                     | true         | false           | true           | `credential_totp`   |
-| No MCP tool (local REST/CLI process resolution only)                                                                | n/a          | n/a             | n/a            | `credential_run`    |
+| Tools                                                                                                               | readOnlyHint | destructiveHint | idempotentHint | Permission           |
+| ------------------------------------------------------------------------------------------------------------------- | ------------ | --------------- | -------------- | -------------------- |
+| `list_inboxes`, `search_inboxes`, `get_inbox`                                                                       | true         | false           | true           | `inbox_read`         |
+| `list_threads`, `search_threads`, `get_thread`, `get_attachment`, `list_messages`, `search_messages`, `get_message` | true         | false           | true           | `message_read`       |
+| `create_inbox`                                                                                                      | false        | false           | false          | `inbox_create`       |
+| `update_inbox`                                                                                                      | false        | false           | true           | `inbox_update`       |
+| `delete_inbox`                                                                                                      | false        | true            | true           | `inbox_delete`       |
+| `update_thread`, `update_message`                                                                                   | false        | false           | true           | `message_update`     |
+| `delete_thread`                                                                                                     | false        | true            | true           | `message_delete`     |
+| `send_message`, `forward_message`                                                                                   | false        | false           | false          | `message_send`       |
+| `create_draft`                                                                                                      | false        | false           | false          | `draft_create`       |
+| `list_drafts`, `get_draft`                                                                                          | true         | false           | true           | `draft_read`         |
+| `update_draft`                                                                                                      | false        | false           | true           | `draft_update`       |
+| `send_draft`                                                                                                        | false        | false           | false          | `draft_send`         |
+| `delete_draft`                                                                                                      | false        | true            | true           | `draft_delete`       |
+| `reply_to_message`                                                                                                  | false        | false           | false          | `message_reply`      |
+| `list_credentials`, `get_credential`                                                                                | true         | false           | true           | `credential_read`    |
+| `create_credential`                                                                                                 | false        | false           | false          | `credential_create`  |
+| `update_credential`, `generate_password`                                                                            | false        | false           | false          | `credential_update`  |
+| `delete_credential`                                                                                                 | false        | true            | true           | `credential_delete`  |
+| `fill_credential`, `capture_credential`                                                                             | false        | false           | false          | `credential_fill`    |
+| `get_totp_code`                                                                                                     | true         | false           | true           | `credential_totp`    |
+| No MCP tool (local REST/CLI process resolution only)                                                                | n/a          | n/a             | n/a            | `credential_run`     |
+| `request_credential`                                                                                                | false        | false           | false          | `credential_request` |
+| `get_credential_request`, `list_credential_requests`                                                                | true         | false           | true           | `credential_request` |
 
 Create/send annotations stay non-idempotent because `clientId` and
 `idempotencyKey` are optional. Replaying a send with the same `idempotencyKey`
@@ -212,3 +214,17 @@ intent returns `idempotency_conflict`; rejection returns `missing_permission`.
 Owner and `direct` grants proceed immediately. Capture, generation, metadata and
 TOTP-code tools are not gated by this policy. Owner request list/approve/reject
 are REST/CLI only and are never MCP tools.
+
+## Credential requests
+
+`request_credential` accepts `inboxId` and a `request` with `name`, optional `url`
+and `username`, 1-8 unique `fields`, and a 1-500 character `reason`.
+The owner enters the values in Inbot; the agent receives only metadata and refs.
+The reason is agent-authored text and is displayed to the owner as plain text.
+`get_credential_request` accepts `inboxId` and `requestId`.
+`list_credential_requests` accepts optional `state` and normal MCP pagination.
+All require `credential_request`; agents see only their key's scoped requests.
+Poll `get_credential_request` later while pending, never busy-loop. Requests
+expire after seven days. Fulfilled metadata does not need `credential_read`, but
+using refs still requires the relevant vault permission. There are no fulfill
+or decline MCP tools; owner decisions use REST or CLI. The request UI is deferred.

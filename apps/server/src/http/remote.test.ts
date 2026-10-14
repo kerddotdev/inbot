@@ -1,3 +1,4 @@
+import { CredentialRequest } from "../../../../packages/contracts/src/credential-requests.js";
 import { createHash, randomBytes } from "node:crypto";
 import * as OAuth from "../../../../packages/contracts/src/oauth.js";
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
@@ -1350,4 +1351,76 @@ test("credential use decisions allow tunneled owner sessions with CSRF and rejec
   expect(
     await (await remoteRequest(f, path, { method: "POST", headers: session })).json(),
   ).toMatchObject({ state: "approved" });
+});
+
+test("keeps request fulfillment local even for owner sessions but allows declines with session CSRF", async ({
+  f,
+}) => {
+  await f.run(f.remote.enable({ hostname }));
+  const inboxId = "agent@example.test";
+  const key = await f.run(
+    f.keys.create({
+      inbox_ids: [inboxId],
+      send_policy: "read_only",
+      permissions: { credential_request: true },
+    }),
+  );
+  const agentHeaders = {
+    authorization: `Bearer ${key.api_key}`,
+    "content-type": "application/json",
+  };
+  const createPath = `/v0/inboxes/${inboxId}/credential-requests`;
+  expect(tunnelRoute(createPath)).toBe("agent");
+  expect(tunnelRoute("/v0/credential-requests")).toBe("agent");
+  const created = await remoteRequest(f, createPath, {
+    method: "POST",
+    headers: agentHeaders,
+    body: JSON.stringify({
+      name: "Existing account",
+      fields: ["password"],
+      reason: "Owner account needed",
+    }),
+  });
+  expect(created.status).toBe(200);
+  const request = Schema.decodeUnknownSync(CredentialRequest)(await created.json());
+  const path = `/v0/credential-requests/${request.request_id}`;
+  expect(
+    (await remoteRequest(f, `${createPath}/${request.request_id}`, { headers: agentHeaders }))
+      .status,
+  ).toBe(200);
+  expect(
+    (await remoteRequest(f, "/v0/credential-requests?state=pending", { headers: agentHeaders }))
+      .status,
+  ).toBe(200);
+  const session = await ownerSession(f);
+  for (const suffix of ["/fulfill", "/fulfill/", "/%66ulfill", "/fulfill?query=synthetic"]) {
+    expect(tunnelRoute(`${path}${suffix}`)).toBe("blocked");
+    for (const headers of [agentHeaders, session]) {
+      const response = await remoteRequest(f, `${path}${suffix}`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ fields: { password: "tunnel-distinctive-secret" } }),
+      });
+      expect(response.status).toBe(403);
+      expect(await response.json()).toMatchObject({
+        code: "missing_permission",
+        fix: "Fulfill from the local web UI or CLI on the Inbot host.",
+      });
+    }
+  }
+  expect(tunnelRoute(`${path}/decline`)).toBe("agent");
+  for (const headers of [
+    agentHeaders,
+    { authorization: `Bearer ${f.token}` },
+    { ...session, "x-inbot-csrf": "invalid" },
+  ]) {
+    const denied = await remoteRequest(f, `${path}/decline`, { method: "POST", headers });
+    expect(denied.status).toBe(403);
+    expect(await denied.json()).toMatchObject({ code: "missing_permission" });
+  }
+  const declined = await remoteRequest(f, `${path}/decline`, { method: "POST", headers: session });
+  expect(declined.status).toBe(200);
+  expect(Schema.decodeUnknownSync(CredentialRequest)(await declined.json()).state).toBe("declined");
+  const replay = await remoteRequest(f, `${path}/decline`, { method: "POST", headers: session });
+  expect(replay.status).toBe(200);
 });

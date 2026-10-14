@@ -46,6 +46,7 @@ export function eventInbox(event: Event): string | undefined {
   if ("draft" in event) return event.draft.inbox_id;
   if ("credential" in event) return event.credential.inbox_id;
   if ("credential_use" in event) return event.credential_use.inbox_id;
+  if ("credential_request" in event) return event.credential_request.inbox_id;
   return undefined;
 }
 
@@ -280,11 +281,13 @@ export function eventVisible(
     labelsAllowed(principal, row.labels) &&
     permits(
       principal,
-      "credential" in row.payload || "credential_use" in row.payload
-        ? "credential_read"
-        : "draft" in row.payload
-          ? "draft_read"
-          : "message_read",
+      "credential_request" in row.payload
+        ? "credential_request"
+        : "credential" in row.payload || "credential_use" in row.payload
+          ? "credential_read"
+          : "draft" in row.payload
+            ? "draft_read"
+            : "message_read",
     )
   );
 }
@@ -298,6 +301,16 @@ export function eventReadable(
   if (!eventVisible(row, principal, subscription)) return false;
   if (principal.kind === "owner") return true;
   const event = row.payload;
+  if ("credential_request" in event) {
+    const request = Schema.decodeUnknownSync(
+      Schema.optional(Schema.Struct({ api_key_id: Schema.NullOr(Schema.String) })),
+    )(
+      db
+        .prepare("SELECT api_key_id FROM credential_requests WHERE request_id = ? AND inbox_id = ?")
+        .get(event.credential_request.request_id, event.credential_request.inbox_id),
+    );
+    return request?.api_key_id === principal.api_key_id;
+  }
   const message =
     "message" in event
       ? event.message
