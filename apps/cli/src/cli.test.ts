@@ -1657,6 +1657,7 @@ base("groups overview help logically and keeps group help focused", async () => 
     "remote",
     "quarantine",
     "service",
+    "update",
     "events",
   ]);
   const lists = await readHelp(["lists", "--help"]);

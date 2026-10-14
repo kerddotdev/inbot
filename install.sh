@@ -107,6 +107,8 @@ chmod 755 "$shim"
 # A shim preserves the package-relative launcher paths when invoked through PATH.
 cp "$shim" "$bin_dir/.inbot-new-$$"
 mv -f "$bin_dir/.inbot-new-$$" "$bin_dir/inbot"
+printf '{"shim":"%s/inbot"}\n' "$bin_dir" > "$install_root/.installation-$$.json"
+mv -f "$install_root/.installation-$$.json" "$install_root/installation.json"
 printf 'Installed Inbot %s to %s\n' "$version" "$destination"
 case ":$PATH:" in
   *":$bin_dir:"*) ;;

@@ -112,6 +112,9 @@ exit /b %INBOT_EXIT_CODE%
 "@
     [System.IO.File]::WriteAllText($ShimTemp, ($ShimContent -replace "`r?`n", "`r`n"), [System.Text.UTF8Encoding]::new($false))
     Move-Item -LiteralPath $ShimTemp -Destination $Shim -Force
+    $MetadataTemp = Join-Path $InstallRoot ([System.IO.Path]::GetRandomFileName())
+    [System.IO.File]::WriteAllText($MetadataTemp, (@{ shim = $Shim } | ConvertTo-Json), [System.Text.UTF8Encoding]::new($false))
+    Move-Item -LiteralPath $MetadataTemp -Destination (Join-Path $InstallRoot "installation.json") -Force
     if (-not $NoPathUpdate) {
         $UserPath = [Environment]::GetEnvironmentVariable('Path', 'User')
         if ($BinDir -notin ($UserPath -split ';')) {
