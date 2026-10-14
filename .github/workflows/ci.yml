@@ -44,7 +44,8 @@ jobs:
         with:
           node-version: 24.21.0
           architecture: arm64
-          cache: pnpm
+          # Saving the pnpm store with the Windows guest's tar.exe hangs until the job times out.
+          cache: ${{ matrix.os != 'windows' && 'pnpm' || '' }}
       # Native addons need the ARM64 Visual C++ runtime, which the clean Windows guest lacks.
       - if: matrix.os == 'windows'
         shell: powershell
