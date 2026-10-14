@@ -1,3 +1,4 @@
+import { automaticUpdates } from "./update/automatic.js";
 import { startWebhookLoop } from "./events/dispatcher.js";
 import { realpath } from "node:fs/promises";
 import { homedir } from "node:os";
@@ -86,6 +87,8 @@ async function serve() {
     if ([resolve(homedir(), ".inbot"), resolve(homedir(), ".inbot-dev")].includes(canonical))
       throw new Error("The test memory keychain cannot use a default Inbot home.");
   }
+  const updateStop = Promise.withResolvers<void>();
+  const updates = await automaticUpdates(resolveHome(input), updateStop.resolve);
   const home = Home.layer(input);
   const manager = KeyManager.Live.pipe(
     Layer.provideMerge(home),
@@ -100,74 +103,88 @@ async function serve() {
       process.off("SIGTERM", stop);
     });
   });
-  await Effect.runPromise(
-    Effect.gen(function* () {
-      const keys = yield* KeyManager;
-      const status = yield* keys.status();
-      const unlock =
-        input.init && !status.initialized
-          ? keys.initialize({ useKeychain: true })
-          : keys.unlockWithKeychain();
-      const dek = yield* unlock;
-      yield* Effect.addFinalizer(() => Effect.sync(() => dek.fill(0)));
-      const store = Store.layer(dek);
-      const config = TransportConfig.Live.pipe(Layer.provideMerge(store));
-      const outbound = Outbox.Live.pipe(
-        Layer.provide(ConfiguredProvider),
-        Layer.provideMerge(config),
-      );
-      const baseServices = Layer.mergeAll(
-        Mailbox.Live,
-        ApiKeys.Live,
-        InboundConfig.Live,
-        Drafts.Live.pipe(Layer.provideMerge(outbound)),
-      ).pipe(Layer.provideMerge(store));
-      const provisionServices = Provisioner.Live.pipe(
-        Layer.provideMerge(
-          Layer.mergeAll(
-            baseServices,
-            PublicDns.live(),
-            CloudflareApi.live().pipe(Layer.provide(config)),
-          ),
-        ),
-      );
-      const services = RemoteAccess.Live.pipe(
-        Layer.provideMerge(provisionServices),
-        Layer.provideMerge(config),
-      );
-      yield* Effect.gen(function* () {
-        const server = yield* startHttpServer({
-          port: input.port,
-          ...(input.webRoot === undefined ? {} : { webRoot: input.webRoot }),
-          setupRequired: (code) =>
-            process.stdout.write(`${JSON.stringify({ event: "owner.setup_required", code })}\n`),
-          ready: (url) =>
-            process.stdout.write(`${JSON.stringify({ event: "server.ready", url })}\n`),
-        });
-        const inbound = yield* startInboundLoop();
-        const events = yield* startEventsLoop();
-        const provision = yield* startProvisionLoop();
-        const webhooks = yield* startWebhookLoop();
-        const remote = yield* startRemoteLoop();
-        const runners = [
-          inbound,
-          events,
-          provision,
-          webhooks,
-          remote,
-          ...(server.runner === undefined ? [] : [server.runner]),
-          ...(server.scheduler === undefined ? [] : [server.scheduler]),
-        ];
-        yield* Effect.raceFirst(
-          stopped,
-          Effect.all(
-            runners.map((runner) => Fiber.join(runner)),
-            { concurrency: "unbounded" },
+  try {
+    await Effect.runPromise(
+      Effect.gen(function* () {
+        const keys = yield* KeyManager;
+        const status = yield* keys.status();
+        const unlock =
+          input.init && !status.initialized
+            ? keys.initialize({ useKeychain: true })
+            : keys.unlockWithKeychain();
+        const dek = yield* unlock;
+        yield* Effect.addFinalizer(() => Effect.sync(() => dek.fill(0)));
+        const store = Store.layer(dek);
+        const config = TransportConfig.Live.pipe(Layer.provideMerge(store));
+        const outbound = Outbox.Live.pipe(
+          Layer.provide(ConfiguredProvider),
+          Layer.provideMerge(config),
+        );
+        const baseServices = Layer.mergeAll(
+          Mailbox.Live,
+          ApiKeys.Live,
+          InboundConfig.Live,
+          Drafts.Live.pipe(Layer.provideMerge(outbound)),
+        ).pipe(Layer.provideMerge(store));
+        const provisionServices = Provisioner.Live.pipe(
+          Layer.provideMerge(
+            Layer.mergeAll(
+              baseServices,
+              PublicDns.live(),
+              CloudflareApi.live().pipe(Layer.provide(config)),
+            ),
           ),
         );
-      }).pipe(Effect.provide(services));
-    }).pipe(Effect.provide(manager), Effect.scoped),
-  );
+        const services = RemoteAccess.Live.pipe(
+          Layer.provideMerge(provisionServices),
+          Layer.provideMerge(config),
+        );
+        yield* Effect.gen(function* () {
+          const server = yield* startHttpServer({
+            updates: updates.state,
+            port: input.port,
+            ...(input.webRoot === undefined ? {} : { webRoot: input.webRoot }),
+            setupRequired: (code) =>
+              process.stdout.write(`${JSON.stringify({ event: "owner.setup_required", code })}\n`),
+            ready: (url) =>
+              process.stdout.write(`${JSON.stringify({ event: "server.ready", url })}\n`),
+          });
+          const inbound = yield* startInboundLoop();
+          const events = yield* startEventsLoop();
+          const provision = yield* startProvisionLoop();
+          const webhooks = yield* startWebhookLoop();
+          const remote = yield* startRemoteLoop();
+          const runners = [
+            inbound,
+            events,
+            provision,
+            webhooks,
+            remote,
+            ...(server.runner === undefined ? [] : [server.runner]),
+            ...(server.scheduler === undefined ? [] : [server.scheduler]),
+          ];
+          yield* Effect.addFinalizer(() => Effect.promise(() => updates.close()));
+          yield* Effect.promise(() => updates.start());
+          yield* Effect.raceFirst(
+            Effect.raceFirst(
+              stopped,
+              Effect.promise(() => updateStop.promise),
+            ),
+            Effect.all(
+              runners.map((runner) => Fiber.join(runner)),
+              { concurrency: "unbounded" },
+            ),
+          );
+        }).pipe(Effect.provide(services));
+      }).pipe(Effect.provide(manager), Effect.scoped),
+    );
+  } catch (error) {
+    await updates.abort();
+    throw error;
+  } finally {
+    await updates.close();
+  }
+  if (await updates.applyAfterShutdown()) process.exitCode = 75;
 }
 
 void serve().catch((error: unknown) => {

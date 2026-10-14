@@ -85,3 +85,10 @@ export const remoteQuery = queryOptions({
       ? false
       : 2000,
 });
+
+export const updatesQuery = queryOptions({
+  queryKey: ["updates"],
+  queryFn: ({ signal }) => api.updates(signal),
+  staleTime: 0,
+  refetchInterval: 30_000,
+});

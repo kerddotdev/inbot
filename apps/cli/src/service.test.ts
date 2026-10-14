@@ -1,3 +1,4 @@
+import { build } from "esbuild";
 import { createServer } from "node:http";
 import { mkdtemp, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -439,7 +440,9 @@ test("definitions preserve spaces and special characters without shell expansion
   expect(plist).toContain("<string>--flavor</string><string>production</string>");
   expect(plist).toContain("<key>SuccessfulExit</key><false/>");
   const unit = renderService({ ...input, platform: "linux" });
-  expect(unit).toContain('ExecStart="/app & folder/node" "/app & folder/cli.js" "serve"');
+  expect(unit).toContain(
+    'ExecStart="/app & folder/node" "/app & folder/service-host.js" "/app & folder/cli.js" "serve"',
+  );
   expect(unit).toContain('\\"quoted\\" %%n $$HOME');
   expect(unit).toContain("Restart=on-failure");
   expect(unit).toContain(
@@ -658,7 +661,14 @@ test("the Windows log host preserves arguments, appends logs, and propagates fai
       cli,
       'process.stdout.write(JSON.stringify(process.argv.slice(2))); process.stderr.write("Synthetic failure"); process.exitCode = 17;',
     );
-    const host = fileURLToPath(new URL("./service-host.ts", import.meta.url));
+    const host = join(root, "service-host.mjs");
+    await build({
+      entryPoints: [fileURLToPath(new URL("./service-host.ts", import.meta.url))],
+      outfile: host,
+      bundle: true,
+      platform: "node",
+      format: "esm",
+    });
     for (let run = 0; run < 2; run++)
       expect(
         (

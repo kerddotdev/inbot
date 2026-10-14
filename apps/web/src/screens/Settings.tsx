@@ -1,3 +1,4 @@
+import { UpdatesSettings } from "./UpdatesSettings";
 import { Quarantine } from "./Quarantine";
 import { WebhooksSettings } from "./WebhooksSettings";
 import {
@@ -240,6 +241,7 @@ export function Settings() {
           }}
         />
       </fieldset>
+      <UpdatesSettings />
       <MailTransport />
       <ListManagement />
       <Quarantine />

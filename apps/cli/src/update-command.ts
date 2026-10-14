@@ -1,3 +1,6 @@
+import { parseVersion } from "../../server/src/update/version.js";
+import { OwnerApiGroup } from "../../../packages/contracts/src/api/owner.js";
+import { connection, request } from "./client.js";
 import { parseArgs } from "node:util";
 import { join } from "node:path";
 import { resolveHome } from "../../server/src/home.js";
@@ -21,6 +24,7 @@ export async function runUpdateCommand(args: readonly string[], io: CliIO) {
       home: { type: "string" },
       flavor: { type: "string" },
       json: { type: "boolean" },
+      auto: { type: "string" },
       check: { type: "boolean" },
       version: { type: "string" },
       help: { type: "boolean", short: "h" },
@@ -28,7 +32,7 @@ export async function runUpdateCommand(args: readonly string[], io: CliIO) {
   });
   if (values.help) {
     io.stdout(
-      "Usage: inbot update [--check] [--version <x.y.z>] [--json] [--home <directory>] [--flavor development|production]\n\nLocal owner only. Checks GitHub releases, verifies SHA-256 and the macOS signing Team ID, then atomically switches the installed launcher. Retains previous versions; downgrades are refused. An installed service is restarted using its existing port. --check only reports current, latest, and update_available. Prereleases require --version.\n",
+      "Usage: inbot update [--check] [--version <x.y.z>] [--auto on|off] [--json] [--home <directory>] [--flavor development|production]\n\nLocal owner only. Checks GitHub releases, verifies SHA-256 and the macOS signing Team ID, then atomically switches the installed launcher. Retains previous versions; downgrades are refused. An installed service is restarted using its existing port. --check only reports current, latest, and update_available. Prereleases require --version. --auto changes the persisted preference through the local owner service; it cannot be combined with --check or --version.\n",
     );
     return;
   }
@@ -45,6 +49,29 @@ export async function runUpdateCommand(args: readonly string[], io: CliIO) {
   const flavor = values.flavor ?? "development";
   if (flavor !== "production" && flavor !== "development")
     usage("--flavor must be production or development.");
+  if (values.auto !== undefined) {
+    if ((values.auto !== "on" && values.auto !== "off") || values.check || values.version)
+      usage("Use --auto on|off by itself.");
+    const auth = await connection(
+      { flavor, ...(values.home === undefined ? {} : { home: values.home }) },
+      io.env,
+    );
+    const result = await request(
+      auth,
+      OwnerApiGroup.endpoints.owner_setUpdates,
+      "/v0/owner/updates",
+      { enabled: values.auto === "on" },
+    );
+    io.stdout(values.json ? `${JSON.stringify(result)}\n` : humanOutput(result));
+    return;
+  }
+  if (values.version !== undefined) {
+    try {
+      parseVersion(values.version);
+    } catch {
+      usage("--version requires a semantic version such as 0.2.0 or 0.2.0-beta.1.");
+    }
+  }
   try {
     const runtime = io.serviceRuntime ?? (await localServiceRuntime());
     const layout = await detectLayout({
