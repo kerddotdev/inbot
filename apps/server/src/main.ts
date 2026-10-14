@@ -76,6 +76,11 @@ async function serve() {
     );
     return;
   }
+  // Listen before any startup work so a stop request during startup still shuts down cleanly.
+  const shutdown = Promise.withResolvers<void>();
+  const stop = () => shutdown.resolve();
+  process.once("SIGINT", stop);
+  process.once("SIGTERM", stop);
   if (input.memoryKeychain) {
     const path = resolveHome(input);
     const parent = await realpath(resolve(path, ".."));
@@ -94,15 +99,7 @@ async function serve() {
     Layer.provideMerge(home),
     Layer.provide(input.memoryKeychain ? KeychainStore.memory() : KeychainStore.Live),
   );
-  const stopped = Effect.callback<void>((resume) => {
-    const stop = () => resume(Effect.void);
-    process.once("SIGINT", stop);
-    process.once("SIGTERM", stop);
-    return Effect.sync(() => {
-      process.off("SIGINT", stop);
-      process.off("SIGTERM", stop);
-    });
-  });
+  const stopped = Effect.promise(() => shutdown.promise);
   try {
     await Effect.runPromise(
       Effect.gen(function* () {
@@ -182,6 +179,8 @@ async function serve() {
     await updates.abort();
     throw error;
   } finally {
+    process.off("SIGINT", stop);
+    process.off("SIGTERM", stop);
     await updates.close();
   }
   if (await updates.applyAfterShutdown()) process.exitCode = 75;
