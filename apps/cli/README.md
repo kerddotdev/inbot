@@ -674,3 +674,41 @@ usual exit mapping. Child codes can overlap these CLI codes.
 Resolution deliberately has no MCP tool: it returns encrypted secret material
 intended for a local child process, which an MCP client cannot spawn through
 Inbot. REST/CLI are the supported surfaces for this operation.
+
+## Credential use approvals
+
+`api-keys create` and `api-keys update` accept `--use-policy approval|direct`.
+Omitted create policy defaults to `approval`; metadata and table output include
+its effective value. This is independent of `--send-policy`.
+
+`credentials fill <inbox_id> <credential_id> --idempotency-key <key>` requests
+approval when required by the grant. Fill does not generate a key; supply one
+and retry the identical target, selector and field with the same key after owner
+approval. The command returns the usual `approval_required` error and exit 4
+while pending. Direct grants and owners can fill without a key. Capture,
+metadata CRUD, generation and TOTP codes keep their existing permissions.
+
+`inbot run` generates one key when `--idempotency-key` is omitted. On a pending
+approval it prints `Waiting for owner approval (request <id>)...` to stderr and
+retries the identical resolution every two seconds. `--approval-timeout <seconds>`
+defaults to 600; `0` returns the first approval error immediately. Rejection
+returns `missing_permission` and exit 4. Timeout returns `approval_required` and
+exit 4. Ctrl-C exits 130 without starting a child; SIGTERM/cancellation exits 143.
+The key is printed on an approval response so it can be identified in retries.
+A fresh invocation uses a fresh encryption recipient. Restarting with the same
+refs and `--idempotency-key` can continue an unconsumed request because approval
+binds the refs, not the per-call encryption recipient. Direct run preserves
+child stderr and no-mask streams.
+
+Local owner commands use the same owner-only REST endpoints:
+
+- `inbot credentials use-requests list [--state pending|approved|rejected|consumed]`
+- `inbot credentials use-requests approve <request_id>`
+- `inbot credentials use-requests reject <request_id>`
+
+List supports `--limit`, `--page-token`, `--ascending` and `--json`; decisions
+support `--json`. URL hints are agent claims, not verified browser origins.
+Pending requests expire after 24 hours; approvals permit one use within 15
+minutes. Expiry does not change stored state; inspect `expires_at`. Same owner
+decisions are idempotent before expiry. Expired/consumed requests need a new key.
+Approval events contain IDs and field names only. The owner request UI is deferred.

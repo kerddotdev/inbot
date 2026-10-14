@@ -41,11 +41,15 @@ export type Permission = keyof Permissions;
 export const SendPolicy = Schema.Literals(["direct", "approval", "read_only"]);
 export type SendPolicy = typeof SendPolicy.Type;
 
+export const UsePolicy = Schema.Literals(["direct", "approval"]);
+export type UsePolicy = typeof UsePolicy.Type;
+
 export const Grant = Schema.Struct({
   inbox_id: Schema.optionalKey(InboxId),
   inbox_ids: Schema.optionalKey(Schema.Array(InboxId)),
   permissions: Permissions,
   send_policy: SendPolicy,
+  use_policy: Schema.optionalKey(UsePolicy),
 }).annotate({ identifier: "Grant" });
 export type Grant = typeof Grant.Type;
 
@@ -72,6 +76,7 @@ export const UpdateApiKeyRequest = Schema.Struct({
   name: Schema.optionalKey(Schema.String),
   permissions: Schema.optionalKey(Permissions),
   send_policy: Schema.optionalKey(SendPolicy),
+  use_policy: Schema.optionalKey(UsePolicy),
 })
   .check(Schema.isMinProperties(1))
   .annotate({ identifier: "UpdateApiKeyRequest" });

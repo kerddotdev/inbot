@@ -45,6 +45,7 @@ export function eventInbox(event: Event): string | undefined {
   if ("outcome" in event) return event.outcome.inbox_id;
   if ("draft" in event) return event.draft.inbox_id;
   if ("credential" in event) return event.credential.inbox_id;
+  if ("credential_use" in event) return event.credential_use.inbox_id;
   return undefined;
 }
 
@@ -279,7 +280,7 @@ export function eventVisible(
     labelsAllowed(principal, row.labels) &&
     permits(
       principal,
-      "credential" in row.payload
+      "credential" in row.payload || "credential_use" in row.payload
         ? "credential_read"
         : "draft" in row.payload
           ? "draft_read"

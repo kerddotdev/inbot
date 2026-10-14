@@ -1,3 +1,4 @@
+import { CredentialUseApi } from "./api/credential-use.js";
 import { HttpApi } from "effect/http-api";
 import { InboxesApi } from "./api/inboxes.js";
 import { ThreadsApi } from "./api/threads.js";
@@ -19,4 +20,5 @@ export const InbotApi = HttpApi.make("inbot").add(
   ListsApi,
   ApiKeysApi,
   CredentialsApi,
+  CredentialUseApi,
 );

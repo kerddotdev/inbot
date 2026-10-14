@@ -172,3 +172,12 @@ Sources: [API lifecycle](https://developers.cloudflare.com/cloudflare-one/networ
 [pinned release checksums](https://github.com/cloudflare/cloudflared/releases/tag/2026.9.1).
 
 Owner quarantine routes under `/v0/owner/quarantine` are blocked on the tunnel listener, including list, retry, and delete. They require a local owner connection; OAuth tokens and agent keys cannot access them locally either.
+
+Credential use request listing and decisions follow draft approvals:
+`GET /v0/credential-use-requests` and
+`POST /v0/credential-use-requests/:request_id/approve|reject` permit owner browser
+sessions with the exact public Origin and CSRF on decisions. Agent keys and
+OAuth tokens cannot list or decide requests. Local owner bearer credentials are
+refused through the tunnel. Browser fill still applies remote CDP endpoint and
+origin restrictions after approval; `/v0/credentials/resolve` stays blocked.
+The owner request UI is deferred. URL hints are agent claims, not verified origins.

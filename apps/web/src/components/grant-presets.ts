@@ -35,6 +35,7 @@ export const defaultGrant: Grant = {
   inbox_ids: [],
   permissions: presetPermissions.full,
   send_policy: "approval",
+  use_policy: "approval",
 };
 
 export function permissionPreset(permissions: Permissions): PermissionPreset | "custom" {

@@ -49,8 +49,16 @@ export function humanOutput(value: unknown): string {
     threads: ["thread_id", "inbox_id", "subject", "labels"],
     messages: ["message_id", "inbox_id", "subject", "send_status", "send_reason", "labels"],
     drafts: ["draft_id", "inbox_id", "subject", "approval_state", "send_status"],
-    grants: ["grant_id", "client_name", "redirect_host", "resource", "send_policy", "inbox_ids"],
-    api_keys: ["api_key_id", "name", "send_policy", "inbox_id", "inbox_ids"],
+    grants: [
+      "grant_id",
+      "client_name",
+      "redirect_host",
+      "resource",
+      "send_policy",
+      "inbox_ids",
+      "use_policy",
+    ],
+    api_keys: ["api_key_id", "name", "send_policy", "inbox_id", "inbox_ids", "use_policy"],
     items: ["quarantine_id", "source_kind", "reason_code", "first_seen", "status", "attempts"],
     rejections: [
       "rejection_id",
@@ -61,6 +69,7 @@ export function humanOutput(value: unknown): string {
       "rules",
     ],
     entries: ["entry", "entry_type", "direction", "list_type", "inbox_id", "reason"],
+    requests: ["request_id", "api_key_name", "inbox_id", "kind", "state", "expires_at", "url_hint"],
   };
   for (const [key, columns] of Object.entries(collections)) {
     const rows = value[key];

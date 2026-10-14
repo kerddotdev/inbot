@@ -1,3 +1,6 @@
+import { randomUUID } from "node:crypto";
+import { IdempotencyKey } from "../../../packages/contracts/src/common.js";
+import { resolveWithApproval } from "./resolve-approval.js";
 import { spawn } from "node:child_process";
 import { constants } from "node:os";
 import { Transform, Writable } from "node:stream";
@@ -5,15 +8,10 @@ import { pipeline } from "node:stream/promises";
 import { StringDecoder } from "node:string_decoder";
 import { parseArgs } from "node:util";
 import { Schema } from "effect";
-import { CredentialsApi } from "../../../packages/contracts/src/api/vault.js";
-import {
-  CredentialRef,
-  ResolveCredentialsRequest,
-  ResolveCredentialsResponse,
-} from "../../../packages/contracts/src/vault.js";
+import { CredentialRef, ResolveCredentialsRequest } from "../../../packages/contracts/src/vault.js";
 import { decrypt, generateIdentity } from "../../../packages/envelope/src/crypto.js";
 import type { CliIO } from "./cli.js";
-import { connection, invalidResponse, request, type Environment } from "./client.js";
+import { connection, invalidResponse, type Environment } from "./client.js";
 import { CliError, usage } from "./errors.js";
 
 export const runHelp = `Usage: inbot run [--env NAME=REF]... [--no-mask] [--home DIR] -- <command> [args...]
@@ -23,6 +21,8 @@ Run a local command with credential references resolved into its environment.
   --no-mask        Inherit stdio for TTYs and byte-exact protocols such as MCP.
   --home <DIR>     Read the owner's connection.json from this home.
   --flavor <value> development or production (default: development).
+  --idempotency-key <key>  Reuse a credential approval request (generated when absent).
+  --approval-timeout <seconds>  Wait for owner approval (default: 600; 0 fails immediately).
   --help           Show this help.
 
 Ambient environment values matching inbot://credentials/<credential_id>/<field>
@@ -142,6 +142,8 @@ export async function runCommand(args: readonly string[], io: CliIO): Promise<nu
       "no-mask": { type: "boolean" },
       home: { type: "string" },
       flavor: { type: "string" },
+      "idempotency-key": { type: "string" },
+      "approval-timeout": { type: "string" },
       help: { type: "boolean", short: "h" },
     },
     allowPositionals: true,
@@ -156,6 +158,16 @@ export async function runCommand(args: readonly string[], io: CliIO): Promise<nu
   const flavor = values.flavor ?? "development";
   if (flavor !== "development" && flavor !== "production")
     usage("--flavor must be development or production.");
+  const approvalTimeout = Number(values["approval-timeout"] ?? 600);
+  if (
+    !Number.isFinite(approvalTimeout) ||
+    approvalTimeout < 0 ||
+    approvalTimeout * 1000 > 2_147_483_647
+  )
+    usage("--approval-timeout must be a nonnegative number of seconds within the timer range.");
+  const idempotencyKey = values["idempotency-key"] ?? randomUUID();
+  if (!Schema.is(IdempotencyKey)(idempotencyKey))
+    usage("Invalid --idempotency-key. Use 1-256 letters, digits, or . _ ~ -.");
   const collected = collectRunEnvironment(io.env, values.env ?? []);
   const auth = await connection(
     { flavor, ...(values.home === undefined ? {} : { home: values.home }) },
@@ -175,10 +187,8 @@ export async function runCommand(args: readonly string[], io: CliIO): Promise<nu
     refs: collected.refs,
     public_key: identity.recipient,
   });
-  const endpoint = CredentialsApi.endpoints.credentials_resolve;
-  const response = Schema.decodeUnknownSync(ResolveCredentialsResponse)(
-    await request(auth, endpoint, endpoint.path, body),
-  );
+  const response = await resolveWithApproval(auth, body, idempotencyKey, approvalTimeout, io);
+  if (typeof response === "number") return response;
   let resolved: Readonly<Record<string, string>>;
   try {
     const plaintext = await decrypt(identity.identity, Buffer.from(response.ciphertext, "base64"));

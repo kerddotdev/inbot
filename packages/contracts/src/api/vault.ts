@@ -63,6 +63,7 @@ export const CredentialsApi = HttpApiGroup.make("credentials")
       {
         params,
         payload: Vault.FillCredentialRequest,
+        headers: Common.SendHeaders,
         success: Vault.FillCredentialResponse,
         error: Errors.WriteErrors,
       },
@@ -111,6 +112,7 @@ export const CredentialsApi = HttpApiGroup.make("credentials")
     }).annotate(RequiredPermission, "credential_read"),
     HttpApiEndpoint.post("credentials_resolve", "/v0/credentials/resolve", {
       payload: Vault.ResolveCredentialsRequest,
+      headers: Common.SendHeaders,
       success: Vault.ResolveCredentialsResponse,
       error: Errors.WriteErrors,
     }).annotate(RequiredPermission, "credential_run"),

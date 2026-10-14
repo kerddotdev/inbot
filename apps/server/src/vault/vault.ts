@@ -1,3 +1,9 @@
+import {
+  checkUseApproval,
+  consumeUseApproval,
+  credentialUseLock,
+  useFingerprint,
+} from "./approvals.js";
 import { randomBytes, randomUUID } from "node:crypto";
 import type Database from "better-sqlite3-multiple-ciphers";
 import { Clock, Context, Effect, Layer, Redacted, Result, Schema } from "effect";
@@ -221,9 +227,10 @@ export function makeVault(store: StoreService) {
     request: FillCredentialRequest | CaptureCredentialRequest,
     inboxId: string,
     capture: boolean,
+    idempotencyKey?: string,
   ) {
     return Effect.gen(function* () {
-      const snapshot = yield* run("credential_fill", inboxId, (db) => {
+      const snapshot = yield* run("credential_fill", inboxId, (db, now, principal) => {
         const input = validateInput(
           capture ? CaptureCredentialRequest : FillCredentialRequest,
           request,
@@ -234,18 +241,47 @@ export function makeVault(store: StoreService) {
             "The credential has no allowed origins.",
             "Set the credential url or origins first.",
           );
-        const row = capture
-          ? undefined
-          : Schema.decodeUnknownSync(Schema.optional(FieldRow))(
-              db
-                .prepare(
-                  "SELECT name, value FROM credential_fields WHERE credential_id = ? AND name = ?",
-                )
-                .get(id, input.field),
+        if (
+          !capture &&
+          !db
+            .prepare("SELECT 1 FROM credential_fields WHERE credential_id = ? AND name = ?")
+            .get(id, input.field)
+        )
+          throw notFound();
+        const approval = capture
+          ? {}
+          : checkUseApproval(
+              db,
+              principal,
+              {
+                kind: "fill",
+                credentials: [{ credential_id: id, inbox_id: inboxId, fields: [input.field] }],
+                fingerprint: useFingerprint({ kind: "fill", credential_id: id, ...input }),
+                ...(input.url === undefined ? {} : { urlHint: input.url }),
+              },
+              now,
+              idempotencyKey,
             );
-        if (!capture && row === undefined) throw notFound();
-        return { input, origins: credential.origins, value: row?.value, settings: settings(db) };
+        const row =
+          capture || approval.error !== undefined
+            ? undefined
+            : Schema.decodeUnknownSync(Schema.optional(FieldRow))(
+                db
+                  .prepare(
+                    "SELECT name, value FROM credential_fields WHERE credential_id = ? AND name = ?",
+                  )
+                  .get(id, input.field),
+              );
+        if (!capture && approval.error === undefined && row === undefined) throw notFound();
+        return {
+          input,
+          approval,
+          origins: credential.origins,
+          value: row?.value,
+          settings: settings(db),
+        };
       });
+      if (snapshot.approval.error !== undefined) return yield* Effect.fail(snapshot.approval.error);
       const tunnel = yield* TunnelTraffic;
       const checkEndpoint = (endpoint: string) =>
         checkCdpEndpoint(endpoint, tunnel, snapshot.settings);
@@ -280,6 +316,7 @@ export function makeVault(store: StoreService) {
             "The credential's allowed origins changed during the browser operation.",
             "Check the credential origins before retrying.",
           );
+        consumeUseApproval(db, snapshot.approval, completedAt);
         const timestamp = new Date(completedAt).toISOString();
         if (capture) {
           changeFields(db, id, { fields: { [field]: Redacted.value(result.value) } }, timestamp);
@@ -346,13 +383,16 @@ export function makeVault(store: StoreService) {
   }
 
   return {
-    fill: (id: string, request: FillCredentialRequest, inboxId: string) =>
-      useCredential(id, request, inboxId, false).pipe(Effect.map((result) => result.filled)),
+    fill: (id: string, request: FillCredentialRequest, inboxId: string, idempotencyKey?: string) =>
+      useCredential(id, request, inboxId, false, idempotencyKey).pipe(
+        credentialUseLock(store),
+        Effect.map((result) => result.filled),
+      ),
     capture: (id: string, request: CaptureCredentialRequest, inboxId: string) =>
       useCredential(id, request, inboxId, true).pipe(Effect.map((result) => result.credential)),
     settings: () => ownerSettings(),
     setSettings: (request: VaultSettings) => ownerSettings(request),
-    resolve: (request: ResolveCredentialsRequest) =>
+    resolve: (request: ResolveCredentialsRequest, idempotencyKey?: string) =>
       Effect.gen(function* () {
         if (yield* TunnelTraffic)
           return yield* Effect.fail(
@@ -372,57 +412,89 @@ export function makeVault(store: StoreService) {
           try: () => encrypt(input.public_key, new Uint8Array(0)),
           catch: () => validationError("Invalid age public key.", "Use an X25519 age recipient."),
         });
-        const values = yield* run("credential_run", undefined, (db, now, principal) => {
-          const used = new Set<string>();
-          return Object.fromEntries(
-            input.refs.map((ref, index) => {
-              const [id = "", field = ""] = ref.slice("inbot://credentials/".length).split("/");
-              const credential = Schema.decodeUnknownSync(Schema.optional(CredentialRow))(
-                db.prepare("SELECT * FROM credentials WHERE credential_id = ?").get(id),
-              );
-              const missing = wireError(
-                "not_found",
-                `Credential reference ${index + 1} was not found.`,
-                "Check the reference and ask the owner to verify its inbox scope and field.",
-              );
-              if (credential === undefined || !inScope(principal, credential.inbox_id))
-                throw missing;
-              const row = Schema.decodeUnknownSync(Schema.optional(FieldRow))(
+        const resolved = yield* run("credential_run", undefined, (db, now, principal) => {
+          const refs = input.refs.map((ref, index) => {
+            const [id = "", field = ""] = ref.slice("inbot://credentials/".length).split("/");
+            const credential = Schema.decodeUnknownSync(Schema.optional(CredentialRow))(
+              db.prepare("SELECT * FROM credentials WHERE credential_id = ?").get(id),
+            );
+            const missing = wireError(
+              "not_found",
+              `Credential reference ${index + 1} was not found.`,
+              "Check the reference and ask the owner to verify its inbox scope and field.",
+            );
+            if (
+              credential === undefined ||
+              !inScope(principal, credential.inbox_id) ||
+              !db
+                .prepare("SELECT 1 FROM credential_fields WHERE credential_id = ? AND name = ?")
+                .get(id, field)
+            )
+              throw missing;
+            return { ref, id, field, inboxId: credential.inbox_id };
+          });
+          const ids = [...new Set(refs.map((ref) => ref.id))];
+          const approval = checkUseApproval(
+            db,
+            principal,
+            {
+              kind: "run",
+              credentials: ids.map((id) => ({
+                credential_id: id,
+                inbox_id: refs.find((ref) => ref.id === id)?.inboxId ?? "",
+                fields: refs.filter((ref) => ref.id === id).map((ref) => ref.field),
+              })),
+              fingerprint: useFingerprint({
+                kind: "run",
+                refs: input.refs,
+              }),
+            },
+            now,
+            idempotencyKey,
+          );
+          if (approval.error !== undefined) return { approval, values: undefined };
+          const values = Object.fromEntries(
+            refs.map(({ ref, id, field }) => {
+              const row = Schema.decodeUnknownSync(FieldRow)(
                 db
                   .prepare(
                     "SELECT name, value FROM credential_fields WHERE credential_id = ? AND name = ?",
                   )
                   .get(id, field),
               );
-              if (row === undefined) throw missing;
               const stored = Redacted.value(row.value);
-              const value = field === "totp" ? totpCode(stored, now).code : stored;
-              if (!used.has(id)) {
-                db.prepare("UPDATE credentials SET last_used_at = ? WHERE credential_id = ?").run(
-                  new Date(now).toISOString(),
-                  id,
-                );
-                appendEvent(
-                  db,
-                  {
-                    type: "event",
-                    event_type: "credential.used",
-                    event_id: randomUUID(),
-                    credential: {
-                      credential_id: id,
-                      inbox_id: credential.inbox_id,
-                      field,
-                      via: "run",
-                    },
-                  },
-                  now,
-                );
-                used.add(id);
-              }
-              return [ref, value];
+              return [ref, field === "totp" ? totpCode(stored, now).code : stored];
             }),
           );
+          for (const id of ids) {
+            const ref = refs.find((ref) => ref.id === id);
+            if (ref === undefined) throw notFound();
+            db.prepare("UPDATE credentials SET last_used_at = ? WHERE credential_id = ?").run(
+              new Date(now).toISOString(),
+              id,
+            );
+            appendEvent(
+              db,
+              {
+                type: "event",
+                event_type: "credential.used",
+                event_id: randomUUID(),
+                credential: {
+                  credential_id: id,
+                  inbox_id: ref.inboxId,
+                  field: ref.field,
+                  via: "run",
+                },
+              },
+              now,
+            );
+          }
+          consumeUseApproval(db, approval, now);
+          return { approval, values };
         });
+        if (resolved.approval.error !== undefined)
+          return yield* Effect.fail(resolved.approval.error);
+        const values = resolved.values;
         const ciphertext = yield* Effect.tryPromise({
           try: () =>
             encrypt(input.public_key, new TextEncoder().encode(JSON.stringify({ values }))),

@@ -271,10 +271,15 @@ export const McpTools = (origin: string) =>
         'Get a CDP endpoint from Chrome/Chromium launched with --remote-debugging-port, Playwright chromium.launch({ args: ["--remote-debugging-port=9222"] }), Chrome DevTools MCP --browserUrl, or a remote browser connect URL allowlisted by the owner.';
       yield* register(
         "fill_credential",
-        `The server types the value itself; the agent never sees it. The main page origin must match the credential. The totp field types the current code, never the seed. Requires credential_fill. ${browserConnection}`,
-        Schema.Struct({ ...credential, ...VaultContracts.FillCredentialRequest.fields }),
+        `The server types the value itself; the agent never sees it. The main page origin must match the credential. The totp field types the current code, never the seed. Requires credential_fill. Approval grants require idempotencyKey; on approval_required ask the owner to approve the request, then retry unchanged with the same key. A successful use consumes approval. ${browserConnection}`,
+        Schema.Struct({
+          ...credential,
+          ...VaultContracts.FillCredentialRequest.fields,
+          idempotencyKey: send.idempotencyKey,
+        }),
         create,
-        ({ inboxId, credentialId, ...input }) => vault.fill(credentialId, input, inboxId),
+        ({ inboxId, credentialId, idempotencyKey, ...input }) =>
+          vault.fill(credentialId, input, inboxId, idempotencyKey),
       );
       yield* register(
         "capture_credential",

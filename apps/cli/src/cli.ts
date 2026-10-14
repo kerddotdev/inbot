@@ -75,7 +75,9 @@ function help(command?: Command, group?: string): string {
   if (command === undefined) {
     const available =
       group === undefined
-        ? commands
+        ? [...new Set(commands.map((entry) => entry.name.split(" ")[0]))].flatMap((group) =>
+            commands.filter((entry) => entry.name.split(" ")[0] === group),
+          )
         : commands.filter((entry) => entry.name.startsWith(`${group} `));
     return `Usage: inbot <command> [options] | inbot --version\n\n${group === undefined ? "  serve                Run the existing server (inbot serve --help).\n  run                  Run a local command with credential refs (inbot run --help).\n" : ""}${available.map((entry) => `  ${entry.name.padEnd(20)} ${entry.description}`).join("\n")}${group === undefined ? `\n${serviceHelp}${updateHelp}  events --follow      Stream accessible events (--json, --last-event-id).` : ""}\n\nGlobal options: --home <directory>, --flavor development|production, --json, --help\nOwner: read connection.json from the server home. Agent: set INBOT_URL and INBOT_API_KEY.\n`;
   }
@@ -284,7 +286,10 @@ export async function runCli(args: readonly string[], io: CliIO): Promise<number
       io.env,
     );
     let idempotencyKey: string | undefined;
-    if (command.idempotent) {
+    if (
+      command.idempotent &&
+      (command.idempotent === true || values["idempotency-key"] !== undefined)
+    ) {
       try {
         idempotencyKey = Schema.decodeUnknownSync(IdempotencyKey)(
           values["idempotency-key"] ?? randomUUID(),

@@ -1900,6 +1900,7 @@ test("parses browser fill/capture flags and local owner vault settings show/set"
       inbox_id: inboxId,
       permissions: { credential_fill: true },
       send_policy: "read_only",
+      use_policy: "direct",
     }),
   );
   const overrides = { env: agentEnv(api, key.api_key) };

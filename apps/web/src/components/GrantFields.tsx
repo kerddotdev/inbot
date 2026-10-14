@@ -1,6 +1,11 @@
 import { useState } from "react";
 import { Schema } from "effect";
-import { Permissions, type Grant, type SendPolicy } from "@inbot/contracts/src/api-keys.js";
+import {
+  Permissions,
+  UsePolicy,
+  type Grant,
+  type SendPolicy,
+} from "@inbot/contracts/src/api-keys.js";
 import type { IconName } from "../icons";
 import { Disclosure, Segmented, type Tone } from "./ui";
 import { LoadError } from "../feedback";
@@ -176,6 +181,27 @@ export function GrantFields({
             </label>
           ))}
         </div>
+      </fieldset>
+      <fieldset className="mb-4 min-w-0">
+        <legend className="mb-[7px] p-0 font-semibold">Credential use policy</legend>
+        <label className="grid gap-1.5">
+          <span className="text-xs text-ink2">
+            Applies to browser fill and local commands. Capture and TOTP codes use their
+            permissions.
+          </span>
+          <select
+            value={value.use_policy ?? "approval"}
+            onChange={(event) =>
+              onChange({
+                ...value,
+                use_policy: Schema.decodeUnknownSync(UsePolicy)(event.target.value),
+              })
+            }
+          >
+            <option value="approval">Owner approval</option>
+            <option value="direct">Direct use</option>
+          </select>
+        </label>
       </fieldset>
     </>
   );

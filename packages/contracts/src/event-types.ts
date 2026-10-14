@@ -29,6 +29,9 @@ export const EventType = Schema.Literals([
   "oauth.authorized",
   "oauth.revoked",
   "oauth.tokens_revoked",
+  "credential.use_requested",
+  "credential.use_approved",
+  "credential.use_rejected",
 ]).annotate({ identifier: "EventType" });
 export type EventType = typeof EventType.Type;
 

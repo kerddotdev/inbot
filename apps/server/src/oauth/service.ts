@@ -235,7 +235,7 @@ export function makeOAuth(store: StoreService) {
       const key = keyRow(
         db.prepare("SELECT * FROM api_keys WHERE api_key_id = ?").get(token.grant_id),
       );
-      const { inbox_id, inbox_ids, permissions, send_policy } = key;
+      const { inbox_id, inbox_ids, permissions, send_policy, use_policy } = key;
       return Result.succeed({
         kind: "agent",
         api_key_id: key.api_key_id,
@@ -244,6 +244,7 @@ export function makeOAuth(store: StoreService) {
           ...(inbox_ids === undefined ? {} : { inbox_ids }),
           permissions,
           send_policy,
+          use_policy: use_policy ?? "approval",
         },
       });
     });
@@ -486,7 +487,7 @@ export function makeOAuth(store: StoreService) {
         const grantId = id();
         const timestamp = new Date(now).toISOString();
         db.prepare(`INSERT INTO api_keys (api_key_id, name, prefix, secret_hash, inbox_id, inbox_ids,
-        permissions, send_policy, created_at, updated_at) VALUES (?, ?, 'oauth', ?, ?, ?, ?, ?, ?, ?)`).run(
+        permissions, send_policy, created_at, updated_at, use_policy) VALUES (?, ?, 'oauth', ?, ?, ?, ?, ?, ?, ?, ?)`).run(
           grantId,
           registered.client_name,
           hashToken(opaque()),
@@ -496,6 +497,7 @@ export function makeOAuth(store: StoreService) {
           grant.send_policy,
           timestamp,
           timestamp,
+          grant.use_policy ?? "approval",
         );
         db.prepare("INSERT INTO oauth_grants VALUES (?, ?, ?, ?)").run(
           grantId,
@@ -637,6 +639,7 @@ export function makeOAuth(store: StoreService) {
                 ...(key.inbox_ids === undefined ? {} : { inbox_ids: key.inbox_ids }),
                 permissions: key.permissions,
                 send_policy: key.send_policy,
+                use_policy: key.use_policy ?? "approval",
               };
             }),
         });

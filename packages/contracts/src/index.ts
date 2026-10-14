@@ -23,3 +23,5 @@ export * from "./oauth.js";
 export * from "./api/oauth.js";
 export * from "./quarantine.js";
 export * from "./api/quarantine.js";
+export * from "./credential-use.js";
+export * from "./api/credential-use.js";

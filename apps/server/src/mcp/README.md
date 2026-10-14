@@ -199,3 +199,16 @@ domain, session, settings, or key tools are added.
 OAuth-capable MCP clients can connect without an API key after browser approval by the owner. See [OAuth authorization](../oauth/README.md).
 
 System state labels (`received`, `queued`, `sent`, `send_unknown`, `failed`, `delivered`, `bounced`, `complained`, `rejected`, `deferred`) are protected on every message, including messages without an outbox entry. Message, thread, and batch label edits that add or remove any of them return `validation_error` with a fix and make no changes. Custom labels and `unread` remain editable.
+
+## Credential use approval
+
+`fill_credential` accepts optional `idempotencyKey`. Agent grants with
+`use_policy: "approval"` (including omitted policy) require it. The first call
+returns `approval_required` with the request ID without connecting to CDP. Ask
+the owner to approve, then retry the unchanged call with the same key. Approval
+permits one successful fill within 15 minutes. A failed CDP fill can be retried
+within that window; consumed or expired requests require a new key. A changed
+intent returns `idempotency_conflict`; rejection returns `missing_permission`.
+Owner and `direct` grants proceed immediately. Capture, generation, metadata and
+TOTP-code tools are not gated by this policy. Owner request list/approve/reject
+are REST/CLI only and are never MCP tools.

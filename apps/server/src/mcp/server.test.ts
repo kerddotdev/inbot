@@ -637,6 +637,7 @@ test("fills and captures without exposing values in MCP content and enforces cre
     api.keys.create({
       inbox_id: inboxId,
       permissions: { credential_fill: true },
+      use_policy: "direct",
       send_policy: "read_only",
     }),
   );
