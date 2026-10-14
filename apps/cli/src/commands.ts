@@ -33,6 +33,7 @@ export interface Command {
   readonly tokenInput?: boolean;
   readonly generateField?: boolean;
   readonly fieldsInput?: boolean;
+  readonly bitwarden?: "export" | "import";
 }
 const pagination = { limit: "number", page_token: "string", ascending: "boolean" } as const;
 const cursor = { limit: "number", page_token: "string" } as const;
@@ -734,6 +735,21 @@ export const commands: readonly Command[] = [
   ...quarantineCommands,
   ...credentialUseCommands,
   ...credentialRequestCommands,
+  {
+    name: "credentials export",
+    description:
+      "Export unencrypted Bitwarden JSON as local owner. Requires -o <file> or explicit -o -; --force replaces a file.",
+    endpoint: CredentialsApi.endpoints.credentials_export,
+    bitwarden: "export",
+  },
+  {
+    name: "credentials import",
+    description:
+      "Import a Bitwarden JSON file as local owner into --inbox. Duplicates are skipped unless --on-duplicate create is given.",
+    endpoint: CredentialsApi.endpoints.credentials_import,
+    query: { on_duplicate: "string" },
+    bitwarden: "import",
+  },
 ];
 
 export const flagName = (field: string) => field.replaceAll("_", "-");

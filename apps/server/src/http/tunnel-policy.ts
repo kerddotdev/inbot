@@ -62,6 +62,7 @@ export function tunnelRoute(url: string): TunnelRoute {
     if (/^\/v0\/inboxes\/[^/]+\/credentials\/[^/]+\/fields$/.test(path)) return "blocked";
     if (path === "/v0/credentials/resolve") return "blocked";
     if (/^\/v0\/credential-requests\/[^/]+\/fulfill$/.test(path)) return "blocked";
+    if (["/v0/credentials/export", "/v0/credentials/import"].includes(path)) return "blocked";
     return "agent";
   }
   if (

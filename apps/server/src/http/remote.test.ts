@@ -1424,3 +1424,39 @@ test("keeps request fulfillment local even for owner sessions but allows decline
   const replay = await remoteRequest(f, `${path}/decline`, { method: "POST", headers: session });
   expect(replay.status).toBe(200);
 });
+
+test("Bitwarden import and export are blocked even for tunnel owner sessions", async ({ f }) => {
+  await f.run(f.remote.enable({ hostname }));
+  const session = await ownerSession(f);
+  const key = await f.run(
+    f.keys.create({
+      inbox_ids: ["agent@example.test"],
+      permissions: { credential_read: true, credential_create: true },
+      send_policy: "direct",
+    }),
+  );
+  for (const operation of ["export", "import"]) {
+    for (const path of [
+      `/v0/credentials/${operation}`,
+      `/v0/credentials/${operation}/`,
+      `/v0/%63redentials/%${operation === "export" ? "65" : "69"}${operation.slice(1)}`,
+      `/v0/credentials/${operation}?inbox_id=agent%40example.test`,
+    ]) {
+      expect(tunnelRoute(path)).toBe("blocked");
+      for (const headers of [
+        session,
+        { authorization: `Bearer ${key.api_key}`, "content-type": "application/json" },
+      ]) {
+        const response = await remoteRequest(f, path, {
+          method: operation === "export" ? "GET" : "POST",
+          headers,
+          ...(operation === "import"
+            ? { body: JSON.stringify({ encrypted: false, items: [] }) }
+            : {}),
+        });
+        expect(response.status).toBe(403);
+        expect(await response.json()).toMatchObject({ code: "missing_permission" });
+      }
+    }
+  }
+});

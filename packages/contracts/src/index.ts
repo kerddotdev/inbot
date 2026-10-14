@@ -26,3 +26,4 @@ export * from "./api/quarantine.js";
 export * from "./credential-use.js";
 export * from "./api/credential-use.js";
 export * from "./credential-requests.js";
+export * from "./bitwarden.js";

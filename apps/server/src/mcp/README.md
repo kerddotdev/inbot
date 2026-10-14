@@ -228,3 +228,12 @@ Poll `get_credential_request` later while pending, never busy-loop. Requests
 expire after seven days. Fulfilled metadata does not need `credential_read`, but
 using refs still requires the relevant vault permission. There are no fulfill
 or decline MCP tools; owner decisions use REST or CLI. The request UI is deferred.
+
+## Bitwarden interoperability boundary
+
+Credential import and export have no MCP tools. They exchange plaintext secrets
+and are local owner-only REST/CLI operations. Both `/v0/credentials/export` and
+`/v0/credentials/import` are blocked by the tunnel even for owner browser
+sessions. Imported credentials emit the existing `credential.created` events
+with field names only; agents can use the resulting metadata and refs according
+to their existing grants. See [Bitwarden interoperability](../vault/README.md#bitwarden-interoperability).
