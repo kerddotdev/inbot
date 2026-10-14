@@ -43,7 +43,7 @@ import { Provisioner } from "../provision/provisioner.js";
 import { RemoteAccess, makeRemote } from "../remote/remote.js";
 import { makeBinary } from "../remote/binary.js";
 import { RemoteHandlers } from "./remote.js";
-import { tunnelPath, tunnelRoute, TunnelTraffic } from "./tunnel-policy.js";
+import { tunnelPath, tunnelRoute, TunnelTraffic, markTunnelRequest } from "./tunnel-policy.js";
 import { Home } from "../home.js";
 import { Mailbox } from "../mailbox/mailbox.js";
 import { AgentOperations } from "../agent/operations.js";
@@ -358,7 +358,9 @@ export function startHttpServer(
         Effect.provideService(
           HttpServerRequest.HttpServerRequest,
           tunnel && routePath === "/mcp"
-            ? request.modify({ headers: Headers.remove(request.headers, "origin") })
+            ? markTunnelRequest(
+                request.modify({ headers: Headers.remove(request.headers, "origin") }),
+              )
             : request,
         ),
         Effect.catchCause((cause) => {

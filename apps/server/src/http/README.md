@@ -137,7 +137,7 @@ optional `inbox_id` and case-insensitive `q` over name, URL, and username. Both
 list routes accept the shared pagination query.
 
 The permissions are `credential_read`, `credential_create`, `credential_update`,
-`credential_delete`, and `credential_totp`. Inbox scope applies to every operation;
+`credential_delete`, `credential_totp`, and `credential_fill`. Inbox scope applies to every operation;
 out-of-scope access returns `not_found`. Any key with the required permission and
 inbox scope can access metadata, regardless of the creator. Mail send policy does
 not change vault permissions. A reference is a name, never a bearer capability.
@@ -166,8 +166,37 @@ field encryption. Deleting a credential or its inbox deletes its fields.
 `credential.created`, `credential.updated`, and `credential.deleted` events carry
 `credential: { credential_id, inbox_id, fields }`, with names only. Webhooks and
 WebSocket replay require `credential_read` and matching inbox scope; TOTP reads
-update usage time without emitting an event. Browser fill, process injection,
-approval policies, and owner requests are future work.
+update usage time without emitting an event. `credential.used` carries
+`credential: { credential_id, inbox_id, field, origin, via: "fill" }`;
+`credential.captured` carries the same identity, field and origin without `via`.
+Both use the same inbox scope and `credential_read` visibility.
+
+`POST /v0/inboxes/:inbox_id/credentials/:credential_id/fill` and `/capture`
+require `credential_fill`. Both accept `cdp_endpoint` (HTTP(S) or WS(S)),
+`selector` (1-1024 characters), `field`, optional target-page `url`, and optional
+`target_id`. The server connects to CDP and verifies the main frame origin against
+the credential's effective origins. Credentials without origins return
+`validation_error` with a fix to set the credential URL or origins first. Fill
+returns `{ credential_id, field, origin, url }`; only native `Input.insertText`
+receives the value. Filling `totp` computes the current code with the service clock,
+never types the seed, and never returns the code. Capture reads the element into
+the encrypted vault and returns credential metadata with refs. Capturing `totp`
+normalizes a displayed base32 setup key or otpauth URI. Success records
+`last_used_at` and the corresponding metadata-only event in a short transaction;
+CDP I/O never holds a SQLite transaction.
+
+`GET` and `PUT /v0/owner/vault/settings` read/replace
+`{ remote_cdp_hosts: string[] }`. These are local owner-only routes, blocked through
+the tunnel and absent from MCP. The maximum is 32 lowercase DNS hostnames or
+`*.suffix` patterns, without IPs, schemes or ports. An empty list disables remote
+fill/capture. A wildcard matches subdomains, not the bare suffix. Local requests
+can use any CDP endpoint, including loopback Chrome. Tunnel REST and MCP requests
+require HTTPS/WSS, an allowed host, and exclusively public DNS results. Both the
+discovery endpoint and discovered WebSocket are checked; discovery redirects are
+rejected. The web Settings editor is deferred; owners can use REST or the CLI.
+See [browser credential use](../vault/README.md) for browser setup, errors and the
+residual DNS-rebinding risk. Process injection, approval policies and owner requests
+are future work.
 
 ## Owner mail transport
 

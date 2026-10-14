@@ -20,6 +20,8 @@ export const EventType = Schema.Literals([
   "credential.created",
   "credential.updated",
   "credential.deleted",
+  "credential.used",
+  "credential.captured",
   "domain.verified",
   "inbound.quarantined",
   "inbound.released",

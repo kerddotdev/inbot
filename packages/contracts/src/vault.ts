@@ -91,3 +91,57 @@ export const CredentialFieldsResponse = Schema.Struct({
   fields: CredentialFields,
 }).annotate({ identifier: "CredentialFieldsResponse" });
 export type CredentialFieldsResponse = typeof CredentialFieldsResponse.Type;
+
+export const CdpTargetFields = {
+  cdp_endpoint: Schema.String.check(
+    Schema.makeFilter((value) => {
+      try {
+        return ["http:", "https:", "ws:", "wss:"].includes(new URL(value).protocol);
+      } catch {
+        return false;
+      }
+    }),
+  ),
+  url: Schema.optionalKey(Schema.String),
+  target_id: Schema.optionalKey(Schema.String),
+  selector: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(1024)),
+};
+export const FillCredentialRequest = Schema.Struct({
+  ...CdpTargetFields,
+  field: CredentialFieldName,
+}).annotate({ identifier: "FillCredentialRequest" });
+export type FillCredentialRequest = typeof FillCredentialRequest.Type;
+export const FillCredentialResponse = Schema.Struct({
+  credential_id: CredentialId,
+  field: CredentialFieldName,
+  origin: Schema.String,
+  url: Schema.String,
+}).annotate({ identifier: "FillCredentialResponse" });
+export type FillCredentialResponse = typeof FillCredentialResponse.Type;
+export const CaptureCredentialRequest = Schema.Struct({
+  ...CdpTargetFields,
+  field: CredentialFieldName,
+}).annotate({ identifier: "CaptureCredentialRequest" });
+export type CaptureCredentialRequest = typeof CaptureCredentialRequest.Type;
+
+const remoteCdpHost = Schema.String.check(
+  Schema.isMaxLength(253),
+  Schema.makeFilter((value) => {
+    const host = value.startsWith("*.") ? value.slice(2) : value;
+    try {
+      return (
+        /^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)*[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(
+          host,
+        ) &&
+        !/^[0-9.]+$/.test(host) &&
+        new URL(`https://${host}`).hostname === host
+      );
+    } catch {
+      return false;
+    }
+  }),
+);
+export const VaultSettings = Schema.Struct({
+  remote_cdp_hosts: Schema.Array(remoteCdpHost).check(Schema.isMaxLength(32)),
+}).annotate({ identifier: "VaultSettings" });
+export type VaultSettings = typeof VaultSettings.Type;

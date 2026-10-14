@@ -13,7 +13,13 @@ import {
   ListMessagesResponse,
 } from "../../../../packages/contracts/src/messages.js";
 import { Webhook } from "../../../../packages/contracts/src/webhooks.js";
-import { Credential, CredentialFieldsResponse } from "../../../../packages/contracts/src/vault.js";
+import { fakeCdp } from "../vault/cdp-test-server.js";
+import { readEvents } from "../events/log.js";
+import {
+  Credential,
+  CredentialFieldsResponse,
+  FillCredentialResponse,
+} from "../../../../packages/contracts/src/vault.js";
 import { Draft, ListDraftsResponse } from "../../../../packages/contracts/src/drafts.js";
 import { ErrorResponse } from "../../../../packages/contracts/src/errors.js";
 import { client as connect } from "./test-client.js";
@@ -115,6 +121,8 @@ test("initializes with an API key and lists mailbox, list and webhook tools with
       "delete_credential",
       "generate_password",
       "get_totp_code",
+      "fill_credential",
+      "capture_credential",
       "list_webhooks",
       "get_webhook",
       "create_webhook",
@@ -610,4 +618,89 @@ test("uses metadata-only vault tools and never registers owner reveal", async ({
   failure(await mcp.call("get_credential", input), "not_found");
   for (const value of [secret, seed, ...Object.values(revealed.fields)])
     expect(JSON.stringify(results)).not.toContain(value);
+});
+
+test("fills and captures without exposing values in MCP content and enforces credential_fill", async ({
+  api,
+}) => {
+  const secret = "mcp-fill-secret-d9K";
+  const captured = "mcp-capture-secret-m2Z";
+  const created = Schema.decodeUnknownSync(Credential)(
+    await (
+      await api.request(`/v0/inboxes/${inboxId}/credentials`, {
+        method: "POST",
+        body: { name: "Browser", url: "https://example.test", fields: { password: secret } },
+      })
+    ).json(),
+  );
+  const key = await api.run(
+    api.keys.create({
+      inbox_id: inboxId,
+      permissions: { credential_fill: true },
+      send_policy: "read_only",
+    }),
+  );
+  const mcp = await client(api, key.api_key);
+  const denied = await client(api);
+  const browser = await fakeCdp({ value: captured });
+  try {
+    const input = {
+      inboxId,
+      credentialId: created.credential_id,
+      cdp_endpoint: browser.endpoint,
+      url: "https://example.test/login",
+      target_id: "page-1",
+      selector: "#password",
+      field: "password",
+    };
+    const results = [];
+    for (const name of ["fill_credential", "capture_credential"]) {
+      const result = await denied.call(name, input);
+      results.push(result);
+      failure(result, "missing_permission");
+    }
+    expect(browser.messages).toEqual([]);
+    const filled = await mcp.call("fill_credential", input);
+    expect(filled.isError).not.toBe(true);
+    expect(
+      Schema.decodeUnknownSync(FillCredentialResponse)(filled.structuredContent),
+    ).toMatchObject({
+      credential_id: created.credential_id,
+      field: "password",
+      origin: "https://example.test",
+    });
+    const result = await mcp.call("capture_credential", input);
+    expect(result.isError).not.toBe(true);
+    expect(Schema.decodeUnknownSync(Credential)(result.structuredContent).refs.password).toBe(
+      created.refs.password,
+    );
+    results.push(filled, result);
+    const revealed = Schema.decodeUnknownSync(CredentialFieldsResponse)(
+      await (
+        await api.request(`/v0/inboxes/${inboxId}/credentials/${created.credential_id}/fields`)
+      ).json(),
+    );
+    expect(revealed.fields.password).toBe(captured);
+    expect(browser.messages.filter((message) => JSON.stringify(message).includes(secret))).toEqual([
+      expect.objectContaining({ method: "Input.insertText", params: { text: secret } }),
+    ]);
+    expect(JSON.stringify(browser.messages)).not.toContain(captured);
+    const rows = await api.run(api.store.use((db) => readEvents(db, 0)));
+    for (const value of [secret, captured])
+      expect(JSON.stringify([results, rows])).not.toContain(value);
+    const { tools } = await mcp.list();
+    expect(tools.some((tool) => /vault.*settings|reveal/.test(tool.name))).toBe(false);
+    for (const name of ["fill_credential", "capture_credential"]) {
+      const tool = tools.find((tool) => tool.name === name);
+      expect(tool?.annotations).toMatchObject({
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: false,
+      });
+      expect(tool?.description).toContain("--remote-debugging-port");
+      expect(tool?.description).toContain("credential_fill");
+    }
+  } finally {
+    await browser.close();
+  }
 });

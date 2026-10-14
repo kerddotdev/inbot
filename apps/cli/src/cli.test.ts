@@ -20,6 +20,8 @@ import {
   CredentialFieldsResponse,
   ListCredentialsResponse,
   TotpCodeResponse,
+  FillCredentialResponse,
+  VaultSettings,
 } from "../../../packages/contracts/src/vault.js";
 import { Draft } from "../../../packages/contracts/src/drafts.js";
 import {
@@ -49,6 +51,7 @@ import {
   BatchUpdateMessagesResponse,
 } from "../../../packages/contracts/src/messages.js";
 import { ApiKey, CreateApiKeyResponse } from "../../../packages/contracts/src/api-keys.js";
+import { fakeCdp } from "../../server/src/vault/cdp-test-server.js";
 import { fixture } from "../../server/src/http/test-fixture.js";
 import { runCli, type CliIO } from "./cli.js";
 import { errorExitCode } from "./errors.js";
@@ -1658,6 +1661,7 @@ base("groups overview help logically and keeps group help focused", async () => 
     "lists",
     "webhooks",
     "credentials",
+    "vault",
     "domains",
     "transport",
     "oauth",
@@ -1872,4 +1876,153 @@ test("parses credential commands with server generation, metadata output and loc
   expect(
     (await invoke(api, ["credentials", "get", inboxId, created.credential_id], overrides)).code,
   ).toBe(5);
+});
+
+test("parses browser fill/capture flags and local owner vault settings show/set", async ({
+  api,
+}) => {
+  const created = Schema.decodeUnknownSync(Credential)(
+    await (
+      await api.request(`/v0/inboxes/${inboxId}/credentials`, {
+        method: "POST",
+        body: {
+          name: "CLI browser",
+          url: "https://example.test",
+          fields: { password: "cli-fill-secret-f5J" },
+        },
+      })
+    ).json(),
+  );
+  const key = await api.run(
+    api.keys.create({
+      inbox_id: inboxId,
+      permissions: { credential_fill: true },
+      send_policy: "read_only",
+    }),
+  );
+  const overrides = { env: agentEnv(api, key.api_key) };
+  const browser = await fakeCdp({ value: "cli-capture-secret-g2P" });
+  try {
+    for (const operation of ["fill", "capture"]) {
+      const help = await invoke(api, ["credentials", operation, "--help"]);
+      expect(help.code).toBe(0);
+      for (const flag of ["--cdp-endpoint", "--url", "--target-id", "--selector", "--field"])
+        expect(help.stdout).toContain(flag);
+      const result = await invoke(
+        api,
+        [
+          "credentials",
+          operation,
+          inboxId,
+          created.credential_id,
+          "--cdp-endpoint",
+          browser.endpoint,
+          "--url",
+          "https://example.test/login",
+          "--target-id",
+          "page-1",
+          "--selector",
+          "#password",
+          "--field",
+          "password",
+          "--json",
+        ],
+        overrides,
+      );
+      expect(result.code, result.stderr).toBe(0);
+      const value = JSON.parse(result.stdout);
+      if (operation === "fill")
+        expect(Schema.decodeUnknownSync(FillCredentialResponse)(value)).toMatchObject({
+          credential_id: created.credential_id,
+          field: "password",
+          origin: "https://example.test",
+        });
+      else
+        expect(Schema.decodeUnknownSync(Credential)(value).refs.password).toBe(
+          created.refs.password,
+        );
+      expect(JSON.stringify(result)).not.toContain("cli-fill-secret-f5J");
+      expect(JSON.stringify(result)).not.toContain("cli-capture-secret-g2P");
+    }
+    expect((await invoke(api, ["vault", "settings", "--help"])).stdout).toContain(
+      "vault settings set",
+    );
+    expect((await invoke(api, ["vault", "settings", "set", "--help"])).stdout).toContain(
+      "--remote-cdp-hosts",
+    );
+    const initial = await invoke(api, ["vault", "settings", "show", "--json"]);
+    expect(initial.code).toBe(0);
+    expect(Schema.decodeUnknownSync(VaultSettings)(JSON.parse(initial.stdout))).toEqual({
+      remote_cdp_hosts: [],
+    });
+    const saved = await invoke(api, [
+      "vault",
+      "settings",
+      "set",
+      "--remote-cdp-hosts",
+      "browser.test",
+      "--remote-cdp-hosts",
+      "*.browserbase.com",
+      "--json",
+    ]);
+    expect(saved.code, saved.stderr).toBe(0);
+    expect(Schema.decodeUnknownSync(VaultSettings)(JSON.parse(saved.stdout))).toEqual({
+      remote_cdp_hosts: ["browser.test", "*.browserbase.com"],
+    });
+    for (const args of [
+      ["vault", "settings", "show"],
+      ["vault", "settings", "set", "--remote-cdp-hosts", "browser.test"],
+    ])
+      expect((await invoke(api, args, overrides)).code).toBe(4);
+    expect(
+      (await invoke(api, ["vault", "settings", "set", "--remote-cdp-hosts", "127.0.0.1"])).code,
+    ).toBe(2);
+    const disabled = await invoke(api, [
+      "vault",
+      "settings",
+      "set",
+      "--data",
+      '{"remote_cdp_hosts":[]}',
+      "--json",
+    ]);
+    expect(disabled.code).toBe(0);
+    expect(JSON.parse(disabled.stdout)).toEqual({ remote_cdp_hosts: [] });
+    const denied = await agent(api);
+    expect(
+      (
+        await invoke(
+          api,
+          [
+            "credentials",
+            "fill",
+            inboxId,
+            created.credential_id,
+            "--cdp-endpoint",
+            browser.endpoint,
+            "--selector",
+            "#password",
+            "--field",
+            "password",
+          ],
+          { env: agentEnv(api, denied.api_key) },
+        )
+      ).code,
+    ).toBe(4);
+    expect(
+      (
+        await invoke(api, [
+          "credentials",
+          "fill",
+          inboxId,
+          created.credential_id,
+          "--selector",
+          "#password",
+          "--field",
+          "password",
+        ])
+      ).code,
+    ).toBe(2);
+  } finally {
+    await browser.close();
+  }
 });

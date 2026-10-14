@@ -7,6 +7,8 @@ import { join } from "node:path";
 import { Schema } from "effect";
 import { expect, test as base } from "vitest";
 import { Credential, ListCredentialsResponse } from "../../../../packages/contracts/src/vault.js";
+import { McpSchema } from "effect/ai";
+import { fakeCdp } from "../vault/cdp-test-server.js";
 import { RemoteStatus } from "../../../../packages/contracts/src/remote.js";
 import { fixture } from "./test-fixture.js";
 import { tunnelPath, tunnelRoute } from "./tunnel-policy.js";
@@ -1112,4 +1114,138 @@ test("allows scoped vault routes through the tunnel and blocks secret reveal for
   const owner = await remoteRequest(f, `${target}/fields`, { headers: session });
   expect(owner.status).toBe(403);
   expect(await owner.json()).toMatchObject({ code: "missing_permission" });
+});
+
+test("guards tunnel CDP in REST and each MCP invocation while keeping vault settings local", async ({
+  f,
+}) => {
+  await f.run(f.remote.enable({ hostname }));
+  const browser = await fakeCdp();
+  try {
+    const created = Schema.decodeUnknownSync(Credential)(
+      await (
+        await f.request("/v0/inboxes/agent@example.test/credentials", {
+          method: "POST",
+          body: {
+            name: "Remote browser",
+            url: "https://example.test",
+            fields: { password: "tunnel-fill-secret-p7R" },
+          },
+        })
+      ).json(),
+    );
+    const key = await f.run(
+      f.keys.create({
+        inbox_id: created.inbox_id,
+        permissions: { credential_fill: true },
+        send_policy: "read_only",
+      }),
+    );
+    const headers = {
+      authorization: `Bearer ${key.api_key}`,
+      "content-type": "application/json",
+      accept: "application/json, text/event-stream",
+    };
+    const target = { cdp_endpoint: browser.endpoint, selector: "#password", field: "password" };
+    for (const operation of ["fill", "capture"]) {
+      const path = `/v0/inboxes/${created.inbox_id}/credentials/${created.credential_id}/${operation}`;
+      expect(tunnelRoute(path)).toBe("agent");
+      const response = await remoteRequest(f, path, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(target),
+      });
+      expect(response.status).toBe(403);
+      expect(await response.json()).toMatchObject({
+        code: "missing_permission",
+        fix: expect.stringContaining("Settings"),
+      });
+    }
+    expect(
+      (
+        await f.request("/v0/owner/vault/settings", {
+          method: "PUT",
+          body: { remote_cdp_hosts: ["localhost"] },
+        })
+      ).status,
+    ).toBe(200);
+    const owner = await ownerSession(f);
+    for (const method of ["GET", "PUT"]) {
+      const response = await remoteRequest(f, "/v0/owner/vault/settings", {
+        method,
+        headers: owner,
+        ...(method === "PUT" ? { body: '{"remote_cdp_hosts":[]}' } : {}),
+      });
+      expect(response.status).toBe(403);
+      expect(await response.json()).toMatchObject({ code: "missing_permission" });
+    }
+    expect(tunnelRoute("/v0/owner/vault/settings")).toBe("blocked");
+    let session: string | undefined;
+    let id = 0;
+    async function rpc(tunnel: boolean, method: string, params: unknown) {
+      const body = { jsonrpc: "2.0", id: ++id, method, params };
+      const requestHeaders = {
+        ...headers,
+        ...(session === undefined
+          ? {}
+          : { "mcp-session-id": session, "mcp-protocol-version": "2025-06-18" }),
+      };
+      const response = tunnel
+        ? await remoteRequest(f, "/mcp", {
+            method: "POST",
+            headers: requestHeaders,
+            body: JSON.stringify(body),
+          })
+        : await f.request("/mcp", {
+            method: "POST",
+            token: key.api_key,
+            headers: requestHeaders,
+            body,
+          });
+      expect(response.status).toBe(200);
+      session = response.headers.get("mcp-session-id") ?? session;
+      const text = await response.text();
+      const json = response.headers.get("content-type")?.includes("text/event-stream")
+        ? text
+            .split("\n")
+            .filter((line) => line.startsWith("data: "))
+            .at(-1)
+            ?.slice(6)
+        : text;
+      return Schema.decodeUnknownSync(
+        Schema.fromJsonString(Schema.Struct({ result: Schema.Unknown })),
+      )(json).result;
+    }
+    await rpc(false, "initialize", {
+      protocolVersion: "2025-06-18",
+      capabilities: {},
+      clientInfo: { name: "tunnel-vault-test", version: "1" },
+    });
+    const args = { inboxId: created.inbox_id, credentialId: created.credential_id, ...target };
+    for (const name of ["fill_credential", "capture_credential"]) {
+      const result = Schema.decodeUnknownSync(McpSchema.CallToolResult)(
+        await rpc(true, "tools/call", { name, arguments: args }),
+      );
+      expect(result.isError).toBe(true);
+      expect(result.structuredContent).toMatchObject({ code: "missing_permission" });
+      expect(browser.requests).toEqual([]);
+      expect(browser.messages).toEqual([]);
+    }
+    const local = Schema.decodeUnknownSync(McpSchema.CallToolResult)(
+      await rpc(false, "tools/call", { name: "fill_credential", arguments: args }),
+    );
+    expect(local.isError).not.toBe(true);
+    expect(
+      browser.messages.filter((message) => message.method === "Input.insertText"),
+    ).toHaveLength(1);
+    const denied = Schema.decodeUnknownSync(McpSchema.CallToolResult)(
+      await rpc(true, "tools/call", { name: "fill_credential", arguments: args }),
+    );
+    expect(denied.structuredContent).toMatchObject({ code: "missing_permission" });
+    expect(
+      browser.messages.filter((message) => message.method === "Input.insertText"),
+    ).toHaveLength(1);
+  } finally {
+    await browser.close();
+  }
 });

@@ -20,6 +20,7 @@ import { OwnerSessions } from "../auth/sessions.js";
 import { cookieName, CurrentRequestOrigin } from "../http/owner-session.js";
 import { authenticatePrincipal } from "../auth/bearer.js";
 import { wireError, wireFailure } from "../http/errors.js";
+import { TunnelTraffic, isTunnelRequest } from "../http/tunnel-policy.js";
 import { toolResult } from "./results.js";
 
 const optionalString = (description: string) =>
@@ -194,6 +195,7 @@ export const McpTools = (origin: string) =>
               );
               const value = yield* handle(decoded).pipe(
                 Effect.provideService(CurrentPrincipal, principal),
+                Effect.provideService(TunnelTraffic, isTunnelRequest(request)),
               );
               return toolResult(value);
             }).pipe(
@@ -264,6 +266,22 @@ export const McpTools = (origin: string) =>
         Schema.Struct(credential),
         read,
         (input) => vault.totp(input.credentialId, input.inboxId),
+      );
+      const browserConnection =
+        'Get a CDP endpoint from Chrome/Chromium launched with --remote-debugging-port, Playwright chromium.launch({ args: ["--remote-debugging-port=9222"] }), Chrome DevTools MCP --browserUrl, or a remote browser connect URL allowlisted by the owner.';
+      yield* register(
+        "fill_credential",
+        `The server types the value itself; the agent never sees it. The main page origin must match the credential. The totp field types the current code, never the seed. Requires credential_fill. ${browserConnection}`,
+        Schema.Struct({ ...credential, ...VaultContracts.FillCredentialRequest.fields }),
+        create,
+        ({ inboxId, credentialId, ...input }) => vault.fill(credentialId, input, inboxId),
+      );
+      yield* register(
+        "capture_credential",
+        `The server reads a page field directly into the vault and returns refs; the agent never sees the secret. The main page origin must match the credential, as when the server types a value itself. Requires credential_fill. ${browserConnection}`,
+        Schema.Struct({ ...credential, ...VaultContracts.CaptureCredentialRequest.fields }),
+        create,
+        ({ inboxId, credentialId, ...input }) => vault.capture(credentialId, input, inboxId),
       );
       const list = {
         inboxId: Schema.optionalKey(Common.InboxId),

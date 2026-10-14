@@ -137,7 +137,6 @@ export async function runCli(args: readonly string[], io: CliIO): Promise<number
     });
     const positional = scan.tokens.filter((token) => token.kind === "positional");
     const first = positional[0];
-    const second = positional[1];
     const group = first?.value;
     if (group === "update") {
       await runUpdateCommand(
@@ -160,8 +159,9 @@ export async function runCli(args: readonly string[], io: CliIO): Promise<number
       );
       return 0;
     }
-    const name = group === "open" ? "open" : `${group ?? ""} ${second?.value ?? ""}`;
-    const command = commands.find((entry) => entry.name === name);
+    const command = commands.find((entry) =>
+      entry.name.split(" ").every((part, index) => positional[index]?.value === part),
+    );
     if (command === undefined) {
       if (
         (args.length === 0 || scan.values.help) &&
@@ -172,7 +172,9 @@ export async function runCli(args: readonly string[], io: CliIO): Promise<number
       }
       usage("Unknown command. Run inbot --help.");
     }
-    const indexes = new Set([first?.index, ...(group === "open" ? [] : [second?.index])]);
+    const indexes = new Set(
+      positional.slice(0, command.name.split(" ").length).map((token) => token.index),
+    );
     let parsed: ReturnType<typeof parseArgs>;
     try {
       parsed = parseArgs({

@@ -83,6 +83,13 @@ const inbox = ["inbox_id"];
 const message = ["inbox_id", "message_id"];
 const draft = ["inbox_id", "draft_id"];
 const credential = ["inbox_id", "credential_id"];
+const credentialTarget = {
+  cdp_endpoint: "string",
+  url: "string",
+  target_id: "string",
+  selector: "string",
+  field: "string",
+} as const;
 const credentialBody = {
   name: "string",
   url: "string",
@@ -566,6 +573,22 @@ export const commands: readonly Command[] = [
     body: { field: "string", mode: "string", length: "number", rules: "string" },
   },
   {
+    name: "credentials fill",
+    description:
+      "Type a vault field directly into a matching-origin browser page. The totp field types the current code. Requires credential_fill.",
+    endpoint: CredentialsApi.endpoints.inboxes_credentials_fill,
+    params: credential,
+    body: credentialTarget,
+  },
+  {
+    name: "credentials capture",
+    description:
+      "Capture a matching-origin browser field into the vault; returns refs only. Requires credential_fill.",
+    endpoint: CredentialsApi.endpoints.inboxes_credentials_capture,
+    params: credential,
+    body: credentialTarget,
+  },
+  {
     name: "credentials totp",
     description: "Get a temporary TOTP code and expiry without revealing its seed.",
     endpoint: CredentialsApi.endpoints.inboxes_credentials_totp,
@@ -577,6 +600,18 @@ export const commands: readonly Command[] = [
       "Reveal stored secret fields as local owner. Agent keys and tunnel access are rejected.",
     endpoint: CredentialsApi.endpoints.inboxes_credentials_reveal,
     params: credential,
+  },
+  {
+    name: "vault settings show",
+    description: "Inspect remote CDP host settings as local owner.",
+    endpoint: CredentialsApi.endpoints.owner_vault_settings,
+  },
+  {
+    name: "vault settings set",
+    description:
+      "Replace remote CDP hosts as local owner. Use --data '{\"remote_cdp_hosts\":[]}' to disable remote fill and capture.",
+    endpoint: CredentialsApi.endpoints.owner_vault_setSettings,
+    body: { remote_cdp_hosts: "array" },
   },
   {
     name: "domains list",

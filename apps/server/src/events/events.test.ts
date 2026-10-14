@@ -1,4 +1,5 @@
 import { CurrentPrincipal } from "../../../../packages/contracts/src/security.js";
+import { fakeCdp } from "../vault/cdp-test-server.js";
 import { makeVault } from "../vault/vault.js";
 import { createHmac } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
@@ -1541,7 +1542,13 @@ test("credential-only agents receive scoped metadata events through WebSocket an
       },
     }),
   );
-  const event_types = ["credential.created", "credential.updated", "credential.deleted"];
+  const event_types = [
+    "credential.created",
+    "credential.used",
+    "credential.captured",
+    "credential.updated",
+    "credential.deleted",
+  ];
   await hook(
     api,
     { url: "https://receiver.example.test/events", inbox_ids: [inboxId], event_types },
@@ -1556,18 +1563,26 @@ test("credential-only agents receive scoped metadata events through WebSocket an
   const secret = "websocket-webhook-distinctive-secret";
   const seed = "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ";
   const vault = makeVault(api.store);
+  const browser = await fakeCdp({ value: secret });
   const run = <A, E>(effect: Effect.Effect<A, E, CurrentPrincipal>) =>
     api.run(effect.pipe(Effect.provideService(CurrentPrincipal, { kind: "owner" })));
   try {
     ws.subscribe({ event_types, inbox_ids: [inboxId] });
     expect(await ws.next()).toMatchObject({ type: "subscribed" });
     const created = await run(
-      vault.create({ name: "Visible", fields: { password: secret, totp: seed } }, inboxId),
+      vault.create(
+        { name: "Visible", url: "https://example.test", fields: { password: secret, totp: seed } },
+        inboxId,
+      ),
     );
     await run(vault.create({ name: "Hidden", fields: { password: secret } }, otherId));
+    const target = { cdp_endpoint: browser.endpoint, field: "password", selector: "#password" };
+    await run(vault.fill(created.credential_id, target, inboxId));
+    await run(vault.capture(created.credential_id, target, inboxId));
     await run(vault.update(created.credential_id, { remove_fields: ["totp"] }, inboxId));
     await run(vault.delete(created.credential_id, inboxId));
-    const frames = [await ws.next(), await ws.next(), await ws.next()];
+    const frames = [];
+    for (const _type of event_types) frames.push(await ws.next());
     expect(frames.map((frame) => ("event_type" in frame ? frame.event_type : frame.type))).toEqual(
       event_types,
     );
@@ -1586,7 +1601,7 @@ test("credential-only agents receive scoped metadata events through WebSocket an
       deliveries.push(Schema.decodeUnknownSync(Event)(JSON.parse(input.body)));
       return 204;
     };
-    for (let index = 0; index < 3; index++) await dispatch(api, sender);
+    for (let index = 0; index < event_types.length; index++) await dispatch(api, sender);
     expect(deliveries.map((event) => event.event_type)).toEqual(event_types);
     expect(deliveries).toEqual(frames);
     await api.run(
@@ -1598,8 +1613,9 @@ test("credential-only agents receive scoped metadata events through WebSocket an
       vault.create({ name: "Read permission revoked", fields: { password: secret } }, inboxId),
     );
     await dispatch(api, sender);
-    expect(deliveries).toHaveLength(3);
+    expect(deliveries).toHaveLength(event_types.length);
   } finally {
     await ws.close();
+    await browser.close();
   }
 });

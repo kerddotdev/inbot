@@ -96,8 +96,96 @@ test("enforces request limits and requires an effective update field", () => {
     credential_update: true,
     credential_delete: true,
     credential_totp: false,
+    credential_fill: true,
   };
   expect(Schema.decodeUnknownSync(Permissions, { onExcessProperty: "error" })(permissions)).toEqual(
     permissions,
   );
+});
+
+test("validates browser targets, owner host settings and metadata-only usage events", async () => {
+  const { FillCredentialRequest, CaptureCredentialRequest, FillCredentialResponse, VaultSettings } =
+    await import("./vault.js");
+  for (const schema of [FillCredentialRequest, CaptureCredentialRequest]) {
+    const decode = Schema.decodeUnknownSync(schema, { onExcessProperty: "error" });
+    const target = { cdp_endpoint: "http://127.0.0.1:9222", field: "totp", selector: "#code" };
+    expect(decode(target)).toEqual(target);
+    for (const cdp_endpoint of [
+      "https://browser.test",
+      "ws://localhost:9222/page",
+      "wss://browser.test/connect",
+    ])
+      expect(
+        decode({ ...target, cdp_endpoint, url: "https://site.test", target_id: "page-1" })
+          .cdp_endpoint,
+      ).toBe(cdp_endpoint);
+    for (const input of [
+      { ...target, cdp_endpoint: "file:///tmp/cdp" },
+      { ...target, cdp_endpoint: "invalid" },
+      { ...target, selector: "" },
+      { ...target, selector: "x".repeat(1025) },
+      { ...target, field: "invalid.field" },
+      { ...target, value: "secret" },
+    ])
+      expect(() => decode(input)).toThrow();
+  }
+  const decode = Schema.decodeUnknownSync(VaultSettings);
+  expect(
+    decode({ remote_cdp_hosts: ["browser.test", "*.browserbase.com", "localhost"] })
+      .remote_cdp_hosts,
+  ).toHaveLength(3);
+  for (const host of [
+    "127.0.0.1",
+    "127.1",
+    "2130706433",
+    "0x7f000001",
+    "::1",
+    "[::1]",
+    "Browser.test",
+    "https://browser.test",
+    "browser.test:9222",
+    "browser.test/path",
+    "browser.test.",
+    "*browser.test",
+    "*.*.test",
+    "-bad.test",
+    "bad-.test",
+    "",
+    "999999999999999999999999999",
+    "a".repeat(64) + ".test",
+  ])
+    expect(() => decode({ remote_cdp_hosts: [host] }), host).toThrow();
+  expect(() =>
+    decode({ remote_cdp_hosts: Array.from({ length: 33 }, (_, i) => `host${i}.test`) }),
+  ).toThrow();
+  for (const event_type of ["credential.used", "credential.captured"]) {
+    const credential = {
+      credential_id: id,
+      inbox_id: metadata.inbox_id,
+      field: "password",
+      origin: "https://example.test",
+      ...(event_type === "credential.used" ? { via: "fill" } : {}),
+    };
+    const event = { type: "event", event_type, event_id: "event-use", credential };
+    expect(Schema.decodeUnknownSync(Event)(event)).toEqual(event);
+    expect(() =>
+      Schema.decodeUnknownSync(Event, { onExcessProperty: "error" })({
+        ...event,
+        credential: { ...credential, value: "secret" },
+      }),
+    ).toThrow();
+    if (event_type === "credential.used")
+      expect(() =>
+        Schema.decodeUnknownSync(Event)({ ...event, credential: { ...credential, via: "run" } }),
+      ).toThrow();
+  }
+  expect(() =>
+    Schema.decodeUnknownSync(FillCredentialResponse, { onExcessProperty: "error" })({
+      credential_id: id,
+      field: "password",
+      origin: "https://example.test",
+      url: "https://example.test/login",
+      value: "secret",
+    }),
+  ).toThrow();
 });

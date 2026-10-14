@@ -9,6 +9,10 @@ import {
   GenerateFieldRequest,
   ListCredentialsQuery,
   CredentialValue,
+  FillCredentialRequest,
+  CaptureCredentialRequest,
+  VaultSettings,
+  type FillCredentialResponse,
   type Credential,
   type CredentialFieldsResponse,
   type ListCredentialsResponse,
@@ -22,6 +26,9 @@ import { MailboxError, notFound, validate, validationError } from "../mailbox/er
 import { keysetWhere, page, preparePage, Where } from "../mailbox/queries.js";
 import { getInbox } from "../mailbox/rows.js";
 import { Store, type StoreService } from "../store.js";
+import { TunnelTraffic } from "../http/tunnel-policy.js";
+import { CdpError, fillField, readField } from "./cdp.js";
+import { checkCdpEndpoint } from "./endpoint-policy.js";
 import { generatePassword, PasswordRulesError } from "./generate.js";
 import { credentialOrigins } from "./origins.js";
 import { CredentialRow, credentialWire, fieldNames, getCredential } from "./rows.js";
@@ -97,6 +104,62 @@ function credentialEvent(
   );
 }
 
+function settings(db: Database.Database): VaultSettings {
+  return (
+    Schema.decodeUnknownSync(
+      Schema.optional(
+        Schema.Struct({
+          remote_cdp_hosts: Schema.fromJsonString(VaultSettings.fields.remote_cdp_hosts),
+        }),
+      ),
+    )(db.prepare("SELECT remote_cdp_hosts FROM vault_settings WHERE id = 1").get()) ?? {
+      remote_cdp_hosts: [],
+    }
+  );
+}
+
+function cdpFailure(error: unknown) {
+  if (Schema.is(ErrorResponse)(error)) return error;
+  if (error instanceof CdpError) {
+    switch (error.code) {
+      case "origin_not_allowed":
+        return wireError(
+          "missing_permission",
+          error.message,
+          "Open the credential's site, or add the origin to the credential.",
+        );
+      case "target_not_found":
+        return validationError(
+          "The browser page was not found.",
+          "Open the page and provide its url or target_id.",
+        );
+      case "element_not_found":
+        return validationError(
+          "The browser element was not found.",
+          "Wait for the field to appear and use a selector for the main page.",
+        );
+      case "element_not_editable":
+        return validationError(
+          "The browser element cannot be edited.",
+          "Select an enabled, writable text input, textarea, or contenteditable element.",
+        );
+      case "cdp_timeout":
+      case "cdp_unreachable":
+      case "cdp_protocol":
+        return wireError(
+          "service_unavailable",
+          "The browser CDP operation could not complete.",
+          "Check the CDP endpoint and browser connection, inspect the page, then retry if needed.",
+        );
+    }
+  }
+  return wireError(
+    "service_unavailable",
+    "The browser operation could not complete.",
+    "Check the CDP endpoint and browser connection, then retry if needed.",
+  );
+}
+
 export function makeVault(store: StoreService) {
   function run<A>(
     permission: Permission,
@@ -151,7 +214,142 @@ export function makeVault(store: StoreService) {
     return credential;
   }
 
+  function useCredential(
+    id: string,
+    request: FillCredentialRequest | CaptureCredentialRequest,
+    inboxId: string,
+    capture: boolean,
+  ) {
+    return Effect.gen(function* () {
+      const snapshot = yield* run("credential_fill", inboxId, (db) => {
+        const input = validateInput(
+          capture ? CaptureCredentialRequest : FillCredentialRequest,
+          request,
+        );
+        const credential = credentialWire(db, getCredential(db, id, inboxId));
+        if (credential.origins.length === 0)
+          throw validationError(
+            "The credential has no allowed origins.",
+            "Set the credential url or origins first.",
+          );
+        const row = capture
+          ? undefined
+          : Schema.decodeUnknownSync(Schema.optional(FieldRow))(
+              db
+                .prepare(
+                  "SELECT name, value FROM credential_fields WHERE credential_id = ? AND name = ?",
+                )
+                .get(id, input.field),
+            );
+        if (!capture && row === undefined) throw notFound();
+        return { input, origins: credential.origins, value: row?.value, settings: settings(db) };
+      });
+      const tunnel = yield* TunnelTraffic;
+      const checkEndpoint = (endpoint: string) =>
+        checkCdpEndpoint(endpoint, tunnel, snapshot.settings);
+      const { cdp_endpoint, field, ...target } = snapshot.input;
+      const input = {
+        ...target,
+        endpoint: cdp_endpoint,
+        allowedOrigins: snapshot.origins,
+        checkEndpoint,
+      };
+      const now = yield* Clock.currentTimeMillis;
+      const result = yield* Effect.tryPromise({
+        try: async () => {
+          if (capture) {
+            const { value, ...page } = await readField(input);
+            return { ...page, value: Redacted.make(value) };
+          }
+          if (snapshot.value === undefined) throw notFound();
+          const value =
+            field === "totp"
+              ? totpCode(Redacted.value(snapshot.value), now).code
+              : Redacted.value(snapshot.value);
+          return { ...(await fillField({ ...input, value })), value: Redacted.make("") };
+        },
+        catch: cdpFailure,
+      });
+      return yield* run("credential_fill", inboxId, (db, completedAt) => {
+        const current = credentialWire(db, getCredential(db, id, inboxId));
+        if (!current.origins.includes(result.origin))
+          throw wireError(
+            "missing_permission",
+            "The credential's allowed origins changed during the browser operation.",
+            "Check the credential origins before retrying.",
+          );
+        const timestamp = new Date(completedAt).toISOString();
+        if (capture) {
+          changeFields(db, id, { fields: { [field]: Redacted.value(result.value) } }, timestamp);
+          db.prepare("UPDATE credentials SET updated_at = ? WHERE credential_id = ?").run(
+            timestamp,
+            id,
+          );
+        }
+        db.prepare("UPDATE credentials SET last_used_at = ? WHERE credential_id = ?").run(
+          timestamp,
+          id,
+        );
+        const credential = { credential_id: id, inbox_id: inboxId, field, origin: result.origin };
+        appendEvent(
+          db,
+          capture
+            ? {
+                type: "event",
+                event_type: "credential.captured",
+                event_id: randomUUID(),
+                credential,
+              }
+            : {
+                type: "event",
+                event_type: "credential.used",
+                event_id: randomUUID(),
+                credential: { ...credential, via: "fill" },
+              },
+          completedAt,
+        );
+        const filled: FillCredentialResponse = {
+          credential_id: id,
+          field,
+          origin: result.origin,
+          url: result.url,
+        };
+        return { filled, credential: credentialWire(db, getCredential(db, id, inboxId)) };
+      });
+    });
+  }
+
+  function ownerSettings(request?: VaultSettings) {
+    return Effect.gen(function* () {
+      const principal = yield* CurrentPrincipal;
+      if (principal.kind !== "owner")
+        return yield* Effect.fail(
+          wireError(
+            "missing_permission",
+            "Vault settings require owner authentication.",
+            "Sign in as the local owner.",
+          ),
+        );
+      return yield* run("credential_read", undefined, (db) => {
+        if (request !== undefined) {
+          const input = validateInput(VaultSettings, request);
+          db.prepare(`INSERT INTO vault_settings (id, remote_cdp_hosts) VALUES (1, ?)
+            ON CONFLICT(id) DO UPDATE SET remote_cdp_hosts = excluded.remote_cdp_hosts`).run(
+            JSON.stringify(input.remote_cdp_hosts),
+          );
+        }
+        return settings(db);
+      });
+    });
+  }
+
   return {
+    fill: (id: string, request: FillCredentialRequest, inboxId: string) =>
+      useCredential(id, request, inboxId, false).pipe(Effect.map((result) => result.filled)),
+    capture: (id: string, request: CaptureCredentialRequest, inboxId: string) =>
+      useCredential(id, request, inboxId, true).pipe(Effect.map((result) => result.credential)),
+    settings: () => ownerSettings(),
+    setSettings: (request: VaultSettings) => ownerSettings(request),
     list: (request: ListCredentialsQuery = {}, inboxId?: string) =>
       run("credential_read", inboxId, (db, _now, principal): ListCredentialsResponse => {
         const query = validateInput(ListCredentialsQuery, request);
