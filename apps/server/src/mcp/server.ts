@@ -659,12 +659,12 @@ export const McpTools = (origin: string) =>
     }),
   );
 
-export function mcpRoutes(origin: string) {
+export function mcpRoutes(origin: string, version: string) {
   return McpTools(origin).pipe(
     Layer.provide(
       McpServer.layerHttp({
         name: "inbot",
-        version: "0.1.0",
+        version,
         path: "/mcp",
         protocols: [McpProtocol.v2025_06_18],
         allowedOrigins: [origin],

@@ -180,21 +180,18 @@ export function startHttpServer(
     const oauth = Context.get(context, OAuth);
     const sessions = Context.get(context, OwnerSessions);
     const shared = AgentOperations.Live.pipe(Layer.provideMerge(Layer.succeedContext(context)));
+    const version = yield* Effect.promise(() => packageVersion());
     const handlers = Layer.mergeAll(
       HandlersLive,
       QuarantineHandlers,
-      ownerHandlers(
-        url,
-        options.updates ??
-          updateState(home.path, yield* Effect.promise(() => packageVersion()), false),
-      ),
+      ownerHandlers(url, options.updates ?? updateState(home.path, version, false)),
       RemoteHandlers,
       OAuthHandlers,
     ).pipe(Layer.provide(Layer.mergeAll(AuthLive, OwnerOnlyLive, WireErrorsLive)));
     const routes = Layer.mergeAll(
       HttpApiBuilder.layer(ServerApi).pipe(Layer.provide(handlers)),
       DownloadRoutes,
-      mcpRoutes(url),
+      mcpRoutes(url, version),
       oauthRoutes(url, options.webRoot),
     ).pipe(Layer.provide(shared));
     const app = yield* HttpRouter.toHttpEffect(routes).pipe(
