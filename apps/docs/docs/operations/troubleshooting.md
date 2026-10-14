@@ -90,11 +90,13 @@ Additional startup codes are `home_unavailable`, `key_storage_unavailable`, `dat
 
 ## Domains
 
-| Symptom                                             | Cause and fix                                                                                                                                                                                        |
-| --------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Stuck in `VERIFYING`                                | Waiting for public DNS or the encrypted self-test arrival. Verification can take about ten minutes or longer; the self-test retries every five minutes. Check record states and the reported reason. |
-| `FAILED` with `action_required`                     | Read `reason`. Common causes: apex mail records changed during apply, an existing routing rule for an address, or a missing token permission.                                                        |
-| `missing_permission` naming a Cloudflare permission | The token lacks it or does not cover the zone. Save a replacement token.                                                                                                                             |
+| Symptom                                             | Cause and fix                                                                                                                                                                                                                    |
+| --------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Stuck in `VERIFYING`                                | Check record states and the reported reason. Inbot queries authoritative nameservers directly; valid DNS still needs an observed encrypted self-test arrival. The self-test retries every five minutes.                          |
+| Records show **Unverified** (`UNKNOWN`)             | DNS could not be confirmed. Check outbound DNS connectivity (UDP/TCP port 53) and HTTPS access to `cloudflare-dns.com`, then retry verification. Empty recursive fallback answers may be cached and are not reported as missing. |
+| Records show **Missing** or **Invalid**             | The authoritative answer is empty or the returned value does not match. Check the record name, type, value and MX priority in the active zone. A nonempty DoH fallback answer can also report a mismatched value as invalid.     |
+| `FAILED` with `action_required`                     | Read `reason`. Common causes: apex mail records changed during apply, an existing routing rule for an address, or a missing token permission.                                                                                    |
+| `missing_permission` naming a Cloudflare permission | The token lacks it or does not cover the zone. Save a replacement token.                                                                                                                                                         |
 
 ## Webhooks
 

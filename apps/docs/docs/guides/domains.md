@@ -34,7 +34,7 @@ Inbot does not touch your apex mail. Before every step that can affect DNS, it s
 
 ## Register and review
 
-Select **Preview plan** to review, then **Apply automatically via Cloudflare** to provision. The screen distinguishes unprovisioned registrations, operations in progress, DNS propagation, the self-test and observed verification.
+Select **Preview plan** to review, then **Apply automatically via Cloudflare** to provision. The screen distinguishes unprovisioned registrations, operations in progress, DNS checks, the self-test and observed verification.
 
 Registering only records the domain; nothing changes in Cloudflare yet. The domain starts as `NOT_STARTED`.
 
@@ -65,13 +65,13 @@ Apply is resumable. Every created resource is written to a ledger first, so afte
 
 ## Verification
 
-After apply, the domain is `VERIFYING`. The service checks every DNS record through public DNS-over-HTTPS. Each record is `MISSING`, `INVALID` or `VALID`. Once all are valid, Inbot:
+After apply, the domain is `VERIFYING`. The service resolves the known zone's nameservers and checks each DNS record directly against them. Each record is `MISSING`, `INVALID`, `VALID` or `UNKNOWN` (shown as **Unverified**). If the authoritative lookup fails, Inbot falls back to public DNS-over-HTTPS. Lookup failures and empty fallback answers stay `UNKNOWN`; they do not prove a record is missing. Once all are valid, Inbot:
 
 1. Adds a temporary routing rule for `inbot-selftest@<subdomain>`.
 2. Sends a message to that address with a random token.
 3. Waits for the encrypted message to arrive through the Worker, R2 and the Queue, and checks the token, sender and recipient.
 
-Verification can take about ten minutes or longer, depending on public DNS propagation and the encrypted test arrival.
+Records can become valid on the next verification check once the authoritative nameservers serve them, without waiting for recursive negative caches to expire. There is no fixed verification duration: DNS connectivity, nameserver updates and the encrypted test arrival can still delay completion. Other mail senders and the DoH fallback may still use cached DNS answers.
 
 Only then does the domain become `VERIFIED` and emit a `domain.verified` event. Provider status alone is never enough. If nothing arrives, the self-test is retried after five minutes. The self-test message is not stored as mail, and `inbot-selftest` cannot be used as an inbox name.
 
@@ -79,7 +79,7 @@ Only then does the domain become `VERIFIED` and emit a `domain.verified` event. 
 | ------------- | ----------------------------------------------------------------- |
 | `NOT_STARTED` | Registered, nothing provisioned                                   |
 | `PENDING`     | Apply or teardown is running                                      |
-| `VERIFYING`   | Provisioned; waiting for DNS propagation or the self-test         |
+| `VERIFYING`   | Provisioned; waiting for valid DNS answers or the self-test       |
 | `VERIFIED`    | DNS is valid and an encrypted test message arrived                |
 | `FAILED`      | Stopped with `action_required`; `reason` says what you need to do |
 

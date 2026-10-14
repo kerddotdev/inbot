@@ -19,6 +19,7 @@ import {
 
 type StatusDisplay = { tone: Tone; icon: IconName; label: string };
 const recordDisplay: Record<RecordStatus, StatusDisplay> = {
+  UNKNOWN: { tone: "mute", icon: "minus-circle", label: "Unverified" },
   VALID: { tone: "ok", icon: "check-circle", label: "Valid" },
   MISSING: { tone: "warn", icon: "minus-circle", label: "Missing" },
   INVALID: { tone: "bad", icon: "x-circle", label: "Invalid" },

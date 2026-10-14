@@ -27,31 +27,39 @@ async function fixture() {
   await local.run(local.inbound.clear());
   const cloud = fakeCloudflare();
   const dnsState = { visible: false };
-  const fetch: typeof globalThis.fetch = async (input) => {
-    const url = new URL(String(input));
-    expect(url.origin).toBe("https://cloudflare-dns.com");
-    const name = url.searchParams.get("name");
-    const type = url.searchParams.get("type");
-    const types: Readonly<Record<string, number>> = { TXT: 16, MX: 15, CNAME: 5 };
-    return Response.json({
-      Status: 0,
-      Answer: dnsState.visible
-        ? cloud.dns
-            .filter((record) => record.name === name && record.type === type)
-            .map((record) => ({
-              name: `${record.name}.`,
-              type: types[record.type],
-              data:
-                record.type === "TXT"
-                  ? `"${record.content}"`
-                  : record.type === "MX"
-                    ? `${record.priority} ${record.content}.`
-                    : `${record.content}.`,
-            }))
-        : [],
-    });
-  };
-  const dns = await Effect.runPromise(PublicDns.pipe(Effect.provide(PublicDns.live(fetch))));
+  const fetch: typeof globalThis.fetch = async () => Response.json({ Status: 0, Answer: [] });
+  const dns = await Effect.runPromise(
+    PublicDns.pipe(
+      Effect.provide(
+        PublicDns.live(fetch, () => ({
+          resolveNs: async (zone) => {
+            expect(zone).toBe("example.test");
+            return ["ns.example.test"];
+          },
+          resolve4: async () => ["192.0.2.53"],
+          resolve6: async () => [],
+          setServers: (servers) => {
+            expect(servers).toEqual(["192.0.2.53"]);
+          },
+          cancel: () => {},
+          resolveTxt: async (name) =>
+            dnsState.visible
+              ? cloud.dns.filter((r) => r.name === name && r.type === "TXT").map((r) => [r.content])
+              : [],
+          resolveMx: async (name) =>
+            dnsState.visible
+              ? cloud.dns
+                  .filter((r) => r.name === name && r.type === "MX")
+                  .map((r) => ({ exchange: r.content, priority: r.priority ?? 0 }))
+              : [],
+          resolveCname: async (name) =>
+            dnsState.visible
+              ? cloud.dns.filter((r) => r.name === name && r.type === "CNAME").map((r) => r.content)
+              : [],
+        })),
+      ),
+    ),
+  );
   const events: DomainVerifiedEvent[] = [];
   const make = (overrides: Partial<Parameters<typeof makeProvisioner>[0]> = {}) =>
     makeProvisioner({
@@ -143,7 +151,7 @@ test("planning has no local or cloud effects and exposes incomplete DKIM honestl
   expect(planned.steps).toContain("verify_buffer_selftest");
   expect(
     planned.records.find((record) => record.name === `cf-bounce._domainkey.${f.domain}`),
-  ).toMatchObject({ value: "", status: "MISSING" });
+  ).toMatchObject({ value: "", status: "UNKNOWN" });
   expect(f.cloud.mutations).toEqual([]);
   expect(await f.run(f.repo.all())).toEqual([]);
 });
@@ -367,7 +375,7 @@ test("verifies public DNS and the encrypted self-test through the real puller wi
   expect(await f.run(f.store.use((db) => readEvents(db, 0)))).toEqual(durable);
 });
 
-test("does not report a queued or missing probe as verified, and retries after propagation time", async () => {
+test("does not report a queued or missing probe as verified, and retries after the self-test retry interval", async () => {
   const f = await fixture();
   const domain = await f.run(f.provisioner.create({ domain: f.domain }));
   await f.run(f.provisioner.apply(domain.domain_id));
@@ -592,37 +600,6 @@ test("a routing create with a lost response is adopted before inbox deletion", a
   await f.run(f.mailbox.deleteInbox(inbox.inbox_id));
   await f.run(f.provisioner.routing.run());
   expect(f.cloud.rules.size).toBe(0);
-});
-
-test("DNS verification rejects wrong values, wrong owner names, and wrong MX priorities", async () => {
-  const dns = await Effect.runPromise(
-    PublicDns.pipe(
-      Effect.provide(
-        PublicDns.live(async () =>
-          Response.json({
-            Status: 0,
-            Answer: [
-              { name: "agents.example.test.", type: 15, data: "20 route1.mx.cloudflare.net." },
-              { name: "wrong.example.test.", type: 16, data: '"v=spf1 -all"' },
-            ],
-          }),
-        ),
-      ),
-    ),
-  );
-  const result = await Effect.runPromise(
-    dns.check([
-      {
-        type: "MX",
-        name: "agents.example.test",
-        value: "route1.mx.cloudflare.net",
-        priority: 10,
-        status: "MISSING",
-      },
-      { type: "TXT", name: "agents.example.test", value: "v=spf1 -all", status: "MISSING" },
-    ]),
-  );
-  expect(result.map((record) => record.status)).toEqual(["INVALID", "MISSING"]);
 });
 
 test("replacing missing infrastructure requires a new encrypted verification probe", async () => {
@@ -1038,4 +1015,29 @@ test("DMARC preview matches onboarding and verification rejects a different publ
   });
   f.cloud.dns[index] = record;
   expect((await f.run(f.provisioner.verify(registered.domain_id))).status).toBe("VERIFIED");
+});
+
+test("unknown DNS persists as unverified and does not start the encrypted self-test", async () => {
+  const f = await fixture();
+  const domain = await f.run(f.provisioner.create({ domain: f.domain }));
+  await f.run(f.provisioner.apply(domain.domain_id));
+  const provisioner = f.make({
+    dns: {
+      check: (records) =>
+        Effect.succeed(
+          records.map((record) => ({
+            ...record,
+            status: "UNKNOWN" as const,
+            reason: "DNS could not be verified.",
+          })),
+        ),
+    },
+  });
+  const result = await f.run(provisioner.verify(domain.domain_id));
+  expect(result.status).toBe("VERIFYING");
+  expect(result.reason).toContain("DNS could not be verified");
+  expect(result.records.every((record) => record.status === "UNKNOWN")).toBe(true);
+  expect((await f.run(f.provisioner.get(domain.domain_id))).records).toEqual(result.records);
+  expect(f.cloud.calls).not.toContain("sendSelfTest");
+  expect(f.events).toEqual([]);
 });

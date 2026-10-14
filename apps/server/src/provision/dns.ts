@@ -1,3 +1,4 @@
+import { Resolver } from "node:dns/promises";
 import { Context, Effect, Layer, Schema } from "effect";
 import type { VerificationRecord } from "../../../../packages/contracts/src/domains.js";
 import type { DnsRecord } from "./cloudflare-api.js";
@@ -47,64 +48,161 @@ export function verificationRecords(records: readonly DnsRecord[]): Verification
         type: record.type,
         name: record.name,
         value: record.content,
-        status: "MISSING",
+        status: "UNKNOWN",
         ...(record.priority === undefined ? {} : { priority: record.priority }),
       },
     ];
   });
 }
+export type DnsResolver = Pick<
+  Resolver,
+  "resolveNs" | "resolveTxt" | "resolveMx" | "resolveCname" | "setServers" | "cancel"
+> & {
+  resolve4: (hostname: string) => Promise<string[]>;
+  resolve6: (hostname: string) => Promise<string[]>;
+};
+
+const makeResolver = (): DnsResolver => new Resolver({ timeout: 2000, tries: 1 });
+
+function withResolver<A>(
+  createResolver: () => DnsResolver,
+  run: (resolver: DnsResolver) => Promise<A>,
+) {
+  return Effect.tryPromise({
+    try: async (signal) => {
+      const resolver = createResolver();
+      const cancel = () => resolver.cancel();
+      signal.addEventListener("abort", cancel, { once: true });
+      try {
+        signal.throwIfAborted();
+        return await run(resolver);
+      } finally {
+        signal.removeEventListener("abort", cancel);
+        resolver.cancel();
+      }
+    },
+    catch: () => unavailable(),
+  }).pipe(
+    Effect.timeoutOrElse({ duration: "5 seconds", orElse: () => Effect.fail(unavailable()) }),
+  );
+}
+
+function noRecords(error: unknown) {
+  return (
+    error instanceof Error &&
+    "code" in error &&
+    (error.code === "ENODATA" || error.code === "ENOTFOUND")
+  );
+}
+
+function recordResult(record: VerificationRecord, answers: readonly string[]): VerificationRecord {
+  const { reason: _reason, ...current } = record;
+  const expected =
+    record.type === "MX"
+      ? `${record.priority ?? 0} ${normalizeDns(record.value, "MX")}`
+      : normalizeDns(record.value, record.type);
+  return {
+    ...current,
+    status: answers.includes(expected) ? "VALID" : answers.length ? "INVALID" : "MISSING",
+  };
+}
+
 export class PublicDns extends Context.Service<
   PublicDns,
   {
     readonly check: (
       records: readonly VerificationRecord[],
+      zone: string,
     ) => Effect.Effect<readonly VerificationRecord[], import("./errors.js").ProvisionError>;
   }
 >()("inbot/PublicDns") {
-  static live(fetch: typeof globalThis.fetch = globalThis.fetch) {
+  static live(
+    fetch: typeof globalThis.fetch = globalThis.fetch,
+    createResolver: () => DnsResolver = makeResolver,
+  ) {
     return Layer.succeed(PublicDns, {
-      check: (records) =>
-        Effect.forEach(
-          records,
-          (record) =>
-            Effect.tryPromise({
-              try: async (signal): Promise<VerificationRecord> => {
-                if (record.value === "") return { ...record, status: "MISSING" };
-                const params = new URLSearchParams({ name: record.name, type: record.type });
-                const response = await fetch(`https://cloudflare-dns.com/dns-query?${params}`, {
-                  signal,
-                  redirect: "error",
-                  headers: { Accept: "application/dns-json" },
-                });
-                if (!response.ok) throw unavailable();
-                const result = Schema.decodeUnknownSync(ResponseSchema)(await response.json());
-                if (result.Status !== 0 && result.Status !== 3) throw unavailable();
-                const answers = (result.Answer ?? []).filter(
-                  (answer) =>
-                    answer.type === dnsTypes[record.type] &&
-                    normalizeDns(answer.name, "CNAME") === normalizeDns(record.name, "CNAME"),
-                );
-                const expected =
-                  record.type === "MX"
-                    ? `${record.priority ?? 0} ${normalizeDns(record.value, "MX")}`
-                    : normalizeDns(record.value, record.type);
-                const valid =
-                  result.Status === 0 &&
-                  answers.some((answer) => normalizeDns(answer.data, record.type) === expected);
-                return {
-                  ...record,
-                  status: valid ? "VALID" : answers.length ? "INVALID" : "MISSING",
-                };
-              },
-              catch: () => unavailable(),
-            }).pipe(
-              Effect.timeoutOrElse({
-                duration: "10 seconds",
-                orElse: () => Effect.fail(unavailable()),
-              }),
-            ),
-          { concurrency: 4 },
-        ),
+      check: (records, zone) =>
+        Effect.gen(function* () {
+          if (records.length === 0) return [];
+          const servers = yield* withResolver(createResolver, async (resolver) => {
+            const names = await resolver.resolveNs(zone);
+            const addresses = await Promise.allSettled(
+              names.flatMap((name) => [resolver.resolve4(name), resolver.resolve6(name)]),
+            );
+            const ips = addresses.flatMap((result) =>
+              result.status === "fulfilled" ? result.value : [],
+            );
+            if (ips.length === 0) throw unavailable();
+            return ips;
+          }).pipe(Effect.catch(() => Effect.succeed(undefined)));
+          return yield* Effect.forEach(
+            records,
+            (record) => {
+              if (record.value === "") return Effect.succeed(record);
+              const authoritative = withResolver(createResolver, async (resolver) => {
+                if (servers === undefined) throw unavailable();
+                resolver.setServers(servers);
+                try {
+                  const answers =
+                    record.type === "TXT"
+                      ? (await resolver.resolveTxt(record.name)).map((chunks) => chunks.join(""))
+                      : record.type === "MX"
+                        ? (await resolver.resolveMx(record.name)).map(
+                            (mx) => `${mx.priority} ${normalizeDns(mx.exchange, "MX")}`,
+                          )
+                        : (await resolver.resolveCname(record.name)).map((name) =>
+                            normalizeDns(name, "CNAME"),
+                          );
+                  return recordResult(record, answers);
+                } catch (error) {
+                  if (noRecords(error)) return recordResult(record, []);
+                  throw error;
+                }
+              });
+              const fallback = Effect.tryPromise({
+                try: async (signal): Promise<VerificationRecord> => {
+                  const params = new URLSearchParams({ name: record.name, type: record.type });
+                  const response = await fetch(`https://cloudflare-dns.com/dns-query?${params}`, {
+                    signal,
+                    redirect: "error",
+                    headers: { Accept: "application/dns-json" },
+                  });
+                  if (!response.ok) throw unavailable();
+                  const result = Schema.decodeUnknownSync(ResponseSchema)(await response.json());
+                  if (result.Status !== 0) throw unavailable();
+                  const answers = (result.Answer ?? [])
+                    .filter(
+                      (answer) =>
+                        answer.type === dnsTypes[record.type] &&
+                        normalizeDns(answer.name, "CNAME") === normalizeDns(record.name, "CNAME"),
+                    )
+                    .map((answer) => normalizeDns(answer.data, record.type));
+                  // A recursive negative answer may predate provisioning. It cannot prove absence.
+                  if (answers.length === 0) throw unavailable();
+                  return recordResult(record, answers);
+                },
+                catch: () => unavailable(),
+              }).pipe(
+                Effect.timeoutOrElse({
+                  duration: "5 seconds",
+                  orElse: () => Effect.fail(unavailable()),
+                }),
+              );
+              return authoritative.pipe(
+                Effect.catch(() => fallback),
+                Effect.catch(() =>
+                  Effect.succeed({
+                    ...record,
+                    status: "UNKNOWN" as const,
+                    reason:
+                      "DNS could not be verified. Check DNS connectivity and retry verification.",
+                  }),
+                ),
+              );
+            },
+            { concurrency: 4 },
+          );
+        }),
     });
   }
 }

@@ -16,7 +16,7 @@ export const RecordType = Schema.Literals(["TXT", "CNAME", "MX"]).annotate({
 });
 export type RecordType = typeof RecordType.Type;
 
-export const RecordStatus = Schema.Literals(["MISSING", "INVALID", "VALID"]).annotate({
+export const RecordStatus = Schema.Literals(["MISSING", "INVALID", "VALID", "UNKNOWN"]).annotate({
   identifier: "RecordStatus",
 });
 export type RecordStatus = typeof RecordStatus.Type;
