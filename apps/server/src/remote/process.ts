@@ -16,7 +16,7 @@ export const spawnConnector: ProcessSpawner = async (binary, token) => {
   try {
     await writeFile(tokenFile, token, { mode: 0o600, flag: "wx" });
   } catch (error) {
-    await rm(credentials, { recursive: true, force: true });
+    await rm(credentials, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     throw error;
   }
   let child: ReturnType<typeof spawn>;
@@ -45,7 +45,7 @@ export const spawnConnector: ProcessSpawner = async (binary, token) => {
       },
     );
   } catch (error) {
-    await rm(credentials, { recursive: true, force: true });
+    await rm(credentials, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     throw error;
   }
   let metrics: string | undefined;
@@ -98,7 +98,7 @@ export const spawnConnector: ProcessSpawner = async (binary, token) => {
       exited = true;
       resolve();
     });
-  }).then(() => rm(credentials, { recursive: true, force: true }));
+  }).then(() => rm(credentials, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }));
   void closed.catch(() => {});
   try {
     await new Promise<void>((resolve, reject) => {
