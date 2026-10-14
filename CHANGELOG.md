@@ -2,6 +2,14 @@
 
 Published changes are recorded in [GitHub releases](https://github.com/kerddotdev/inbot/releases), with notes generated from merged pull requests. This file summarizes each release.
 
+## 0.1.1 - 2026-10-14
+
+- `inbot update` installs a newer release after verifying its checksum and, on macOS, its Developer ID signature, then restarts the background service. `inbot update --check` only reports whether an update exists.
+- The background service checks for new releases about every four hours and installs them automatically. Owners can turn this off with `inbot update --auto off` or in Settings, which also shows the last check and its result.
+- Domain verification asks the zone's authoritative nameservers, so records turn valid as soon as they exist instead of waiting out a resolver's negative cache. Lookup failures are reported as unknown rather than missing.
+- The Windows launcher can be replaced safely while it runs, and connector credential cleanup retries while Windows releases the files.
+- The MCP server reports the installed version.
+
 ## 0.1.0 - 2026-10-12
 
 - Self-hosted agent inboxes on custom domains, encrypted local SQLite storage, and OS-keychain-backed initialization and unlock.
