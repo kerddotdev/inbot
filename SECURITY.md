@@ -41,3 +41,24 @@ Out of scope:
 - Denial of service through traffic volume alone, or vulnerabilities in third-party services without an Inbot-specific impact
 
 Only test against machines, accounts, domains, and inboxes you own. Use synthetic mail and isolated homes; do not test against another owner's instance or mail infrastructure.
+
+## Release updates
+
+The local owner updater downloads releases only from `kerddotdev/inbot` on GitHub.
+It verifies the exact platform archive against `SHA256SUMS` before extraction and,
+on macOS, runs `codesign --verify --strict` on the bundled Node binary and requires
+Team ID `7LA5DMHTL9`. Verification failure prevents the launcher switch. The updater
+and release tooling share the checksum verifier. HTTPS and the GitHub release
+account remain trust boundaries: a checksum hosted beside an archive is not an
+independent publisher signature. macOS releases are signed and notarized during
+publication; the updater checks the Node signature, not a fresh notarization verdict
+or every native module individually. GitHub provenance attestations are published
+but must be verified separately with `gh attestation verify`.
+
+Automatic updates are enabled by default only for installed background services.
+The owner can disable them locally. Status and preference routes require owner
+credentials, enforce browser CSRF, and are excluded from the tunnel. There is no
+REST or MCP operation to install a release. Applying an automatic update waits
+for the existing shutdown path before switching versions and requesting a manager
+restart. Updates never downgrade; older packages are retained, but rollback after
+a database migration is unsupported.

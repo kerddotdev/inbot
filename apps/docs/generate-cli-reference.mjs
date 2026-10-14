@@ -44,6 +44,7 @@ const order = [
   "transport",
   "quarantine",
   "service",
+  "update",
 ];
 const groups = new Map(order.map((group) => [group, []]));
 for (const command of commands) {

@@ -52,3 +52,39 @@ gh attestation verify ./inbot-<version>-<target>.tar.gz --repo kerddotdev/inbot
 ```
 
 Replace the placeholders with the downloaded filename; Windows archives use `.zip`. You can verify `SHA256SUMS` with the same command. The [GitHub CLI reference](https://cli.github.com/manual/gh_attestation_verify) explains the verification output and authentication requirements. The installer does not perform attestation verification. Apple signing and notarization, checksums and provenance protect different boundaries; none substitutes for an independent audit.
+
+## Runtime updates
+
+`inbot update` and the automatic service updater share release lookup, semantic
+version ordering, SHA-256 verification, staging, layout validation and launcher
+activation. The release scripts import the same checksum verifier. Release lookup
+uses GitHub's stable latest release unless a version is explicitly requested.
+The runtime downloads only from `kerddotdev/inbot`; it has no configurable mirror.
+Tests inject fake network and process adapters instead.
+
+The updater requires the installer's `app/<version>` layout and archive marker.
+New installers record the shim in `installation.json`; older installations can
+identify it through PATH. Versions are installed alongside one another and the
+shim is replaced by a same-directory rename. A different archive under an existing
+version is rejected. Updates serialize through an install-root lock. An interrupted
+updater may leave `.update-lock`; remove it only after confirming no updater is
+running. Previous versions are never deleted automatically.
+
+On macOS, activation additionally requires `codesign --verify --strict` and
+`TeamIdentifier=7LA5DMHTL9` on the bundled Node binary. Local unsigned packages are
+therefore intentionally rejected by the updater. This is not a fresh notarization
+check and does not replace independent provenance verification. Neither the
+installers nor the updater automatically verifies GitHub attestations.
+
+Automatic checks run 30-60 seconds after service startup, then every 3.5-4 hours
+with jitter. A service host starts the version selected by the shim and provides
+an IPC channel identifying managed execution. The updater also observes the
+service registration before enabling its scheduler. It downloads while the server
+runs, then uses the existing scoped shutdown path before activating. Exit status
+75 asks launchd, systemd or Task Scheduler to restart the service. The bootstrap
+host's original package remains required until service reinstall rewrites its paths.
+The next successful server startup records `updated`; a restart request alone is
+only `restarting`. The latest check, result and failure are persisted in the home.
+
+Database migrations run on the new server's startup. Rollback to an older version
+after migration is unsupported, even though previous packages are retained.
