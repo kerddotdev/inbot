@@ -125,6 +125,19 @@ const paths = {
       <circle cx="8" cy="8" r="1.8" />
     </>
   ),
+  "eye-off": (
+    <>
+      <path d="M1.8 8S4 3.8 8 3.8 14.2 8 14.2 8 12 12.2 8 12.2 1.8 8 1.8 8z" />
+      <path d="M3 13L13 3" />
+    </>
+  ),
+  vault: (
+    <>
+      <rect x="2" y="3" width="12" height="10" rx="1.8" />
+      <circle cx="8.5" cy="8" r="2" />
+      <path d="M5 13v1M11 13v1M8.5 6v.1" />
+    </>
+  ),
   menu: <path d="M2.5 4.5h11M2.5 8h11M2.5 11.5h11" />,
 } satisfies Record<string, ReactNode>;
 

@@ -50,7 +50,7 @@ The list accepts at most 32 lowercase DNS hostnames or wildcard suffixes, with n
 IPs, ports or schemes. Wildcards require a subdomain; list an apex separately.
 An empty list disables remote fill and capture. Owners can replace or clear the
 list through local REST or `inbot vault settings show`/`set`. Agent credentials,
-tunnel requests and MCP cannot manage it. The Settings UI is deferred.
+tunnel requests and MCP cannot manage it. Settings > Remote browser hosts edits the list in the web UI.
 
 Tunnel endpoints must use HTTPS/WSS. All resolved addresses must be public;
 loopback, private, link-local, unique-local, CGNAT, multicast and reserved ranges
@@ -83,7 +83,7 @@ and migrated keys, including OAuth grants) or `direct`. Owners bypass it. Only
 browser fill and local credential resolution are gated; capture, metadata CRUD,
 password generation and the TOTP-code endpoint keep their existing permissions.
 The shared API key and OAuth consent editor lets owners choose either policy.
-The owner credential approval UI is deferred; use the owner REST or CLI routes.
+Approvals in the web UI lists and decides pending credential use requests; owner REST and CLI routes remain available.
 
 Approval grants must supply `Idempotency-Key` on fill/resolve, or `idempotencyKey`
 on MCP fill. The first call commits a pending request and
@@ -151,8 +151,8 @@ normal `credential.created` event with the usual shared-inbox visibility.
 Migration 19 creates `credential_requests` and indexes with `IF NOT EXISTS`.
 Owner fulfillment is blocked both at the tunnel boundary and in the service:
 Cloudflare terminates TLS at its edge, so secret input must stay on the host.
-Decline can use an owner browser session through the tunnel with CSRF. The web
-request/decision UI is deferred; local REST and CLI are available now.
+Decline can use an owner browser session through the tunnel with CSRF. Approvals in the
+local web UI fulfills and declines requests; REST and CLI also work.
 
 ## Bitwarden interoperability
 
@@ -184,5 +184,5 @@ REST import/export and their CLI commands require the local owner. Both routes
 are blocked by the tunnel even for owner browser sessions because Cloudflare
 terminates TLS at its edge. They have no MCP tools. Export returns
 `Cache-Control: no-store`; exported files contain plaintext secrets and are
-explicit owner-controlled copies outside the encrypted database. Web UI support
-is deferred to the vault UI change.
+explicit owner-controlled copies outside the encrypted database. The Vault screen exports
+and imports through the same routes.

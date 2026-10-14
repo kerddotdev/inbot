@@ -1,5 +1,10 @@
 import { useMemo, useSyncExternalStore } from "react";
 
+export type ApprovalSelection = {
+  kind: "draft" | "credential-use" | "credential-request";
+  id: string;
+};
+
 export type Route =
   | { name: "setup" }
   | { name: "login" }
@@ -9,7 +14,8 @@ export type Route =
       inboxId: string | undefined;
       threadId: string | undefined;
     }
-  | { name: "approvals"; draftId: string | undefined }
+  | { name: "approvals"; selection: ApprovalSelection | undefined }
+  | { name: "vault"; inboxId: string | undefined; credentialId: string | undefined }
   | { name: "domains" }
   | { name: "keys" }
   | { name: "remote" }
@@ -25,6 +31,12 @@ export const links = {
       : "#/inbox",
   approvals: (draftId?: string) =>
     draftId ? `#/approvals/${encodeURIComponent(draftId)}` : "#/approvals",
+  credentialUse: (id: string) => `#/approvals/credential-use/${encodeURIComponent(id)}`,
+  credentialRequest: (id: string) => `#/approvals/credential-request/${encodeURIComponent(id)}`,
+  vault: (inboxId?: string, credentialId?: string) =>
+    inboxId && credentialId
+      ? `#/vault/${encodeURIComponent(inboxId)}/${encodeURIComponent(credentialId)}`
+      : "#/vault",
   domains: "#/domains",
   keys: "#/keys",
   remote: "#/remote",
@@ -54,7 +66,14 @@ export function parseRoute(hash: string): Route | undefined {
     case "inbox":
       return { name: "inbox", inboxId: first || undefined, threadId: second };
     case "approvals":
-      return { name: "approvals", draftId: first };
+      if (first === "credential-use" || first === "credential-request")
+        return {
+          name: "approvals",
+          selection: second ? { kind: first, id: second } : undefined,
+        };
+      return { name: "approvals", selection: first ? { kind: "draft", id: first } : undefined };
+    case "vault":
+      return { name: "vault", inboxId: first || undefined, credentialId: second || undefined };
     default:
       return undefined;
   }

@@ -81,6 +81,39 @@ const cases: readonly { event: Event; changed: readonly string[] }[] = [
     },
     changed: ["domains", "inboxes"],
   },
+  {
+    event: {
+      type: "event",
+      event_type: "credential.updated",
+      event_id: "credential",
+      credential: { credential_id: "c1", inbox_id: "agent@example.test", fields: ["password"] },
+    },
+    changed: ["credentials"],
+  },
+  {
+    event: {
+      type: "event",
+      event_type: "credential.use_requested",
+      event_id: "use",
+      credential_use: {
+        request_id: "r1",
+        inbox_id: "agent@example.test",
+        kind: "fill",
+        credential_ids: ["c1"],
+        fields: ["password"],
+      },
+    },
+    changed: ["approvals", "credentials"],
+  },
+  {
+    event: {
+      type: "event",
+      event_type: "credential.requested",
+      event_id: "request",
+      credential_request: { request_id: "q1", inbox_id: "agent@example.test", fields: ["totp"] },
+    },
+    changed: ["approvals", "credentials"],
+  },
 ];
 
 test.each(cases)("$event.event_type invalidates affected query caches", ({ event, changed }) => {
@@ -90,6 +123,7 @@ test.each(cases)("$event.event_type invalidates affected query caches", ({ event
     "threads",
     "thread",
     "approvals",
+    "credentials",
     "draft",
     "drafts",
     "domains",

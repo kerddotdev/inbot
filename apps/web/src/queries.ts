@@ -1,5 +1,5 @@
 import { queryOptions } from "@tanstack/react-query";
-import { api, type ListSelection } from "./api";
+import { api, type CredentialFilter, type CredentialRef, type ListSelection } from "./api";
 
 export const quarantineQuery = (pageToken: string | null) =>
   queryOptions({
@@ -91,4 +91,36 @@ export const updatesQuery = queryOptions({
   queryFn: ({ signal }) => api.updates(signal),
   staleTime: 0,
   refetchInterval: 30_000,
+});
+
+export const credentialsQuery = (filter: CredentialFilter) =>
+  queryOptions({
+    queryKey: ["credentials", "list", filter],
+    queryFn: ({ signal }) => api.credentials(filter, signal),
+    staleTime: 0,
+  });
+
+export const credentialQuery = (credential: CredentialRef) =>
+  queryOptions({
+    queryKey: ["credentials", "detail", credential.inbox_id, credential.credential_id],
+    queryFn: ({ signal }) => api.credential(credential, signal),
+    staleTime: 0,
+  });
+
+export const vaultSettingsQuery = queryOptions({
+  queryKey: ["vault-settings"],
+  queryFn: ({ signal }) => api.vaultSettings(signal),
+  staleTime: 0,
+});
+
+export const credentialUseQuery = queryOptions({
+  queryKey: ["approvals", "credential-use"],
+  queryFn: ({ signal }) => api.pendingCredentialUse(signal),
+  staleTime: 0,
+});
+
+export const credentialRequestsQuery = queryOptions({
+  queryKey: ["approvals", "credential-requests"],
+  queryFn: ({ signal }) => api.pendingCredentialRequests(signal),
+  staleTime: 0,
 });

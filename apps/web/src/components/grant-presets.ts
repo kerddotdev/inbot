@@ -55,3 +55,33 @@ export function permissionPreset(permissions: Permissions): PermissionPreset | "
     }) ?? "custom"
   );
 }
+
+const vaultPermissionLabels: Readonly<Record<string, string>> = {
+  credential_read: "Read metadata",
+  credential_create: "Create",
+  credential_update: "Update",
+  credential_delete: "Delete",
+  credential_totp: "TOTP codes",
+  credential_fill: "Fill and capture in browser",
+  credential_run: "Use in local commands",
+  credential_request: "Request from owner",
+};
+
+export function permissionGroups(names: readonly string[]) {
+  const vault = names.filter((name) => name.startsWith("credential_"));
+  return [
+    {
+      title: "Mail",
+      items: names
+        .filter((name) => !name.startsWith("credential_"))
+        .map((name) => ({ name, label: name.replaceAll("_", " ") })),
+    },
+    {
+      title: "Vault",
+      items: vault.map((name) => ({
+        name,
+        label: vaultPermissionLabels[name] ?? name.replaceAll("_", " "),
+      })),
+    },
+  ];
+}

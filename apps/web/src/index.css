@@ -87,3 +87,9 @@
     transition: none !important;
   }
 }
+
+@keyframes drain {
+  to {
+    transform: scaleX(0);
+  }
+}

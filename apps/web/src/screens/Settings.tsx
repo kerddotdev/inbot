@@ -13,6 +13,7 @@ import { ErrorNotice, LoadError } from "../feedback";
 import { transportQuery } from "../queries";
 import { readTheme, writeTheme, type ThemeChoice } from "../theme";
 import { ListManagement } from "./ListManagement";
+import { RemoteBrowserHosts } from "./vault/RemoteBrowserHosts";
 
 const choices: { value: ThemeChoice; label: string }[] = [
   { value: "system", label: "System" },
@@ -244,6 +245,7 @@ export function Settings() {
       <UpdatesSettings />
       <MailTransport />
       <ListManagement />
+      <RemoteBrowserHosts />
       <Quarantine />
       <WebhooksSettings />
     </Page>
