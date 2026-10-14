@@ -102,13 +102,10 @@ try {
     $ShimTemp = Join-Path $BinDir ([System.IO.Path]::GetRandomFileName())
     $ShimContent = @"
 @echo off
-setlocal
+setlocal DisableDelayedExpansion
 for /f "tokens=2 delims=:" %%C in ('chcp') do set "INBOT_PREVIOUS_CODEPAGE=%%C"
 chcp 65001 >nul
-"$Destination\runtime\node.exe" "$Destination\application\dist\apps\cli\src\main.js" %*
-set "INBOT_EXIT_CODE=%errorlevel%"
-chcp %INBOT_PREVIOUS_CODEPAGE% >nul
-exit /b %INBOT_EXIT_CODE%
+"$Destination\runtime\node.exe" "$Destination\application\dist\apps\cli\src\main.js" %* & call set "INBOT_EXIT_CODE=%%errorlevel%%" & chcp %INBOT_PREVIOUS_CODEPAGE% >nul & call exit /b %%INBOT_EXIT_CODE%%
 "@
     [System.IO.File]::WriteAllText($ShimTemp, ($ShimContent -replace "`r?`n", "`r`n"), [System.Text.UTF8Encoding]::new($false))
     Move-Item -LiteralPath $ShimTemp -Destination $Shim -Force

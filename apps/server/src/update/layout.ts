@@ -26,7 +26,9 @@ export function renderShim(bundle: string, windows: boolean): string {
   if (windows) {
     if (/[\r\n%"!]/.test(bundle)) throw new UpdateError("Unsupported installation path.");
     const { executable, cli } = bundlePaths(bundle, true);
-    return `@echo off\r\nsetlocal\r\nfor /f "tokens=2 delims=:" %%C in ('chcp') do set "INBOT_PREVIOUS_CODEPAGE=%%C"\r\nchcp 65001 >nul\r\n"${executable}" "${cli}" %*\r\nset "INBOT_EXIT_CODE=%errorlevel%"\r\nchcp %INBOT_PREVIOUS_CODEPAGE% >nul\r\nexit /b %INBOT_EXIT_CODE%\r\n`;
+    // cmd.exe must parse the exit before Node can replace this file. CALL expands
+    // the exit code after Node returns without enabling expansion of ! in arguments.
+    return `@echo off\r\nsetlocal DisableDelayedExpansion\r\nfor /f "tokens=2 delims=:" %%C in ('chcp') do set "INBOT_PREVIOUS_CODEPAGE=%%C"\r\nchcp 65001 >nul\r\n"${executable}" "${cli}" %* & call set "INBOT_EXIT_CODE=%%errorlevel%%" & chcp %INBOT_PREVIOUS_CODEPAGE% >nul & call exit /b %%INBOT_EXIT_CODE%%\r\n`;
   }
   if (/[\r\n"`$\\]/.test(bundle)) throw new UpdateError("Unsupported installation path.");
   return `#!/bin/sh\nexec "${join(bundle, "inbot")}" "$@"\n`;
@@ -35,7 +37,7 @@ export function renderShim(bundle: string, windows: boolean): string {
 export async function activeBundle(layout: Pick<InstalledLayout, "root" | "shim" | "windows">) {
   const text = await readFile(layout.shim, "utf8");
   const destination = layout.windows
-    ? text.match(/^"(.+)\\runtime\\node.exe" ".+" %\*\r?$/m)?.[1]
+    ? text.match(/^"(.+)\\runtime\\node.exe" ".+" %\* & call set .+\r?$/m)?.[1]
     : text.match(/^exec "(.+)\/inbot" "\$@"$/m)?.[1];
   if (
     !destination ||
