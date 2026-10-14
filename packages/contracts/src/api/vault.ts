@@ -109,5 +109,10 @@ export const CredentialsApi = HttpApiGroup.make("credentials")
       success: Vault.ListCredentialsResponse,
       error: Errors.ListErrors,
     }).annotate(RequiredPermission, "credential_read"),
+    HttpApiEndpoint.post("credentials_resolve", "/v0/credentials/resolve", {
+      payload: Vault.ResolveCredentialsRequest,
+      success: Vault.ResolveCredentialsResponse,
+      error: Errors.WriteErrors,
+    }).annotate(RequiredPermission, "credential_run"),
   )
   .middleware(BearerAuth);

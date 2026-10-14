@@ -66,6 +66,7 @@ Thread tools may omit `inboxId` for a scoped global lookup. Default page size is
 | `delete_credential`                                                                                                 | false        | true            | true           | `credential_delete` |
 | `fill_credential`, `capture_credential`                                                                             | false        | false           | false          | `credential_fill`   |
 | `get_totp_code`                                                                                                     | true         | false           | true           | `credential_totp`   |
+| No MCP tool (local REST/CLI process resolution only)                                                                | n/a          | n/a             | n/a            | `credential_run`    |
 
 Create/send annotations stay non-idempotent because `clientId` and
 `idempotencyKey` are optional. Replaying a send with the same `idempotencyKey`
@@ -111,6 +112,19 @@ Use Chrome/Chromium launched with `--remote-debugging-port=9222`, Playwright
 requests can use loopback CDP. Tunnel requests require an owner-allowed public
 HTTPS/WSS host, including any discovered WebSocket. Owner vault settings have no
 MCP tool. See [browser credential use](../vault/README.md).
+Credential resolution (`POST /v0/credentials/resolve`, `inbot run`) deliberately
+has no MCP tool. It returns encrypted secret material for a local child process;
+MCP clients cannot spawn that process through Inbot. It is REST/CLI-only and
+requires the separate `credential_run` permission and matching inbox scope.
+Tunnel access is blocked in both the allowlist and the service. The full web grant
+preset includes this permission; read and read-draft presets do not.
+
+The CLI decrypts with an ephemeral in-memory age identity and injects the values
+into the local child environment. This keeps values out of the model context and
+logs by default, but is not a security boundary: a process the agent controls can
+print or transform them. CLI stdout/stderr masking is best effort and can be
+disabled with `--no-mask` for TTYs or byte-exact protocols. This is why process
+resolution has its own permission separate from browser fill.
 
 ## Drafts
 

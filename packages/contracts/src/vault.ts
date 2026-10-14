@@ -14,7 +14,7 @@ export const CredentialFields = Schema.Record(CredentialFieldName, CredentialVal
 const origins = Schema.Array(Schema.String).check(Schema.isMaxLength(16));
 const name = Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(200));
 const username = Schema.String.check(Schema.isMaxLength(320));
-const ref = Schema.String.check(
+export const CredentialRef = Schema.String.check(
   Schema.isPattern(/^inbot:\/\/credentials\/[0-9a-f]{32}\/[a-z][a-z0-9_]{0,63}$/),
 );
 
@@ -26,7 +26,7 @@ export const Credential = Schema.Struct({
   origins,
   username: Schema.optionalKey(username),
   fields: Schema.Array(CredentialFieldName).check(Schema.isMaxLength(32)),
-  refs: Schema.Record(CredentialFieldName, ref),
+  refs: Schema.Record(CredentialFieldName, CredentialRef),
   created_at: Timestamp,
   updated_at: Timestamp,
   last_used_at: Schema.optionalKey(Timestamp),
@@ -145,3 +145,16 @@ export const VaultSettings = Schema.Struct({
   remote_cdp_hosts: Schema.Array(remoteCdpHost).check(Schema.isMaxLength(32)),
 }).annotate({ identifier: "VaultSettings" });
 export type VaultSettings = typeof VaultSettings.Type;
+export const ResolveCredentialsRequest = Schema.Struct({
+  refs: Schema.Array(CredentialRef).check(
+    Schema.isMinLength(1),
+    Schema.isMaxLength(32),
+    Schema.isUnique(),
+  ),
+  public_key: Schema.String.check(Schema.isPattern(/^age1[qpzry9x8gf2tvdw0s3jn54khce6mua7l]{58}$/)),
+}).annotate({ identifier: "ResolveCredentialsRequest" });
+export type ResolveCredentialsRequest = typeof ResolveCredentialsRequest.Type;
+export const ResolveCredentialsResponse = Schema.Struct({
+  ciphertext: Schema.String,
+}).annotate({ identifier: "ResolveCredentialsResponse" });
+export type ResolveCredentialsResponse = typeof ResolveCredentialsResponse.Type;

@@ -624,3 +624,53 @@ remote fill/capture. Hostnames are lowercase DNS names or wildcard suffixes, wit
 no schemes, IPs or ports. Wildcards exclude the bare apex. Tunnel browser use
 requires HTTPS/WSS and public DNS addresses; local loopback CDP remains usable.
 See [browser credential use](../server/src/vault/README.md) for setup and limits.
+rejected. Credential read/create/update/delete/TOTP/run permissions and inbox scope
+apply independently of mail send policy. Events contain field names only.
+
+## Run with credential references
+
+```sh
+GH_PASSWORD=inbot://credentials/0123456789abcdef0123456789abcdef/password inbot run -- ./login.sh
+inbot run --env GH_PASSWORD=inbot://credentials/0123456789abcdef0123456789abcdef/password -- ./login.sh
+inbot run --no-mask --env TOKEN=inbot://credentials/0123456789abcdef0123456789abcdef/api_key -- ./stdio-server
+```
+
+`inbot run [--env NAME=REF]... [--no-mask] [--home DIR] -- <command> [args...]`
+resolves exact credential references in ambient environment variables and repeatable
+`--env` flags. Flags override the same ambient target; repeated references are
+resolved once. There must be 1-32 unique refs. Invalid or dangerous target names
+(`LD_PRELOAD`, `LD_LIBRARY_PATH`, `DYLD_*`, `NODE_OPTIONS`, `BASH_ENV`, `ENV`, `PATH`)
+fail with a usage error. Other environment values pass through unchanged.
+
+Authentication uses the same owner home connection or `INBOT_URL` plus
+`INBOT_API_KEY` as resource commands; `--flavor` selects the home default.
+Resolution requires `credential_run` and matching inbox scope, independently of
+send policy. Only the web grant editor's full preset includes this permission.
+The URL must use `localhost`, `127.0.0.1`, or `::1`; remote origins are refused
+before making a request. The REST route is also blocked through the tunnel.
+
+The CLI generates an ephemeral age identity in memory, sends only its recipient
+to `POST /v0/credentials/resolve`, and decrypts the ciphertext locally. Neither
+identity nor resolved values are written to disk or printed by the CLI. A `totp`
+reference resolves to the current code, never its seed. The child is spawned with
+an environment and literal argument array, without a shell. stdin is inherited.
+
+By default, stdout and stderr pass through byte-preserving streaming masking:
+exact values of at least four characters become `<concealed by inbot>`, including
+matches across chunks. Masking is best effort: short, encoded, transformed, or
+otherwise altered values can appear. `--no-mask` inherits stdio directly for TTYs
+and byte-exact protocols such as MCP stdio servers. This keeps values out of the
+model context and logs by default, but is not a security boundary: a process the
+agent controls can print or transform them (for example, `sh -c 'echo "$X"'`).
+This is why process resolution has its own permission separate from browser fill.
+
+SIGINT and SIGTERM are forwarded to the child. The command returns the child's
+exit code, or `128 + signal number` for signal termination. Before child startup,
+usage errors (including no refs) return 2, non-loopback or missing permission
+returns 4, unknown/out-of-scope references return 5, connection/response failures
+return 10, and failure to spawn the child returns 1. Other REST errors retain the
+usual exit mapping. Child codes can overlap these CLI codes.
+
+Resolution deliberately has no MCP tool: it returns encrypted secret material
+intended for a local child process, which an MCP client cannot spawn through
+Inbot. REST/CLI are the supported surfaces for this operation.

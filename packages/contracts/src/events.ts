@@ -169,8 +169,13 @@ export const CredentialUsedEvent = Schema.Struct({
   type: Schema.Literal("event"),
   event_type: Schema.Literal("credential.used"),
   event_id: Schema.String,
-  credential: Schema.Struct({ ...credentialUse, via: Schema.Literals(["fill"]) }),
+  credential: Schema.Struct({
+    ...credentialUse,
+    origin: Schema.optionalKey(Schema.String),
+    via: Schema.Literals(["fill", "run"]),
+  }),
 }).annotate({ identifier: "CredentialUsedEvent" });
+export type CredentialUsedEvent = typeof CredentialUsedEvent.Type;
 export const CredentialCapturedEvent = Schema.Struct({
   type: Schema.Literal("event"),
   event_type: Schema.Literal("credential.captured"),

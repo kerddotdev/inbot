@@ -137,14 +137,14 @@ optional `inbox_id` and case-insensitive `q` over name, URL, and username. Both
 list routes accept the shared pagination query.
 
 The permissions are `credential_read`, `credential_create`, `credential_update`,
-`credential_delete`, `credential_totp`, and `credential_fill`. Inbox scope applies to every operation;
+`credential_delete`, `credential_totp`, `credential_fill`, and `credential_run`. Inbox scope applies to every operation;
 out-of-scope access returns `not_found`. Any key with the required permission and
 inbox scope can access metadata, regardless of the creator. Mail send policy does
 not change vault permissions. A reference is a name, never a bearer capability.
 
 Create/update accept `fields` with values already held by the caller and an optional
 `generate` request (`field`, `mode`, `length`, `rules`). Generated passwords never
-leave the service in agent responses. Metadata contains sorted field names and
+appear in plaintext metadata responses. Metadata contains sorted field names and
 `inbot://credentials/<credential_id>/<field>` refs. `totp` accepts a base32 seed or
 TOTP URI and stores a canonical otpauth URI. Password generation cannot target
 `totp`. Updates remove `remove_fields` first, then set explicit and generated
@@ -169,6 +169,7 @@ WebSocket replay require `credential_read` and matching inbox scope; TOTP reads
 update usage time without emitting an event. `credential.used` carries
 `credential: { credential_id, inbox_id, field, origin, via: "fill" }`;
 `credential.captured` carries the same identity, field and origin without `via`.
+`inbot run` records `via: "run"` without an origin (see below).
 Both use the same inbox scope and `credential_read` visibility.
 
 `POST /v0/inboxes/:inbox_id/credentials/:credential_id/fill` and `/capture`
@@ -195,8 +196,36 @@ require HTTPS/WSS, an allowed host, and exclusively public DNS results. Both the
 discovery endpoint and discovered WebSocket are checked; discovery redirects are
 rejected. The web Settings editor is deferred; owners can use REST or the CLI.
 See [browser credential use](../vault/README.md) for browser setup, errors and the
-residual DNS-rebinding risk. Process injection, approval policies and owner requests
-are future work.
+residual DNS-rebinding risk. Approval policies and owner requests are future work.
+
+`POST /v0/credentials/resolve` requires `credential_run` and a loopback connection.
+It is blocked by the tunnel allowlist and rejects `TunnelTraffic` in the service
+with `missing_permission`, including for owners. Request:
+`{ refs: ["inbot://credentials/<credential_id>/<field>"], public_key: "age1..." }`.
+Refs must be unique, with 1-32 entries; the recipient must be a valid X25519 age
+public key. Invalid input or recipients return `validation_error`. Unknown,
+out-of-scope, or missing-field refs return `not_found` with only the one-based
+reference index in the error. Mail send policy does not affect resolution.
+
+The response is only `{ ciphertext: "<base64 age ciphertext>" }`, containing
+UTF-8 JSON `{ values: { "<ref>": "<value>" } }` encrypted to the supplied key.
+`totp` resolves to the current clock's code, never the seed. The recipient is
+validated before the short transaction that reads fields, updates `last_used_at`,
+and appends audit events; encryption runs outside the transaction. A failed batch
+rolls back all usage updates and events. Successful resolution records one
+`credential.used` event per credential with
+`credential: { credential_id, inbox_id, field, via: "run" }`. If several fields of
+the same credential are requested, `field` is the first requested field. No values
+or origin are recorded for run. Event visibility requires `credential_read` and
+matching inbox scope, including webhook and WebSocket consumers.
+
+Local `inbot run` decrypts in memory and injects values into a child environment.
+This keeps values out of model context and logs by default, but is not a security
+boundary: a process the agent controls can print or transform the values. CLI
+output masking is best effort. This capability has its own permission separate
+from browser fill. There is no MCP tool or web execution UI: resolution returns
+secret material for a local child process that MCP cannot spawn through Inbot.
+This is a deliberate REST/CLI-only exception to surface parity.
 
 ## Owner mail transport
 

@@ -1648,10 +1648,12 @@ base("groups overview help logically and keeps group help focused", async () => 
   };
   const overview = await readHelp(["--help"]);
   expect(overview[0]).toBe("serve Run");
-  expect(overview[1]).toBe("open Print");
+  expect(overview[1]).toBe("run Run");
+  expect(overview[2]).toBe("open Print");
   const groups = overview.map((line) => line.split(" ")[0]);
   expect(groups.filter((group, index) => index === 0 || group !== groups[index - 1])).toEqual([
     "serve",
+    "run",
     "open",
     "inboxes",
     "threads",

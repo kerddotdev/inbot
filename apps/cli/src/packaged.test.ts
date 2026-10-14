@@ -29,6 +29,11 @@ test("packaged commands share the production home and serve the bundled UI with 
       "--flavor",
       "production",
     ]);
+    expect(
+      packagedArguments(["run", "--", "command", "--flavor", "child-argument"], entry),
+    ).toEqual(["run", "--flavor", "production", "--", "command", "--flavor", "child-argument"]);
+    const run = ["run", "--flavor=development", "--", "command"];
+    expect(packagedArguments(run, entry)).toEqual(run);
     const args = ["serve", "--flavor", "development", "--web-root=/custom/web"];
     expect(packagedArguments(args, entry)).toEqual(args);
     const equals = ["serve", "--flavor=development", "--web-root", "/custom/web"];

@@ -40,6 +40,7 @@ export const CredentialsLive = HttpApiBuilder.group(ServerApi, "credentials", (h
       .handle("inboxes_credentials_reveal", ({ params }) =>
         respond(vault.reveal(params.credential_id, params.inbox_id)),
       )
+      .handle("credentials_resolve", ({ payload }) => respond(vault.resolve(payload)))
       .handle("credentials_list", ({ query: { inbox_id, ...query } }) =>
         respond(vault.list(query, inbox_id)),
       );
