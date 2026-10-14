@@ -567,3 +567,34 @@ inbot quarantine delete <quarantine_id> --json
 ```
 
 Use the local owner connection with `--home <directory>` or `INBOT_HOME`; scoped agent keys and OAuth tokens cannot use these commands. List prints a table by default or the unchanged paginated REST response with `--json`. Retry JSON distinguishes `released` from another permanent `quarantined` result. Delete permanently removes ciphertext and metadata, is idempotent, and prints `null` with `--json`. Queue items contain metadata only and retry returns `not_supported` (exit 9). Missing/mismatched buffer configuration and pending deletion return `action_required` (exit 6); forbidden credentials exit 4. Cleanup may remain pending after provider/storage failure: inspect the list before retrying. No extra CLI confirmation is requested.
+
+## Credential vault parity
+
+`inbot credentials list` maps to `GET /v0/credentials`; `--inbox INBOX` uses the
+inbox list route, and `--inbox-id INBOX` filters the global route. List supports
+`--q` and shared pagination. `get`, `update`, `delete`, `generate`, `totp`, and
+`reveal` take `INBOX CREDENTIAL_ID`; `create` takes `INBOX`. They call the shared
+credential REST endpoints, including `generate`, `totp`, and owner-only `fields`.
+
+```sh
+inbot credentials create bot@example.test --name GitHub --url https://github.com --username bot@example.test --generate --json
+inbot credentials create bot@example.test --name Service --generate --rules 'minlength: 24; required: upper; required: digit;' --json
+inbot credentials generate bot@example.test CREDENTIAL_ID --field api_key --mode random --length 32 --json
+inbot credentials update bot@example.test CREDENTIAL_ID --remove-fields recovery_codes --json
+inbot credentials totp bot@example.test CREDENTIAL_ID --json
+inbot credentials reveal bot@example.test CREDENTIAL_ID --json
+```
+
+Create/update accept `--name`, `--url`, repeatable `--origins`, `--username`, and
+`--fields` as a JSON object. `--generate` generates a password server-side with
+optional `--mode`, `--length`, or Apple `--rules`, keeping the value out of shell
+history. `--data-file -` can read explicit secret fields or a custom generation
+field from stdin without placing values in command arguments. Generation cannot
+target `totp`; set that field to a base32 seed or TOTP URI instead. Updates can
+remove fields with repeatable `--remove-fields`.
+
+Agent output contains only metadata and refs, except the temporary code returned
+by `totp`. A ref is a name and does not grant access. `reveal` requires the local
+owner connection and prints secret values; agent keys and tunnel access are
+rejected. Credential read/create/update/delete/TOTP permissions and inbox scope
+apply independently of mail send policy. Events contain field names only.

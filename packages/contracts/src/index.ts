@@ -11,6 +11,7 @@ export * from "./api-keys.js";
 export * from "./event-types.js";
 export * from "./events.js";
 export * from "./webhooks.js";
+export * from "./vault.js";
 export * from "./security.js";
 export * from "./api.js";
 export * from "./outbound.js";

@@ -13,6 +13,7 @@ import {
   ListMessagesResponse,
 } from "../../../../packages/contracts/src/messages.js";
 import { Webhook } from "../../../../packages/contracts/src/webhooks.js";
+import { Credential, CredentialFieldsResponse } from "../../../../packages/contracts/src/vault.js";
 import { Draft, ListDraftsResponse } from "../../../../packages/contracts/src/drafts.js";
 import { ErrorResponse } from "../../../../packages/contracts/src/errors.js";
 import { client as connect } from "./test-client.js";
@@ -107,6 +108,13 @@ test("initializes with an API key and lists mailbox, list and webhook tools with
       "get_list_entry",
       "create_list_entry",
       "delete_list_entry",
+      "list_credentials",
+      "get_credential",
+      "create_credential",
+      "update_credential",
+      "delete_credential",
+      "generate_password",
+      "get_totp_code",
       "list_webhooks",
       "get_webhook",
       "create_webhook",
@@ -124,7 +132,8 @@ test("initializes with an API key and lists mailbox, list and webhook tools with
     expect(tool.annotations?.readOnlyHint).toBe(read);
     expect(tool.annotations?.destructiveHint).toBe(tool.name.startsWith("delete_"));
     expect(tool.annotations?.idempotentHint).toBe(
-      read || tool.name.startsWith("update_") || tool.name.startsWith("delete_"),
+      tool.name !== "update_credential" &&
+        (read || tool.name.startsWith("update_") || tool.name.startsWith("delete_")),
     );
   }
   expect(
@@ -390,7 +399,7 @@ test("authenticates browser MCP requests as the owner with CSRF and keeps owner 
       (tool) =>
         !tool.name.includes("owner") &&
         !tool.name.includes("session") &&
-        !tool.name.includes("password"),
+        (!tool.name.includes("password") || tool.name === "generate_password"),
     ),
   ).toBe(true);
   const result = await owner.call("list_inboxes", {});
@@ -550,4 +559,55 @@ test("REST and MCP reject every system label edit on inbound and queued messages
     }
     expect(await api.run(api.mailbox.getMessage(inboxId, id))).toEqual(before);
   }
+});
+
+test("uses metadata-only vault tools and never registers owner reveal", async ({ api }) => {
+  const key = await api.run(
+    api.keys.create({
+      inbox_id: inboxId,
+      send_policy: "read_only",
+      permissions: {
+        credential_read: true,
+        credential_create: true,
+        credential_update: true,
+        credential_delete: true,
+        credential_totp: true,
+      },
+    }),
+  );
+  const mcp = await client(api, key.api_key);
+  const tools = await mcp.list();
+  expect(tools.tools.some((tool) => /reveal/.test(tool.name))).toBe(false);
+  const seed = "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ";
+  const secret = "mcp-distinctive-api-secret";
+  const results: unknown[] = [];
+  const createdResult = await mcp.call("create_credential", {
+    inboxId,
+    request: { name: "MCP account", fields: { api_key: secret, totp: seed }, generate: {} },
+  });
+  results.push(createdResult);
+  const created = Schema.decodeUnknownSync(Credential)(createdResult.structuredContent);
+  expect(created.refs.password).toBe(`inbot://credentials/${created.credential_id}/password`);
+  const input = { inboxId, credentialId: created.credential_id };
+  results.push(await mcp.call("list_credentials", {}), await mcp.call("get_credential", input));
+  results.push(await mcp.call("update_credential", { ...input, request: { name: "Renamed" } }));
+  results.push(await mcp.call("generate_password", { ...input, mode: "random", length: 32 }));
+  const revealed = Schema.decodeUnknownSync(CredentialFieldsResponse)(
+    await (
+      await api.request(`/v0/inboxes/${inboxId}/credentials/${created.credential_id}/fields`)
+    ).json(),
+  );
+  results.push(await mcp.call("get_totp_code", input));
+  const denied = await client(api);
+  const deniedResult = await denied.call("get_credential", input);
+  failure(deniedResult, "missing_permission");
+  results.push(deniedResult);
+  failure(
+    await mcp.call("get_credential", { ...input, inboxId: "other@example.test" }),
+    "not_found",
+  );
+  results.push(await mcp.call("delete_credential", input));
+  failure(await mcp.call("get_credential", input), "not_found");
+  for (const value of [secret, seed, ...Object.values(revealed.fields)])
+    expect(JSON.stringify(results)).not.toContain(value);
 });

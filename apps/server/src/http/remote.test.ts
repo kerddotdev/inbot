@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Schema } from "effect";
 import { expect, test as base } from "vitest";
+import { Credential, ListCredentialsResponse } from "../../../../packages/contracts/src/vault.js";
 import { RemoteStatus } from "../../../../packages/contracts/src/remote.js";
 import { fixture } from "./test-fixture.js";
 import { tunnelPath, tunnelRoute } from "./tunnel-policy.js";
@@ -1060,4 +1061,55 @@ test("tunnel public OAuth CORS permits browser clients without exposing consent 
     expect(response.status).toBe(403);
     expect(response.headers.has("access-control-allow-origin")).toBe(false);
   }
+});
+
+test("allows scoped vault routes through the tunnel and blocks secret reveal for agents and owner sessions", async ({
+  f,
+}) => {
+  const inbox = "agent@example.test";
+  const path = `/v0/inboxes/${inbox}/credentials`;
+  expect(tunnelRoute(path)).toBe("agent");
+  expect(tunnelRoute("/v0/credentials?inbox_id=agent%40example.test")).toBe("agent");
+  const created = Schema.decodeUnknownSync(Credential)(
+    await (
+      await f.request(path, { method: "POST", body: { name: "Tunnel account", generate: {} } })
+    ).json(),
+  );
+  const target = `${path}/${created.credential_id}`;
+  for (const suffix of ["", "/generate", "/totp"])
+    expect(tunnelRoute(`${target}${suffix}`)).toBe("agent");
+  for (const suffix of ["/fields", "/fields/", "/%66ields", "/fields?query=synthetic"])
+    expect(tunnelRoute(`${target}${suffix}`)).toBe("blocked");
+  await f.run(f.remote.enable({ hostname }));
+  const key = await f.run(
+    f.keys.create({
+      inbox_ids: [inbox],
+      send_policy: "read_only",
+      permissions: { credential_read: true, credential_update: true },
+    }),
+  );
+  const headers = { authorization: `Bearer ${key.api_key}` };
+  const listed = await remoteRequest(f, path, { headers });
+  expect(listed.status).toBe(200);
+  expect(
+    Schema.decodeUnknownSync(ListCredentialsResponse)(await listed.json()).credentials,
+  ).toEqual([created]);
+  const generated = await remoteRequest(f, `${target}/generate`, {
+    method: "POST",
+    headers: { ...headers, "content-type": "application/json" },
+    body: "{}",
+  });
+  expect(generated.status).toBe(200);
+  expect(Schema.decodeUnknownSync(Credential)(await generated.json()).refs.password).toBe(
+    created.refs.password,
+  );
+  for (const suffix of ["/fields", "/fields/", "/%66ields"]) {
+    const response = await remoteRequest(f, `${target}${suffix}`, { headers });
+    expect(response.status).toBe(403);
+    expect(await response.json()).toMatchObject({ code: "missing_permission" });
+  }
+  const session = await ownerSession(f);
+  const owner = await remoteRequest(f, `${target}/fields`, { headers: session });
+  expect(owner.status).toBe(403);
+  expect(await owner.json()).toMatchObject({ code: "missing_permission" });
 });

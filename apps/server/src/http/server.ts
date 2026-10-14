@@ -5,6 +5,7 @@ import { InboundBuffer } from "../inbound/cloudflare.js";
 import { QuarantineHandlers } from "./quarantine.js";
 import { EventLog } from "../events/log.js";
 import { Webhooks } from "../events/webhooks.js";
+import { Vault } from "../vault/vault.js";
 import { websocket } from "../events/websocket.js";
 import { createHash } from "node:crypto";
 import { isIP } from "node:net";
@@ -162,6 +163,7 @@ export function startHttpServer(
       ),
       EventLog.Live.pipe(Layer.provide(Layer.succeed(Store, store))),
       Webhooks.Live.pipe(Layer.provide(Layer.succeed(Store, store))),
+      Vault.Live.pipe(Layer.provide(Layer.succeed(Store, store))),
       Layer.succeed(RemoteAccess, remote),
       Layer.succeed(OAuth, makeOAuth(store)),
       Layer.succeed(Home, home),

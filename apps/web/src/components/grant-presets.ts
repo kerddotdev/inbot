@@ -1,7 +1,12 @@
 import type { Grant, Permissions } from "@inbot/contracts/src/api-keys.js";
 
 export type PermissionPreset = "read" | "read-draft" | "full";
-const readPermissions = { inbox_read: true, message_read: true, draft_read: true };
+const readPermissions = {
+  inbox_read: true,
+  message_read: true,
+  draft_read: true,
+  credential_read: true,
+};
 const draftPermissions = {
   ...readPermissions,
   draft_create: true,
@@ -17,6 +22,10 @@ export const presetPermissions = {
     message_reply: true,
     message_send: true,
     draft_send: true,
+    credential_create: true,
+    credential_update: true,
+    credential_delete: true,
+    credential_totp: true,
   },
 } satisfies Record<PermissionPreset, Permissions>;
 

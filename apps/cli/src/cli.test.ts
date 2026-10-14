@@ -15,6 +15,12 @@ import { ListRejectionsResponse } from "../../../packages/contracts/src/lists.js
 import { Event } from "../../../packages/contracts/src/events.js";
 import { Webhook, ListWebhooksResponse } from "../../../packages/contracts/src/webhooks.js";
 import { readEvents } from "../../server/src/events/log.js";
+import {
+  Credential,
+  CredentialFieldsResponse,
+  ListCredentialsResponse,
+  TotpCodeResponse,
+} from "../../../packages/contracts/src/vault.js";
 import { Draft } from "../../../packages/contracts/src/drafts.js";
 import {
   ListInboxesResponse,
@@ -1651,6 +1657,7 @@ base("groups overview help logically and keeps group help focused", async () => 
     "api-keys",
     "lists",
     "webhooks",
+    "credentials",
     "domains",
     "transport",
     "oauth",
@@ -1693,4 +1700,176 @@ test("uses the shared owner-only quarantine endpoints with JSON, table output an
     expect(removed.code).toBe(0);
     expect(removed.stdout).toBe("null\n");
   }
+});
+
+test("parses credential commands with server generation, metadata output and local owner reveal", async ({
+  api,
+}) => {
+  const key = await api.run(
+    api.keys.create({
+      inbox_id: inboxId,
+      send_policy: "read_only",
+      permissions: {
+        credential_read: true,
+        credential_create: true,
+        credential_update: true,
+        credential_delete: true,
+        credential_totp: true,
+      },
+    }),
+  );
+  const overrides = { env: agentEnv(api, key.api_key) };
+  const help = await invoke(api, ["credentials", "create", "--help"]);
+  expect(help.stdout).toContain("--generate");
+  expect(help.stdout).toContain("--rules");
+  expect(help.stdout).toContain("shell history");
+  const createdResult = await invoke(
+    api,
+    [
+      "credentials",
+      "create",
+      inboxId,
+      "--name",
+      "CLI account",
+      "--url",
+      "https://account.test/login",
+      "--origins",
+      "https://extra.test",
+      "--generate",
+      "--rules",
+      "minlength: 24; required: upper; required: digit;",
+      "--json",
+    ],
+    overrides,
+  );
+  expect(createdResult.code).toBe(0);
+  const created = Schema.decodeUnknownSync(Credential)(JSON.parse(createdResult.stdout));
+  expect(created.refs.password).toBe(`inbot://credentials/${created.credential_id}/password`);
+  const revealed = await invoke(api, [
+    "credentials",
+    "reveal",
+    inboxId,
+    created.credential_id,
+    "--json",
+  ]);
+  expect(revealed.code).toBe(0);
+  const secret = Schema.decodeUnknownSync(CredentialFieldsResponse)(JSON.parse(revealed.stdout))
+    .fields.password;
+  if (secret === undefined) throw new Error("Expected generated password");
+  expect(secret.length).toBeGreaterThanOrEqual(24);
+  expect(createdResult.stdout).not.toContain(secret);
+  const denied = await invoke(
+    api,
+    ["credentials", "reveal", inboxId, created.credential_id, "--json"],
+    overrides,
+  );
+  expect(denied.code).toBe(4);
+  expect(denied.stderr).toContain("missing_permission");
+  expect(denied.stdout).toBe("");
+  const seed = "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ";
+  const updated = await invoke(
+    api,
+    [
+      "credentials",
+      "update",
+      inboxId,
+      created.credential_id,
+      "--fields",
+      JSON.stringify({ totp: seed, recovery_codes: "cli-distinctive-secret" }),
+      "--name",
+      "Renamed",
+      "--json",
+    ],
+    overrides,
+  );
+  expect(updated.code).toBe(0);
+  expect(updated.stdout).not.toContain(seed);
+  expect(updated.stdout).not.toContain("cli-distinctive-secret");
+  const totp = await invoke(
+    api,
+    ["credentials", "totp", inboxId, created.credential_id, "--json"],
+    overrides,
+  );
+  expect(totp.code).toBe(0);
+  expect(Schema.decodeUnknownSync(TotpCodeResponse)(JSON.parse(totp.stdout)).code).toMatch(
+    /^\d{6}$/,
+  );
+  const generated = await invoke(
+    api,
+    [
+      "credentials",
+      "generate",
+      inboxId,
+      created.credential_id,
+      "--mode",
+      "random",
+      "--length",
+      "32",
+      "--json",
+    ],
+    overrides,
+  );
+  expect(generated.code).toBe(0);
+  expect(Schema.decodeUnknownSync(Credential)(JSON.parse(generated.stdout)).refs.password).toBe(
+    created.refs.password,
+  );
+  for (const command of [
+    ["credentials", "get", inboxId, created.credential_id, "--json"],
+    ["credentials", "list", "--inbox", inboxId, "--q", "RENAMED", "--json"],
+    ["credentials", "list", "--inbox-id", inboxId, "--json"],
+    [
+      "credentials",
+      "update",
+      inboxId,
+      created.credential_id,
+      "--remove-fields",
+      "recovery_codes",
+      "--json",
+    ],
+  ]) {
+    const result = await invoke(api, command, overrides);
+    expect(result.code).toBe(0);
+    expect(result.stdout).not.toContain(secret);
+    expect(result.stdout).not.toContain(seed);
+    expect(result.stdout).not.toContain("cli-distinctive-secret");
+    if (command[1] === "list")
+      expect(
+        Schema.decodeUnknownSync(ListCredentialsResponse)(JSON.parse(result.stdout)).credentials,
+      ).toHaveLength(1);
+  }
+  expect(
+    (
+      await invoke(
+        api,
+        ["credentials", "create", inboxId, "--name", "Invalid", "--rules", "minlength: 20;"],
+        overrides,
+      )
+    ).code,
+  ).toBe(2);
+  expect(
+    (
+      await invoke(
+        api,
+        ["credentials", "create", inboxId, "--generate", "--data", '{"name":"Mixed"}'],
+        overrides,
+      )
+    ).code,
+  ).toBe(2);
+  const stdin = await invoke(
+    api,
+    ["credentials", "create", inboxId, "--data-file", "-", "--json"],
+    {
+      ...overrides,
+      readStdin: async () =>
+        JSON.stringify({ name: "Stdin account", fields: { api_key: "stdin-distinctive-secret" } }),
+    },
+  );
+  expect(stdin.code).toBe(0);
+  expect(stdin.stdout).not.toContain("stdin-distinctive-secret");
+  expect(
+    (await invoke(api, ["credentials", "delete", inboxId, created.credential_id], overrides)).code,
+  ).toBe(0);
+  expect(
+    (await invoke(api, ["credentials", "get", inboxId, created.credential_id], overrides)).code,
+  ).toBe(5);
 });

@@ -48,6 +48,7 @@ export function tunnelRoute(url: string): TunnelRoute {
     if (/^\/v0\/(owner|domains|api-keys)(\/|$)/.test(path) || /\/api-keys(\/|$)/.test(path))
       return "blocked";
     if (/^\/v0\/inboxes\/[^/]+\/messages\/[^/]+\/resolve$/.test(path)) return "blocked";
+    if (/^\/v0\/inboxes\/[^/]+\/credentials\/[^/]+\/fields$/.test(path)) return "blocked";
     return "agent";
   }
   if (
