@@ -20,6 +20,7 @@ export const DraftId = Schema.String;
 export const AttachmentId = Schema.String;
 export const DomainId = Schema.String;
 export const WebhookId = Schema.String;
+export const CredentialId = Schema.String;
 export const ApiKeyId = Schema.String;
 export const Limit = Schema.Int;
 export const Count = Schema.Int;

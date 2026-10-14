@@ -1,5 +1,6 @@
 import { Schema } from "effect";
-import { DraftId, InboxId, MessageId, ThreadId, Timestamp } from "./common.js";
+import { CredentialId, DraftId, InboxId, MessageId, ThreadId, Timestamp } from "./common.js";
+import { CredentialFieldName } from "./vault.js";
 import { Domain } from "./domains.js";
 import { EventType, MessageReceivedEventType } from "./event-types.js";
 import { Message } from "./messages.js";
@@ -146,6 +147,18 @@ export const DraftEvent = Schema.Struct({
 }).annotate({ identifier: "DraftEvent" });
 export type DraftEvent = typeof DraftEvent.Type;
 
+export const CredentialEvent = Schema.Struct({
+  type: Schema.Literal("event"),
+  event_type: Schema.Literals(["credential.created", "credential.updated", "credential.deleted"]),
+  event_id: Schema.String,
+  credential: Schema.Struct({
+    credential_id: CredentialId,
+    inbox_id: InboxId,
+    fields: Schema.Array(CredentialFieldName),
+  }),
+}).annotate({ identifier: "CredentialEvent" });
+export type CredentialEvent = typeof CredentialEvent.Type;
+
 export const DomainVerifiedEvent = Schema.Struct({
   type: Schema.Literal("event"),
   event_type: Schema.Literal("domain.verified"),
@@ -189,6 +202,7 @@ export const Event = Schema.Union([
   MessageFailedEvent,
   MessageSendUnknownEvent,
   DraftEvent,
+  CredentialEvent,
   DomainVerifiedEvent,
   OAuthGrantEvent,
   QuarantineEvent,

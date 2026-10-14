@@ -1,6 +1,7 @@
 import { quarantineCommands } from "./quarantine-commands.js";
 import type { HttpApiEndpoint } from "effect/http-api";
 import { WebhooksApi } from "../../../packages/contracts/src/api/webhooks.js";
+import { CredentialsApi } from "../../../packages/contracts/src/api/vault.js";
 import { InboxesApi } from "../../../packages/contracts/src/api/inboxes.js";
 import { ThreadsApi } from "../../../packages/contracts/src/api/threads.js";
 import { MessagesApi } from "../../../packages/contracts/src/api/messages.js";
@@ -28,6 +29,7 @@ export interface Command {
   readonly download?: boolean;
   readonly response?: "text";
   readonly tokenInput?: boolean;
+  readonly generateField?: boolean;
 }
 const pagination = { limit: "number", page_token: "string", ascending: "boolean" } as const;
 const cursor = { limit: "number", page_token: "string" } as const;
@@ -80,6 +82,15 @@ const { subject: _subject, ...reply } = composition;
 const inbox = ["inbox_id"];
 const message = ["inbox_id", "message_id"];
 const draft = ["inbox_id", "draft_id"];
+const credential = ["inbox_id", "credential_id"];
+const credentialBody = {
+  name: "string",
+  url: "string",
+  origins: "array",
+  username: "string",
+  fields: "object",
+  generate: "object",
+} as const;
 
 export const commands: readonly Command[] = [
   {
@@ -508,6 +519,64 @@ export const commands: readonly Command[] = [
     scopedEndpoint: WebhooksApi.endpoints.inboxes_webhooks_updateHeaders,
     params: ["webhook_id"],
     body: { headers: "object", remove_headers: "array" },
+  },
+  {
+    name: "credentials list",
+    description: "List credential metadata and refs, optionally within --inbox.",
+    endpoint: CredentialsApi.endpoints.credentials_list,
+    scopedEndpoint: CredentialsApi.endpoints.inboxes_credentials_list,
+    query: { ...pagination, q: "string", inbox_id: "string" },
+  },
+  {
+    name: "credentials get",
+    description: "Read credential metadata and refs without secret values.",
+    endpoint: CredentialsApi.endpoints.inboxes_credentials_get,
+    params: credential,
+  },
+  {
+    name: "credentials create",
+    description:
+      "Store credentials. --generate creates a password server-side and keeps it out of shell history; --rules sets Apple passwordrules.",
+    endpoint: CredentialsApi.endpoints.inboxes_credentials_create,
+    params: inbox,
+    body: credentialBody,
+    generateField: true,
+  },
+  {
+    name: "credentials update",
+    description:
+      "Update metadata or fields; --generate replaces a password without returning its value.",
+    endpoint: CredentialsApi.endpoints.inboxes_credentials_update,
+    params: credential,
+    body: { ...credentialBody, remove_fields: "array" },
+    generateField: true,
+  },
+  {
+    name: "credentials delete",
+    description: "Delete a credential and all its secret fields.",
+    endpoint: CredentialsApi.endpoints.inboxes_credentials_delete,
+    params: credential,
+  },
+  {
+    name: "credentials generate",
+    description:
+      "Generate a password into an existing credential field; returns metadata and a stable ref.",
+    endpoint: CredentialsApi.endpoints.inboxes_credentials_generate,
+    params: credential,
+    body: { field: "string", mode: "string", length: "number", rules: "string" },
+  },
+  {
+    name: "credentials totp",
+    description: "Get a temporary TOTP code and expiry without revealing its seed.",
+    endpoint: CredentialsApi.endpoints.inboxes_credentials_totp,
+    params: credential,
+  },
+  {
+    name: "credentials reveal",
+    description:
+      "Reveal stored secret fields as local owner. Agent keys and tunnel access are rejected.",
+    endpoint: CredentialsApi.endpoints.inboxes_credentials_reveal,
+    params: credential,
   },
   {
     name: "domains list",

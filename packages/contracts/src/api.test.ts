@@ -169,3 +169,23 @@ it("declares owner browser auth separately from mailbox routes with public and p
   }
   expect(Object.keys(InbotApi.groups)).not.toContain("owner");
 });
+
+it("declares vault permissions and keeps reveal owner-only inside the authenticated group", () => {
+  const group = InbotApi.groups.credentials;
+  for (const [name, endpoint] of Object.entries(group.endpoints)) {
+    expect(endpoint.middlewares.has(BearerAuth)).toBe(true);
+    if (name === "inboxes_credentials_reveal") {
+      expect([...endpoint.middlewares]).toContain(OwnerOnly);
+      expect(Context.get(endpoint.annotations, RequiredPermission)).toBeUndefined();
+    } else {
+      expect([...endpoint.middlewares]).not.toContain(OwnerOnly);
+      expect(Context.get(endpoint.annotations, RequiredPermission)).toMatch(/^credential_/);
+    }
+  }
+  expect(
+    Context.get(group.endpoints.inboxes_credentials_totp.annotations, RequiredPermission),
+  ).toBe("credential_totp");
+  expect(
+    Context.get(group.endpoints.inboxes_credentials_generate.annotations, RequiredPermission),
+  ).toBe("credential_update");
+});

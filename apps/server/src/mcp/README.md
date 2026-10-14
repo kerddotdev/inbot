@@ -44,22 +44,27 @@ the issuing principal. Keep URLs private. File bytes are not embedded in tool re
 
 Thread tools may omit `inboxId` for a scoped global lookup. Default page size is 10; `limit` can override it.
 
-| Tools                                                                                                               | readOnlyHint | destructiveHint | idempotentHint | Permission       |
-| ------------------------------------------------------------------------------------------------------------------- | ------------ | --------------- | -------------- | ---------------- |
-| `list_inboxes`, `search_inboxes`, `get_inbox`                                                                       | true         | false           | true           | `inbox_read`     |
-| `list_threads`, `search_threads`, `get_thread`, `get_attachment`, `list_messages`, `search_messages`, `get_message` | true         | false           | true           | `message_read`   |
-| `create_inbox`                                                                                                      | false        | false           | false          | `inbox_create`   |
-| `update_inbox`                                                                                                      | false        | false           | true           | `inbox_update`   |
-| `delete_inbox`                                                                                                      | false        | true            | true           | `inbox_delete`   |
-| `update_thread`, `update_message`                                                                                   | false        | false           | true           | `message_update` |
-| `delete_thread`                                                                                                     | false        | true            | true           | `message_delete` |
-| `send_message`, `forward_message`                                                                                   | false        | false           | false          | `message_send`   |
-| `create_draft`                                                                                                      | false        | false           | false          | `draft_create`   |
-| `list_drafts`, `get_draft`                                                                                          | true         | false           | true           | `draft_read`     |
-| `update_draft`                                                                                                      | false        | false           | true           | `draft_update`   |
-| `send_draft`                                                                                                        | false        | false           | false          | `draft_send`     |
-| `delete_draft`                                                                                                      | false        | true            | true           | `draft_delete`   |
-| `reply_to_message`                                                                                                  | false        | false           | false          | `message_reply`  |
+| Tools                                                                                                               | readOnlyHint | destructiveHint | idempotentHint | Permission          |
+| ------------------------------------------------------------------------------------------------------------------- | ------------ | --------------- | -------------- | ------------------- |
+| `list_inboxes`, `search_inboxes`, `get_inbox`                                                                       | true         | false           | true           | `inbox_read`        |
+| `list_threads`, `search_threads`, `get_thread`, `get_attachment`, `list_messages`, `search_messages`, `get_message` | true         | false           | true           | `message_read`      |
+| `create_inbox`                                                                                                      | false        | false           | false          | `inbox_create`      |
+| `update_inbox`                                                                                                      | false        | false           | true           | `inbox_update`      |
+| `delete_inbox`                                                                                                      | false        | true            | true           | `inbox_delete`      |
+| `update_thread`, `update_message`                                                                                   | false        | false           | true           | `message_update`    |
+| `delete_thread`                                                                                                     | false        | true            | true           | `message_delete`    |
+| `send_message`, `forward_message`                                                                                   | false        | false           | false          | `message_send`      |
+| `create_draft`                                                                                                      | false        | false           | false          | `draft_create`      |
+| `list_drafts`, `get_draft`                                                                                          | true         | false           | true           | `draft_read`        |
+| `update_draft`                                                                                                      | false        | false           | true           | `draft_update`      |
+| `send_draft`                                                                                                        | false        | false           | false          | `draft_send`        |
+| `delete_draft`                                                                                                      | false        | true            | true           | `draft_delete`      |
+| `reply_to_message`                                                                                                  | false        | false           | false          | `message_reply`     |
+| `list_credentials`, `get_credential`                                                                                | true         | false           | true           | `credential_read`   |
+| `create_credential`                                                                                                 | false        | false           | false          | `credential_create` |
+| `update_credential`, `generate_password`                                                                            | false        | false           | false          | `credential_update` |
+| `delete_credential`                                                                                                 | false        | true            | true           | `credential_delete` |
+| `get_totp_code`                                                                                                     | true         | false           | true           | `credential_totp`   |
 
 Create/send annotations stay non-idempotent because `clientId` and
 `idempotencyKey` are optional. Replaying a send with the same `idempotencyKey`
@@ -72,9 +77,24 @@ returns `isError: true` with `approval_required`. The error shape stays
 id is invented before the owner approves. Proposed message idempotency is shared
 with REST, including after the original draft is approved or deleted.
 
-There are no tools for owner authentication, sessions, passwords, domains, keys,
+There are no tools for owner authentication, sessions, owner passwords, domains, keys,
 settings, transport, unlock, or approval/rejection.
 Owner-only capabilities never enter the MCP registry.
+
+## Credentials
+
+Credential tools call the same vault service as REST. `list_credentials` accepts
+optional `inboxId`, `q`, and pagination. Other tools require `inboxId`, and existing
+credentials require `credentialId`. Create/update take a shared REST `request`;
+`generate_password` takes `field`, `mode`, `length`, and `rules` directly.
+
+Credential results contain metadata, sorted field names, and stable
+`inbot://credentials/<credential_id>/<field>` references. Stored values and TOTP
+seeds are never returned. References are names and always require authorization
+when used. `get_totp_code` returns a temporary code, expiry, and period; it records
+usage time without returning the seed. Send policy does not affect these operations.
+`update_credential` is annotated non-idempotent because it can generate a fresh
+password. Owner reveal is available only through local REST/CLI and has no tool.
 
 ## Drafts
 

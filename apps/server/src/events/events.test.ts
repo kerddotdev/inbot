@@ -1,3 +1,5 @@
+import { CurrentPrincipal } from "../../../../packages/contracts/src/security.js";
+import { makeVault } from "../vault/vault.js";
 import { createHmac } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
 import { createServer, request as httpRequest } from "node:http";
@@ -1512,6 +1514,91 @@ test("unknown outcomes and owner decisions reach scoped WebSockets and signed we
     await dispatch(api, receive);
     expect(deliveries).toEqual([unknown, resolved]);
     expect(api.sent).toHaveLength(0);
+  } finally {
+    await ws.close();
+  }
+});
+
+test("credential-only agents receive scoped metadata events through WebSocket and signed webhook delivery", async ({
+  api,
+}) => {
+  const key = await api.run(
+    api.keys.create({
+      inbox_ids: [inboxId],
+      send_policy: "read_only",
+      permissions: { credential_read: true, webhook_create: true, webhook_read: true },
+    }),
+  );
+  const denied = await api.run(
+    api.keys.create({
+      inbox_ids: [inboxId],
+      send_policy: "direct",
+      permissions: {
+        message_read: true,
+        draft_read: true,
+        webhook_create: true,
+        webhook_read: true,
+      },
+    }),
+  );
+  const event_types = ["credential.created", "credential.updated", "credential.deleted"];
+  await hook(
+    api,
+    { url: "https://receiver.example.test/events", inbox_ids: [inboxId], event_types },
+    key.api_key,
+  );
+  await hook(
+    api,
+    { url: "https://receiver.example.test/denied", inbox_ids: [inboxId], event_types },
+    denied.api_key,
+  );
+  const ws = await client(api, { headers: { authorization: `Bearer ${key.api_key}` } });
+  const secret = "websocket-webhook-distinctive-secret";
+  const seed = "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ";
+  const vault = makeVault(api.store);
+  const run = <A, E>(effect: Effect.Effect<A, E, CurrentPrincipal>) =>
+    api.run(effect.pipe(Effect.provideService(CurrentPrincipal, { kind: "owner" })));
+  try {
+    ws.subscribe({ event_types, inbox_ids: [inboxId] });
+    expect(await ws.next()).toMatchObject({ type: "subscribed" });
+    const created = await run(
+      vault.create({ name: "Visible", fields: { password: secret, totp: seed } }, inboxId),
+    );
+    await run(vault.create({ name: "Hidden", fields: { password: secret } }, otherId));
+    await run(vault.update(created.credential_id, { remove_fields: ["totp"] }, inboxId));
+    await run(vault.delete(created.credential_id, inboxId));
+    const frames = [await ws.next(), await ws.next(), await ws.next()];
+    expect(frames.map((frame) => ("event_type" in frame ? frame.event_type : frame.type))).toEqual(
+      event_types,
+    );
+    for (const frame of frames) {
+      expect(frame).toMatchObject({
+        credential: { credential_id: created.credential_id, inbox_id: inboxId },
+      });
+      expect(JSON.stringify(frame)).not.toContain(secret);
+      expect(JSON.stringify(frame)).not.toContain(seed);
+    }
+    const deliveries: Event[] = [];
+    const sender = async (input: WebhookRequest) => {
+      expect(input.url).toBe("https://receiver.example.test/events");
+      expect(input.body).not.toContain(secret);
+      expect(input.body).not.toContain(seed);
+      deliveries.push(Schema.decodeUnknownSync(Event)(JSON.parse(input.body)));
+      return 204;
+    };
+    for (let index = 0; index < 3; index++) await dispatch(api, sender);
+    expect(deliveries.map((event) => event.event_type)).toEqual(event_types);
+    expect(deliveries).toEqual(frames);
+    await api.run(
+      api.keys.update(key.api_key_id, {
+        permissions: { webhook_read: true, webhook_create: true },
+      }),
+    );
+    await run(
+      vault.create({ name: "Read permission revoked", fields: { password: secret } }, inboxId),
+    );
+    await dispatch(api, sender);
+    expect(deliveries).toHaveLength(3);
   } finally {
     await ws.close();
   }

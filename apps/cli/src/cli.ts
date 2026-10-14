@@ -58,6 +58,14 @@ function commandOptions(command: Command): ParseArgsOptionsConfig {
     ...(command.browser ? { browser: { type: "boolean" } } : {}),
     ...(command.download ? { output: { type: "string", short: "o" } } : {}),
     ...(command.tokenInput ? { "token-stdin": { type: "boolean" } } : {}),
+    ...(command.generateField
+      ? {
+          generate: { type: "boolean" },
+          rules: { type: "string" },
+          mode: { type: "string" },
+          length: { type: "string" },
+        }
+      : {}),
   };
 }
 
@@ -212,7 +220,22 @@ export async function runCli(args: readonly string[], io: CliIO): Promise<number
     if (query.size > 0) path += `?${query}`;
     let body: unknown;
     if (command.body !== undefined) {
-      const bodyFlags = fields(command.body, values);
+      const definition = command.generateField
+        ? Object.fromEntries(Object.entries(command.body).filter(([field]) => field !== "generate"))
+        : command.body;
+      const bodyFlags = fields(definition, values);
+      if (command.generateField) {
+        if (
+          !values.generate &&
+          [values.rules, values.mode, values.length].some((value) => value !== undefined)
+        )
+          usage("Use --generate with --rules, --mode, or --length.");
+        if (values.generate)
+          bodyFlags.generate = fields(
+            { mode: "string", length: "number", rules: "string" },
+            values,
+          );
+      }
       if (values.data !== undefined && values["data-file"] !== undefined)
         usage("Choose --data or --data-file.");
       if (

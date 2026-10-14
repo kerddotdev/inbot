@@ -44,6 +44,7 @@ export function eventInbox(event: Event): string | undefined {
   if ("failure" in event) return event.failure.inbox_id;
   if ("outcome" in event) return event.outcome.inbox_id;
   if ("draft" in event) return event.draft.inbox_id;
+  if ("credential" in event) return event.credential.inbox_id;
   return undefined;
 }
 
@@ -276,7 +277,14 @@ export function eventVisible(
   return (
     inScope(principal, row.inbox_id) &&
     labelsAllowed(principal, row.labels) &&
-    permits(principal, "draft" in row.payload ? "draft_read" : "message_read")
+    permits(
+      principal,
+      "credential" in row.payload
+        ? "credential_read"
+        : "draft" in row.payload
+          ? "draft_read"
+          : "message_read",
+    )
   );
 }
 

@@ -1,4 +1,5 @@
 import { WebhooksLive } from "../events/handlers.js";
+import { CredentialsLive } from "../vault/handlers.js";
 import { Effect, Layer } from "effect";
 import { HttpApiBuilder } from "effect/http-api";
 import { CurrentPrincipal } from "../../../../packages/contracts/src/security.js";
@@ -360,5 +361,6 @@ export const HandlersLive = Layer.mergeAll(
   DraftsLive,
   ListsLive,
   WebhooksLive,
+  CredentialsLive,
   DomainsLive,
 );

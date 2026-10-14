@@ -30,6 +30,9 @@ importers:
       effect:
         specifier: 4.0.2
         version: 4.0.2
+      otpauth:
+        specifier: 9.5.2
+        version: 9.5.2
       postal-mime:
         specifier: 4.0.5
         version: 4.0.5
@@ -4447,6 +4450,9 @@ packages:
   os-paths@4.4.0:
     resolution: {integrity: sha512-wrAwOeXp1RRMFfQY8Sy7VaGVmPocaLwSFOYCGKSyo8qmJ+/yaafCl5BCA1IQZWqFSRBrKDYFeR9d/VyQzfH/jg==}
     engines: {node: '>= 6.0'}
+
+  otpauth@9.5.2:
+    resolution: {integrity: sha512-GQ5emWR/x1tcExT62IBT0UfO95wZzJZyxYOJOGVeQF47SYEN9vmh0vISvDZaNMuFJRG+IaWCKtfm+t9Bfoal6w==}
 
   ow@0.28.2:
     resolution: {integrity: sha512-dD4UpyBh/9m4X2NVjA+73/ZPBRF+uF4zIMFvvQsabMiEK8x41L3rQ8EENOi35kyyoaJwNxEeJcP6Fj1H4U409Q==}
@@ -10008,6 +10014,10 @@ snapshots:
   option@0.2.4: {}
 
   os-paths@4.4.0: {}
+
+  otpauth@9.5.2:
+    dependencies:
+      '@noble/hashes': 2.4.0
 
   ow@0.28.2:
     dependencies:

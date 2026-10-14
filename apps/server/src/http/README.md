@@ -73,6 +73,7 @@ override are 4.0.2, matching the installed Effect version.
 - Threads: inbox and global list, search, get, update, delete, attachment.
 - Messages: list, search, get, update, delete, batch-get, batch-update, raw,
   attachment, send, reply, reply-all, forward.
+- Credentials: inbox metadata CRUD, password generation, TOTP codes and local owner reveal; global scoped list.
 - Drafts: inbox CRUD, send, attachment; global list, get, attachment;
   owner-only approve and reject.
 - Domains: owner-only register, list, get, update, delete, verify, BIND zone-file,
@@ -123,6 +124,50 @@ origin checks. REST message bodies are never sanitized for agents. The static we
 CSP permits HTTP(S) images so inherited `srcdoc` policies can support explicit
 per-message consent; each sanitized frame defaults to data images only and has
 no script permission. See [HTML messages](../../../web/README.md#html-messages).
+
+## Credential vault
+
+`GET` and `POST /v0/inboxes/:inbox_id/credentials` list metadata and create
+credentials. `GET`, `PATCH`, and `DELETE` on `/:credential_id` read metadata,
+update, and delete. `POST /:credential_id/generate` generates a password into
+an existing field (default `password`). `GET /:credential_id/totp` returns only
+`{ code, expires_at, period }` and records `last_used_at`; a missing TOTP field
+returns `not_found`. `GET /v0/credentials` lists across accessible inboxes, with
+optional `inbox_id` and case-insensitive `q` over name, URL, and username. Both
+list routes accept the shared pagination query.
+
+The permissions are `credential_read`, `credential_create`, `credential_update`,
+`credential_delete`, and `credential_totp`. Inbox scope applies to every operation;
+out-of-scope access returns `not_found`. Any key with the required permission and
+inbox scope can access metadata, regardless of the creator. Mail send policy does
+not change vault permissions. A reference is a name, never a bearer capability.
+
+Create/update accept `fields` with values already held by the caller and an optional
+`generate` request (`field`, `mode`, `length`, `rules`). Generated passwords never
+leave the service in agent responses. Metadata contains sorted field names and
+`inbot://credentials/<credential_id>/<field>` refs. `totp` accepts a base32 seed or
+TOTP URI and stores a canonical otpauth URI. Password generation cannot target
+`totp`. Updates remove `remove_fields` first, then set explicit and generated
+fields; generated values take precedence for the same field. Empty updates are
+invalid. Limits are 32 fields, 1-16384 characters per value, and 16 unique origins.
+
+Origins are the URL origin first, followed by unique extra origins. URLs require
+HTTPS, except HTTP on `localhost`, `127.0.0.1`, or `[::1]`. Extra origins must be
+bare canonical origins without a path, query, fragment, or trailing slash.
+`origins` on update replaces the extra list; changing the URL replaces its derived
+origin. Embedded URL credentials are rejected.
+
+`GET /v0/inboxes/:inbox_id/credentials/:credential_id/fields` reveals field values
+only to the local owner, including the canonical TOTP URI. It is blocked through
+the tunnel and absent from MCP. Responses use `Cache-Control: no-store`. Secrets
+remain in the existing encrypted database without a plaintext cache or additional
+field encryption. Deleting a credential or its inbox deletes its fields.
+
+`credential.created`, `credential.updated`, and `credential.deleted` events carry
+`credential: { credential_id, inbox_id, fields }`, with names only. Webhooks and
+WebSocket replay require `credential_read` and matching inbox scope; TOTP reads
+update usage time without emitting an event. Browser fill, process injection,
+approval policies, and owner requests are future work.
 
 ## Owner mail transport
 

@@ -7,6 +7,8 @@ import * as Messages from "../../../../packages/contracts/src/messages.js";
 import * as Drafts from "../../../../packages/contracts/src/drafts.js";
 import * as WebhookContracts from "../../../../packages/contracts/src/webhooks.js";
 import { Webhooks } from "../events/webhooks.js";
+import * as VaultContracts from "../../../../packages/contracts/src/vault.js";
+import { Vault } from "../vault/vault.js";
 import * as Threads from "../../../../packages/contracts/src/threads.js";
 import * as Lists from "../../../../packages/contracts/src/lists.js";
 import { CurrentPrincipal } from "../../../../packages/contracts/src/security.js";
@@ -127,6 +129,7 @@ export const McpTools = (origin: string) =>
       const oauth = yield* OAuth;
       const sessions = yield* OwnerSessions;
       const webhooks = yield* Webhooks;
+      const vault = yield* Vault;
 
       function register<S extends Schema.Top & { readonly DecodingServices: never }, A, E>(
         name: string,
@@ -207,6 +210,61 @@ export const McpTools = (origin: string) =>
       const update = { readOnlyHint: false, destructiveHint: false, idempotentHint: true };
       const remove = { readOnlyHint: false, destructiveHint: true, idempotentHint: true };
       const create = { readOnlyHint: false, destructiveHint: false, idempotentHint: false };
+      const credential = { ...inbox, credentialId: Common.CredentialId };
+      yield* register(
+        "list_credentials",
+        "List credential metadata across accessible inboxes or one inbox. Values are never returned; use refs. Requires credential_read.",
+        Schema.Struct({
+          ...page,
+          inboxId: Schema.optionalKey(Common.InboxId),
+          q: VaultContracts.ListCredentialsQuery.fields.q,
+        }),
+        read,
+        ({ inboxId, q, ...input }) =>
+          vault.list({ ...pageQuery(input), ...(q === undefined ? {} : { q }) }, inboxId),
+      );
+      yield* register(
+        "get_credential",
+        "Read credential metadata. Values are never returned; use refs, which require authorization when used. Requires credential_read.",
+        Schema.Struct(credential),
+        read,
+        (input) => vault.get(input.credentialId, input.inboxId),
+      );
+      yield* register(
+        "create_credential",
+        "Store credentials or generate a password server-side. Values are never returned; use refs. Requires credential_create.",
+        Schema.Struct({ ...inbox, request: VaultContracts.CreateCredentialRequest }),
+        create,
+        (input) => vault.create(input.request, input.inboxId),
+      );
+      yield* register(
+        "update_credential",
+        "Update metadata, set/remove fields, or generate a password. Values are never returned; use refs. Requires credential_update.",
+        Schema.Struct({ ...credential, request: VaultContracts.UpdateCredentialRequest }),
+        { ...update, idempotentHint: false },
+        (input) => vault.update(input.credentialId, input.request, input.inboxId),
+      );
+      yield* register(
+        "delete_credential",
+        "Delete a credential and its fields. Values are never returned. Requires credential_delete.",
+        Schema.Struct(credential),
+        remove,
+        (input) => vault.delete(input.credentialId, input.inboxId),
+      );
+      yield* register(
+        "generate_password",
+        "Generate and store a password in an existing credential field. Values are never returned; use the stable ref. Requires credential_update.",
+        Schema.Struct({ ...credential, ...VaultContracts.GenerateFieldRequest.fields }),
+        create,
+        ({ inboxId, credentialId, ...input }) => vault.generate(credentialId, input, inboxId),
+      );
+      yield* register(
+        "get_totp_code",
+        "Get a temporary TOTP code and its expiry. Stored field values and seeds are never returned; credential metadata provides refs. Requires credential_totp.",
+        Schema.Struct(credential),
+        read,
+        (input) => vault.totp(input.credentialId, input.inboxId),
+      );
       const list = {
         inboxId: Schema.optionalKey(Common.InboxId),
         direction: Lists.Direction,

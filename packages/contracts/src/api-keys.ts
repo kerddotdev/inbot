@@ -27,6 +27,11 @@ export const Permissions = Schema.Struct({
   webhook_create: Schema.optionalKey(Schema.Boolean),
   webhook_update: Schema.optionalKey(Schema.Boolean),
   webhook_delete: Schema.optionalKey(Schema.Boolean),
+  credential_read: Schema.optionalKey(Schema.Boolean),
+  credential_create: Schema.optionalKey(Schema.Boolean),
+  credential_update: Schema.optionalKey(Schema.Boolean),
+  credential_delete: Schema.optionalKey(Schema.Boolean),
+  credential_totp: Schema.optionalKey(Schema.Boolean),
 }).annotate({ identifier: "Permissions" });
 export type Permissions = typeof Permissions.Type;
 export type Permission = keyof Permissions;
