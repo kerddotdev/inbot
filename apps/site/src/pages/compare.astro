@@ -11,6 +11,7 @@ const rows = [
   { key: "events", label: "Webhooks and live events" },
   { key: "approval", label: "Approval before sending" },
   { key: "auth", label: "Agent access" },
+  { key: "vault", label: "Agent passwords and logins" },
   { key: "price", label: "Cost to start" },
 ] as const;
 
@@ -31,6 +32,7 @@ const products: Product[] = [
       events: "Signed webhooks and WebSocket",
       approval: "Enforced for API key and OAuth grants: direct, approval or read_only",
       auth: "Scoped API keys and OAuth",
+      vault: "Built in: agents get references, never values, and the server types passwords into the browser after an origin check.",
       price: "Free software. Workers Paid starts at $5/month; 3,000 sends included, then $0.35/1,000. Domain, host and usage costs are separate.",
     },
     sources: [
@@ -53,6 +55,7 @@ const products: Product[] = [
       events: "Webhooks and WebSocket",
       approval: "Draft review workflow; a mandatory send-approval policy is not documented in the linked guide.",
       auth: "API keys, OAuth for MCP",
+      vault: "Not documented",
       price: "Free: 3 inboxes, 3,000 emails/month, 100/day. Developer: $20/month for 10 inboxes and 10,000 emails; add-ons cost extra.",
     },
     sources: [
@@ -74,6 +77,7 @@ const products: Product[] = [
       events: "Webhooks",
       approval: "Rules and quotas; a mandatory send-approval step is not documented in the linked overview.",
       auth: "API keys",
+      vault: "Not documented",
       price: "Free: 3 Agent Accounts and 3,000 emails/month. Essentials: $15/month for 10 accounts and 10,000 emails; overages cost extra.",
     },
     sources: ["https://developer.nylas.com/docs/v3/agent-accounts/", "https://www.nylas.com/pricing/"],
@@ -91,6 +95,7 @@ const products: Product[] = [
       events: "Webhooks",
       approval: "Not documented",
       auth: "API keys, OAuth for MCP",
+      vault: "Not documented",
       price: "Transactional email: 3,000/month free, 100/day. Pro: $20/month for 50,000; extra emails $0.90/1,000. Inbox beta access is separate.",
     },
     sources: ["https://resend.com/pricing", "https://resend.com/docs/mcp-server"],
@@ -108,6 +113,7 @@ const products: Product[] = [
       events: "Webhooks and WebSocket",
       approval: "Not documented",
       auth: "API keys, OAuth for MCP",
+      vault: "Not documented",
       price: "Free: 3 inboxes, 3,000 emails/month, 100/day. Pro: EUR 9/month for 10 inboxes and 10,000 emails, plus usage.",
     },
     sources: ["https://openmail.sh/pricing", "https://docs.openmail.sh/integrations/mcp.md"],
@@ -125,6 +131,7 @@ const products: Product[] = [
       events: "Not documented",
       approval: "External MCP agents create drafts for owner review.",
       auth: "Cloudflare Access for the owner",
+      vault: "Not documented",
       price: "Free software. Workers Paid starts at $5/month for sending, plus infrastructure usage.",
     },
     sources: ["https://github.com/cloudflare/agentic-inbox", "https://blog.cloudflare.com/email-for-agents/"],
@@ -142,6 +149,7 @@ const products: Product[] = [
       events: "Webhooks",
       approval: "Reviewer decisions are recorded; they do not execute an action.",
       auth: "Identity tokens with scopes; separate operator credentials and remote MCP OAuth.",
+      vault: "Not documented",
       price: "Free software; server, domain and mail-provider or relay costs are separate.",
     },
     sources: ["https://github.com/openagentemail/openagentemail"],
@@ -159,6 +167,7 @@ const products: Product[] = [
       events: "Signed webhooks",
       approval: "Not built in",
       auth: "Bearer key",
+      vault: "Not documented",
       price: "Free software. Workers Paid starts at $5/month for sending, plus infrastructure usage.",
     },
     sources: [

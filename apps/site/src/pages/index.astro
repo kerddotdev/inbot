@@ -8,17 +8,20 @@ import CipherPair from "../components/CipherPair.astro";
 import PolicyDemo from "../components/PolicyDemo.astro";
 import mailLight from "../assets/screens/mail-light.webp";
 import mailDark from "../assets/screens/mail-dark.webp";
+import vaultLight from "../assets/screens/vault-light.webp";
+import vaultDark from "../assets/screens/vault-dark.webp";
 ---
 
 <Base
   title="Inbot"
-  description="Private email for AI agents. Give each agent its own inbox on your domain, keep mail encrypted on your own machine, and decide what agents may send."
+  description="Private email and a credential vault for AI agents. Give each agent its own inbox on your domain and logins it can use but never read, all encrypted on your own machine."
 >
   <section class="hero">
-    <h1 class="display">Email for AI agents.<br />Kept on your machine.</h1>
+    <h1 class="display">Email and logins for AI agents.<br />Kept on your machine.</h1>
     <p class="lede">
-      Give every agent its own inbox on your domain. Mail waits in the cloud only as ciphertext,
-      lives in an encrypted database on your computer, and leaves only when its rules allow.
+      Give every agent its own inbox on your domain and a private vault of credentials it can use
+      but never read. Mail waits in the cloud only as ciphertext, and everything else lives in an
+      encrypted database on your computer.
     </p>
     <div class="actions">
       <a class="btn btn-primary" href="/docs/get-started/install">Get started</a>
@@ -49,6 +52,36 @@ import mailDark from "../assets/screens/mail-dark.webp";
       <a class="more" href="/features">See the features</a>
     </header>
     <Screenshot light={mailLight} dark={mailDark} alt="The Inbot owner app showing an agent inbox with a selected thread." />
+  </section>
+
+  <section class="sec wide" aria-labelledby="vault">
+    <header>
+      <h2 class="h2" id="vault">Logins agents can use, not read</h2>
+      <p>
+        Agents get references like <code>inbot://credentials/&lt;id&gt;/password</code>, never the
+        values. Each use is checked against the agent's permissions, inbox scope and use policy, and
+        by default waits for your approval.
+      </p>
+      <a class="more" href="/docs/guides/vault">Read about the vault</a>
+    </header>
+    <Screenshot light={vaultLight} dark={vaultDark} alt="The Inbot Vault screen showing a credential with hidden fields, references and a live one-time code." />
+  </section>
+
+  <section class="sec" aria-labelledby="types">
+    <header>
+      <h2 class="h2" id="types">The server types the password</h2>
+      <p>
+        When an agent signs up for a site, Inbot generates the password and types it into the
+        agent's browser itself. The page's origin is checked against the credential first, so a
+        phishing page or an injected email cannot steer it to the wrong site.
+      </p>
+      <a class="more" href="/docs/concepts/security">Read the security model</a>
+    </header>
+    <ul class="facts">
+      <li><strong>Never in the conversation.</strong> A new account's password is generated and filled in by the server and never returned to the agent. TOTP seeds stay on the server too.</li>
+      <li><strong>Your call.</strong> Agents can ask for a credential and you enter it in the owner app, and every use is logged by name, never by value.</li>
+      <li><strong>Honest limit.</strong> Whatever types a password holds it for that moment, so keep use on approval for sites that matter.</li>
+    </ul>
   </section>
 
   <section class="sec" aria-labelledby="surfaces">
