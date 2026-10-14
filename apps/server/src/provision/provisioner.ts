@@ -140,7 +140,7 @@ export function makeProvisioner(options: {
                 type: "TXT",
                 name: `cf-bounce._domainkey.${domain}`,
                 value: "",
-                status: "MISSING",
+                status: "UNKNOWN",
                 reason: "Cloudflare assigns the DKIM key during apply.",
               } satisfies VerificationRecord,
               ...Array.from(
@@ -150,7 +150,7 @@ export function makeProvisioner(options: {
                     type: "MX",
                     name: `cf-bounce.${domain}`,
                     value: "",
-                    status: "MISSING",
+                    status: "UNKNOWN",
                     reason: "Cloudflare assigns the sending MX target and priority during apply.",
                   }) satisfies VerificationRecord,
               ),
@@ -158,20 +158,23 @@ export function makeProvisioner(options: {
                 type: "TXT",
                 name: `cf-bounce.${domain}`,
                 value: "v=spf1 include:_spf.mx.cloudflare.net ~all",
-                status: "MISSING",
+                status: "UNKNOWN",
               } satisfies VerificationRecord,
               {
                 type: "TXT",
                 name: `_dmarc.${domain}`,
                 value: "v=DMARC1; p=reject;",
-                status: "MISSING",
+                status: "UNKNOWN",
               } satisfies VerificationRecord,
             ]
           : verificationRecords(yield* api.sendingDns(zone.id, sending.tag));
       return {
         domain,
         steps,
-        records: yield* dns.check([...sendingRecords, ...verificationRecords(routingRecords)]),
+        records: yield* dns.check(
+          [...sendingRecords, ...verificationRecords(routingRecords)],
+          zone.name,
+        ),
         warnings: [
           previewWarning,
           "Cloudflare may add cf2024-1._domainkey at the zone apex; Inbot records its ID for conditional cleanup.",
@@ -540,7 +543,7 @@ export function makeProvisioner(options: {
                   previous.status === "VALID",
               )
                 ? "VALID"
-                : "MISSING",
+                : "UNKNOWN",
           })),
         );
         yield* repo.status(
@@ -565,7 +568,7 @@ export function makeProvisioner(options: {
             "Apply the domain resources, then verify the domain again.",
           );
         yield* recoverDns(row);
-        const records = yield* dns.check(row.records);
+        const records = yield* dns.check(row.records, row.zone_name);
         yield* repo.records(id, records);
         if (records.length === 0 || records.some((record) => record.status !== "VALID")) {
           yield* repo.status(
@@ -573,7 +576,9 @@ export function makeProvisioner(options: {
             "VERIFYING",
             "ready",
             yield* now(),
-            "Waiting for public DNS propagation.",
+            records.some((record) => record.status === "UNKNOWN")
+              ? "DNS could not be verified. Check record details and retry verification."
+              : "DNS records do not match the required values. Check record details and retry verification.",
           );
           return domainWire(yield* getRow(id));
         }
