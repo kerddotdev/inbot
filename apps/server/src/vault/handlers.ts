@@ -26,6 +26,14 @@ export const CredentialsLive = HttpApiBuilder.group(ServerApi, "credentials", (h
       .handle("inboxes_credentials_generate", ({ params, payload }) =>
         respond(vault.generate(params.credential_id, payload, params.inbox_id)),
       )
+      .handle("inboxes_credentials_fill", ({ params, payload }) =>
+        respond(vault.fill(params.credential_id, payload, params.inbox_id)),
+      )
+      .handle("inboxes_credentials_capture", ({ params, payload }) =>
+        respond(vault.capture(params.credential_id, payload, params.inbox_id)),
+      )
+      .handle("owner_vault_settings", () => respond(vault.settings()))
+      .handle("owner_vault_setSettings", ({ payload }) => respond(vault.setSettings(payload)))
       .handle("inboxes_credentials_totp", ({ params }) =>
         respond(vault.totp(params.credential_id, params.inbox_id)),
       )

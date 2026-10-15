@@ -24,6 +24,7 @@ test("read presets grant only vault metadata while full grants every vault permi
     credential_update: true,
     credential_delete: true,
     credential_totp: true,
+    credential_fill: true,
   });
   expect(permissionPreset({ ...presetPermissions.read, credential_totp: true })).toBe("custom");
 });

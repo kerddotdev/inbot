@@ -57,6 +57,35 @@ export const CredentialsApi = HttpApiGroup.make("credentials")
         error: Errors.WriteErrors,
       },
     ).annotate(RequiredPermission, "credential_update"),
+    HttpApiEndpoint.post(
+      "inboxes_credentials_fill",
+      "/v0/inboxes/:inbox_id/credentials/:credential_id/fill",
+      {
+        params,
+        payload: Vault.FillCredentialRequest,
+        success: Vault.FillCredentialResponse,
+        error: Errors.WriteErrors,
+      },
+    ).annotate(RequiredPermission, "credential_fill"),
+    HttpApiEndpoint.post(
+      "inboxes_credentials_capture",
+      "/v0/inboxes/:inbox_id/credentials/:credential_id/capture",
+      {
+        params,
+        payload: Vault.CaptureCredentialRequest,
+        success: Vault.Credential,
+        error: Errors.WriteErrors,
+      },
+    ).annotate(RequiredPermission, "credential_fill"),
+    HttpApiEndpoint.get("owner_vault_settings", "/v0/owner/vault/settings", {
+      success: Vault.VaultSettings,
+      error: Errors.ReadErrors,
+    }).middleware(OwnerOnly),
+    HttpApiEndpoint.put("owner_vault_setSettings", "/v0/owner/vault/settings", {
+      payload: Vault.VaultSettings,
+      success: Vault.VaultSettings,
+      error: Errors.WriteErrors,
+    }).middleware(OwnerOnly),
     HttpApiEndpoint.get(
       "inboxes_credentials_totp",
       "/v0/inboxes/:inbox_id/credentials/:credential_id/totp",

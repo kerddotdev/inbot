@@ -20,3 +20,10 @@ CREATE TABLE IF NOT EXISTS credential_fields (
   PRIMARY KEY (credential_id, name)
 );
 `;
+
+export const vaultSettingsSchema = `
+CREATE TABLE IF NOT EXISTS vault_settings (
+  id INTEGER PRIMARY KEY CHECK (id = 1),
+  remote_cdp_hosts TEXT NOT NULL
+);
+`;

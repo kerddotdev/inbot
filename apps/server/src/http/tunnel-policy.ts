@@ -1,9 +1,20 @@
 import { Context } from "effect";
+import type { HttpServerRequest } from "effect/http";
 import { decodeWebPath } from "./static.js";
 
 export const TunnelTraffic = Context.Reference<boolean>("inbot/TunnelTraffic", {
   defaultValue: () => false,
 });
+
+// MCP carries the invocation HTTP request, but not arbitrary context references.
+const tunnelRequests = new WeakSet<HttpServerRequest.HttpServerRequest>();
+export function markTunnelRequest(request: HttpServerRequest.HttpServerRequest) {
+  tunnelRequests.add(request);
+  return request;
+}
+export function isTunnelRequest(request: HttpServerRequest.HttpServerRequest) {
+  return tunnelRequests.has(request);
+}
 
 export type TunnelRoute = "agent" | "auth" | "web" | "blocked";
 export function tunnelPath(url: string): string {

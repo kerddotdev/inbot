@@ -159,6 +159,25 @@ export const CredentialEvent = Schema.Struct({
 }).annotate({ identifier: "CredentialEvent" });
 export type CredentialEvent = typeof CredentialEvent.Type;
 
+const credentialUse = {
+  credential_id: CredentialId,
+  inbox_id: InboxId,
+  field: CredentialFieldName,
+  origin: Schema.String,
+};
+export const CredentialUsedEvent = Schema.Struct({
+  type: Schema.Literal("event"),
+  event_type: Schema.Literal("credential.used"),
+  event_id: Schema.String,
+  credential: Schema.Struct({ ...credentialUse, via: Schema.Literals(["fill"]) }),
+}).annotate({ identifier: "CredentialUsedEvent" });
+export const CredentialCapturedEvent = Schema.Struct({
+  type: Schema.Literal("event"),
+  event_type: Schema.Literal("credential.captured"),
+  event_id: Schema.String,
+  credential: Schema.Struct(credentialUse),
+}).annotate({ identifier: "CredentialCapturedEvent" });
+
 export const DomainVerifiedEvent = Schema.Struct({
   type: Schema.Literal("event"),
   event_type: Schema.Literal("domain.verified"),
@@ -203,6 +222,8 @@ export const Event = Schema.Union([
   MessageSendUnknownEvent,
   DraftEvent,
   CredentialEvent,
+  CredentialUsedEvent,
+  CredentialCapturedEvent,
   DomainVerifiedEvent,
   OAuthGrantEvent,
   QuarantineEvent,

@@ -64,6 +64,7 @@ Thread tools may omit `inboxId` for a scoped global lookup. Default page size is
 | `create_credential`                                                                                                 | false        | false           | false          | `credential_create` |
 | `update_credential`, `generate_password`                                                                            | false        | false           | false          | `credential_update` |
 | `delete_credential`                                                                                                 | false        | true            | true           | `credential_delete` |
+| `fill_credential`, `capture_credential`                                                                             | false        | false           | false          | `credential_fill`   |
 | `get_totp_code`                                                                                                     | true         | false           | true           | `credential_totp`   |
 
 Create/send annotations stay non-idempotent because `clientId` and
@@ -95,6 +96,21 @@ when used. `get_totp_code` returns a temporary code, expiry, and period; it reco
 usage time without returning the seed. Send policy does not affect these operations.
 `update_credential` is annotated non-idempotent because it can generate a fresh
 password. Owner reveal is available only through local REST/CLI and has no tool.
+
+`fill_credential` and `capture_credential` take `inboxId`, `credentialId`,
+`cdp_endpoint`, `selector`, `field`, optional target-page `url`, and optional
+`target_id`. Both require `credential_fill`, are neither read-only nor destructive,
+and are non-idempotent. The server types the value itself or captures it directly
+into the vault; the agent receives metadata/refs only. The main page origin must
+match the credential. Fill on `totp` types the current code, never its seed;
+capture on `totp` accepts a setup key or otpauth URI.
+
+Use Chrome/Chromium launched with `--remote-debugging-port=9222`, Playwright
+`chromium.launch({ args: ["--remote-debugging-port=9222"] })`, Chrome DevTools MCP
+`--browserUrl`, or a remote browser connect URL allowlisted by the owner. Local
+requests can use loopback CDP. Tunnel requests require an owner-allowed public
+HTTPS/WSS host, including any discovered WebSocket. Owner vault settings have no
+MCP tool. See [browser credential use](../vault/README.md).
 
 ## Drafts
 

@@ -573,7 +573,7 @@ Use the local owner connection with `--home <directory>` or `INBOT_HOME`; scoped
 `inbot credentials list` maps to `GET /v0/credentials`; `--inbox INBOX` uses the
 inbox list route, and `--inbox-id INBOX` filters the global route. List supports
 `--q` and shared pagination. `get`, `update`, `delete`, `generate`, `totp`, and
-`reveal` take `INBOX CREDENTIAL_ID`; `create` takes `INBOX`. They call the shared
+`reveal`, `fill`, and `capture` take `INBOX CREDENTIAL_ID`; `create` takes `INBOX`. They call the shared
 credential REST endpoints, including `generate`, `totp`, and owner-only `fields`.
 
 ```sh
@@ -596,5 +596,31 @@ remove fields with repeatable `--remove-fields`.
 Agent output contains only metadata and refs, except the temporary code returned
 by `totp`. A ref is a name and does not grant access. `reveal` requires the local
 owner connection and prints secret values; agent keys and tunnel access are
-rejected. Credential read/create/update/delete/TOTP permissions and inbox scope
+rejected. Credential read/create/update/delete/TOTP/fill permissions and inbox scope
 apply independently of mail send policy. Events contain field names only.
+
+`credentials fill` and `credentials capture` map to the corresponding credential
+POST routes and require `credential_fill`. Both accept every shared target field:
+`--cdp-endpoint`, `--selector`, `--field`, optional `--url`, and `--target-id`.
+The target URL is a browser page hint; it does not change credential origins.
+Fill returns field/origin metadata, and capture returns credential refs. A `totp`
+fill types the current code; capture normalizes a setup key or otpauth URI. Secret
+values are never printed. After an uncertain browser result, inspect the page
+before retrying; these operations are not idempotent.
+
+```sh
+inbot credentials fill bot@example.test CREDENTIAL_ID --cdp-endpoint http://127.0.0.1:9222 --selector '#password' --field password --json
+inbot credentials capture bot@example.test CREDENTIAL_ID --cdp-endpoint http://127.0.0.1:9222 --selector '#setup-key' --field totp --json
+inbot vault settings show --json
+inbot vault settings set --remote-cdp-hosts browser.example.com --remote-cdp-hosts '*.browserbase.com' --json
+inbot vault settings set --data '{"remote_cdp_hosts":[]}' --json
+```
+
+The owner `vault settings show`/`set` commands follow the existing grouped
+operation pattern (`transport status`/`configure`, `remote status`/`enable`), under
+a nested settings group. They map to GET/PUT `/v0/owner/vault/settings` and require
+the local owner connection. Set replaces the entire list; an empty list disables
+remote fill/capture. Hostnames are lowercase DNS names or wildcard suffixes, with
+no schemes, IPs or ports. Wildcards exclude the bare apex. Tunnel browser use
+requires HTTPS/WSS and public DNS addresses; local loopback CDP remains usable.
+See [browser credential use](../server/src/vault/README.md) for setup and limits.

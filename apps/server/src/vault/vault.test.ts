@@ -10,9 +10,13 @@ import {
   CredentialFieldsResponse,
   ListCredentialsResponse,
   TotpCodeResponse,
+  FillCredentialResponse,
+  VaultSettings,
 } from "../../../../packages/contracts/src/vault.js";
 import { eventVisible, readEvents } from "../events/log.js";
 import { fixture } from "../http/test-fixture.js";
+import { fakeCdp } from "./cdp-test-server.js";
+import { migrate } from "../store.js";
 import { normalizeTotp } from "./totp.js";
 import { makeVault } from "./vault.js";
 
@@ -27,6 +31,7 @@ const permissions: Permissions = {
   credential_update: true,
   credential_delete: true,
   credential_totp: true,
+  credential_fill: true,
 };
 const test = base.extend<{ api: Awaited<ReturnType<typeof fixture>> }>({
   api: async ({ task: _task }, use) => {
@@ -627,4 +632,413 @@ test("deleting an inbox cascades through credentials and secret fields", async (
   expect(
     (await run(api, makeVault(api.store).get(retained.credential_id, otherId))).credential_id,
   ).toBe(retained.credential_id);
+});
+
+test("fills through HTTP with the secret only in native insertion and records scoped metadata", async ({
+  api,
+}) => {
+  const transactionActive = await api.run(api.store.use((db) => () => db.inTransaction));
+  const inTransactions: boolean[] = [];
+  const browser = await fakeCdp({
+    reply: (_command, result) => {
+      inTransactions.push(transactionActive());
+      return result;
+    },
+  });
+  const logs = (["log", "error", "warn", "info", "debug"] as const).map((method) =>
+    vi.spyOn(console, method).mockImplementation(() => {}),
+  );
+  const secret = "only-native-insertion-p8R";
+  try {
+    const vault = makeVault(api.store);
+    const created = await run(
+      api,
+      vault.create(
+        { name: "Browser", url: "https://example.test", fields: { password: secret } },
+        inboxId,
+      ),
+    );
+    const { token, principal } = await agent(api, { credential_fill: true });
+    api.advance(2000);
+    const response = await api.request(
+      `/v0/inboxes/${inboxId}/credentials/${created.credential_id}/fill`,
+      {
+        method: "POST",
+        token,
+        body: {
+          cdp_endpoint: browser.endpoint,
+          selector: "#password",
+          field: "password",
+          url: "https://example.test/login",
+          target_id: "page-1",
+        },
+      },
+    );
+    expect(response.status).toBe(200);
+    const result = Schema.decodeUnknownSync(FillCredentialResponse)(await response.json());
+    expect(result).toEqual({
+      credential_id: created.credential_id,
+      field: "password",
+      origin: "https://example.test",
+      url: "https://example.test/login",
+    });
+    expect(browser.messages.filter((message) => JSON.stringify(message).includes(secret))).toEqual([
+      expect.objectContaining({ method: "Input.insertText", params: { text: secret } }),
+    ]);
+    expect(inTransactions.length).toBeGreaterThan(0);
+    expect(inTransactions.every((active) => !active)).toBe(true);
+    expect((await run(api, vault.get(created.credential_id, inboxId))).last_used_at).toBe(
+      "2026-10-10T12:00:02.000Z",
+    );
+    const rows = await api.run(api.store.use((db) => readEvents(db, 0)));
+    const used = rows.find((row) => row.event_type === "credential.used");
+    if (used === undefined) throw new Error("Expected credential usage event");
+    expect(used.payload).toEqual({
+      type: "event",
+      event_type: "credential.used",
+      event_id: expect.any(String),
+      credential: {
+        credential_id: created.credential_id,
+        inbox_id: inboxId,
+        field: "password",
+        origin: "https://example.test",
+        via: "fill",
+      },
+    });
+    expect(eventVisible(used, principal)).toBe(false);
+    expect(
+      eventVisible(used, {
+        ...principal,
+        grant: { ...principal.grant, permissions: { credential_read: true } },
+      }),
+    ).toBe(true);
+    expect(
+      eventVisible(used, {
+        ...principal,
+        grant: { ...principal.grant, inbox_ids: [otherId], permissions: { credential_read: true } },
+      }),
+    ).toBe(false);
+    noSecrets([result, rows, logs.map((log) => log.mock.calls)], [secret]);
+  } finally {
+    for (const log of logs) log.mockRestore();
+    await browser.close();
+  }
+});
+
+test("fills the current TOTP from the injected clock without returning the code or seed", async ({
+  api,
+}) => {
+  const browser = await fakeCdp();
+  try {
+    const vault = makeVault(api.store);
+    const created = await run(
+      api,
+      vault.create(
+        { name: "TOTP", origins: ["https://example.test"], fields: { totp: uri } },
+        inboxId,
+      ),
+    );
+    api.advance(59_000 - Date.parse(created.created_at));
+    const { principal } = await agent(api, { credential_fill: true });
+    const result = await run(
+      api,
+      vault.fill(
+        created.credential_id,
+        { cdp_endpoint: browser.pageSocket, field: "totp", selector: "#code" },
+        inboxId,
+      ),
+      principal,
+    );
+    expect(
+      browser.messages
+        .filter((message) => message.method === "Input.insertText")
+        .map((message) => message.params),
+    ).toEqual([{ text: "94287082" }]);
+    noSecrets(browser.messages, [seed, uri]);
+    noSecrets(
+      [result, await api.run(api.store.use((db) => readEvents(db, 0)))],
+      [seed, uri, "94287082"],
+    );
+  } finally {
+    await browser.close();
+  }
+});
+
+test("captures browser fields and normalizes TOTP setup keys while returning refs only", async ({
+  api,
+}) => {
+  const vault = makeVault(api.store);
+  const created = await run(
+    api,
+    vault.create({ name: "Capture", url: "https://example.test" }, inboxId),
+  );
+  const { token, principal } = await agent(api, { credential_fill: true });
+  for (const [field, value] of [
+    ["password", "captured-secret-9Jq"],
+    ["totp", "gezd gnbv gy3t qojq gezd gnbv gy3t qojq"],
+    ["totp", uri],
+  ] as const) {
+    const browser = await fakeCdp({ value });
+    try {
+      const response = await api.request(
+        `/v0/inboxes/${inboxId}/credentials/${created.credential_id}/capture`,
+        {
+          token,
+          method: "POST",
+          body: { cdp_endpoint: browser.endpoint, selector: "#setup", field },
+        },
+      );
+      expect(response.status).toBe(200);
+      const captured = Schema.decodeUnknownSync(Credential)(await response.json());
+      expect(captured.refs[field]).toBe(`inbot://credentials/${created.credential_id}/${field}`);
+      expect(captured.last_used_at).toBe("2026-10-10T12:00:00.000Z");
+      const revealed = await run(api, vault.reveal(created.credential_id, inboxId));
+      expect(revealed.fields[field]).toBe(field === "totp" ? normalizeTotp(value) : value);
+      const rows = await api.run(api.store.use((db) => readEvents(db, 0)));
+      const event = rows.at(-1);
+      if (event === undefined) throw new Error("Expected capture event");
+      expect(event.payload).toMatchObject({
+        event_type: "credential.captured",
+        credential: {
+          credential_id: created.credential_id,
+          inbox_id: inboxId,
+          field,
+          origin: "https://example.test",
+        },
+      });
+      expect(Object.keys("credential" in event.payload ? event.payload.credential : {})).toEqual([
+        "credential_id",
+        "inbox_id",
+        "field",
+        "origin",
+      ]);
+      expect(eventVisible(event, principal)).toBe(false);
+      expect(
+        eventVisible(event, {
+          ...principal,
+          grant: { ...principal.grant, permissions: { credential_read: true } },
+        }),
+      ).toBe(true);
+      expect(browser.messages.some((message) => message.method === "Input.insertText")).toBe(false);
+      noSecrets([captured, rows, browser.messages], [value, seed, normalizeTotp(seed)]);
+    } finally {
+      await browser.close();
+    }
+  }
+});
+
+test("rejects missing origins, fields, permissions and foreign inboxes before contacting CDP", async ({
+  api,
+}) => {
+  const vault = makeVault(api.store);
+  const created = await credential(api);
+  const foreign = await credential(api, "Foreign", otherId);
+  const browser = await fakeCdp();
+  const input = { cdp_endpoint: browser.endpoint, field: "password", selector: "#password" };
+  try {
+    const { principal, token } = await agent(api, { credential_fill: true });
+    const denied = await agent(api, { credential_read: true, credential_update: true });
+    for (const operation of ["fill", "capture"] as const) {
+      const invoke = (id: string, inbox: string) =>
+        operation === "fill"
+          ? vault.fill(id, input, inbox).pipe(Effect.asVoid)
+          : vault.capture(id, input, inbox).pipe(Effect.asVoid);
+      expect(
+        await run(api, Effect.result(invoke(created.credential_id, inboxId)), principal),
+      ).toMatchObject({
+        failure: { code: "validation_error", fix: "Set the credential url or origins first." },
+      });
+      expect(
+        await run(api, Effect.result(invoke(foreign.credential_id, otherId)), principal),
+      ).toMatchObject({ failure: { code: "not_found" } });
+      expect(
+        await run(api, Effect.result(invoke(created.credential_id, inboxId)), denied.principal),
+      ).toMatchObject({ failure: { code: "missing_permission" } });
+      await errorCode(
+        await api.request(
+          `/v0/inboxes/${otherId}/credentials/${foreign.credential_id}/${operation}`,
+          { token, method: "POST", body: input },
+        ),
+        "not_found",
+        404,
+      );
+      await errorCode(
+        await api.request(
+          `/v0/inboxes/${inboxId}/credentials/${created.credential_id}/${operation}`,
+          { token: denied.token, method: "POST", body: input },
+        ),
+        "missing_permission",
+        403,
+      );
+    }
+    await run(api, vault.update(created.credential_id, { url: "https://example.test" }, inboxId));
+    expect(
+      await run(
+        api,
+        Effect.result(vault.fill(created.credential_id, { ...input, field: "absent" }, inboxId)),
+        principal,
+      ),
+    ).toMatchObject({ failure: { code: "not_found" } });
+    expect(browser.messages).toEqual([]);
+    expect(browser.requests).toEqual([]);
+    expect(
+      (await run(api, vault.get(created.credential_id, inboxId))).last_used_at,
+    ).toBeUndefined();
+  } finally {
+    await browser.close();
+  }
+});
+
+test("maps CDP failures to safe wire errors without recording usage", async ({ api }) => {
+  const vault = makeVault(api.store);
+  const secret = "never-echo-browser-error-p3Z";
+  const created = await run(
+    api,
+    vault.create(
+      { name: "Failures", url: "https://example.test", fields: { password: secret } },
+      inboxId,
+    ),
+  );
+  for (const [options, code, status] of [
+    [{ pageUrl: "https://evil.test/login" }, "missing_permission", 403],
+    [{ pages: [] }, "validation_error", 400],
+    [{ missing: true }, "validation_error", 400],
+    [{ readOnly: true }, "validation_error", 400],
+    [{ handshake: "reject" }, "service_unavailable", 503],
+    [
+      { protocolError: { method: "Input.insertText", message: `Browser echoed ${secret}` } },
+      "service_unavailable",
+      503,
+    ],
+  ] as const) {
+    const browser = await fakeCdp(options);
+    try {
+      const response = await api.request(
+        `/v0/inboxes/${inboxId}/credentials/${created.credential_id}/fill`,
+        {
+          method: "POST",
+          body: { cdp_endpoint: browser.endpoint, field: "password", selector: "#password" },
+        },
+      );
+      expect(response.status).toBe(status);
+      const error: unknown = await response.json();
+      expect(error).toMatchObject({ code, fix: expect.any(String) });
+      noSecrets(error, [secret]);
+      if (code === "missing_permission") {
+        expect(error).toMatchObject({
+          message: expect.stringContaining("https://evil.test"),
+          fix: "Open the credential's site, or add the origin to the credential.",
+        });
+        expect(browser.messages.some((message) => message.method === "Input.insertText")).toBe(
+          false,
+        );
+      }
+    } finally {
+      await browser.close();
+    }
+  }
+  const browser = await fakeCdp({ pageUrl: "https://evil.test", value: secret });
+  try {
+    await errorCode(
+      await api.request(`/v0/inboxes/${inboxId}/credentials/${created.credential_id}/capture`, {
+        method: "POST",
+        body: { cdp_endpoint: browser.endpoint, field: "password", selector: "#password" },
+      }),
+      "missing_permission",
+      403,
+    );
+    expect(browser.messages.some((message) => message.method.startsWith("Runtime."))).toBe(false);
+  } finally {
+    await browser.close();
+  }
+  expect((await run(api, vault.get(created.credential_id, inboxId))).last_used_at).toBeUndefined();
+  expect(
+    (await api.run(api.store.use((db) => readEvents(db, 0))))
+      .filter((row) => "credential" in row.payload)
+      .map((row) => row.event_type),
+  ).toEqual(["credential.created"]);
+});
+
+test("stores local owner vault settings safely across migration replay and denies agents", async ({
+  api,
+}) => {
+  const vault = makeVault(api.store);
+  const { principal, token } = await agent(api);
+  const path = "/v0/owner/vault/settings";
+  expect(await run(api, vault.settings())).toEqual({ remote_cdp_hosts: [] });
+  const settings = { remote_cdp_hosts: ["browser.test", "*.browserbase.com"] };
+  const saved = await api.request(path, { method: "PUT", body: settings });
+  expect(saved.status).toBe(200);
+  expect(Schema.decodeUnknownSync(VaultSettings)(await saved.json())).toEqual(settings);
+  await api.run(api.store.use((db) => db.pragma("user_version = 14")));
+  await api.run(api.store.use((db) => Effect.runSync(migrate(db))));
+  expect(Schema.decodeUnknownSync(VaultSettings)(await (await api.request(path)).json())).toEqual(
+    settings,
+  );
+  for (const method of ["GET", "PUT"])
+    await errorCode(
+      await api.request(path, { method, token, ...(method === "PUT" ? { body: settings } : {}) }),
+      "missing_permission",
+      403,
+    );
+  expect(await run(api, Effect.result(vault.settings()), principal)).toMatchObject({
+    failure: { code: "missing_permission" },
+  });
+  expect(await run(api, Effect.result(vault.setSettings(settings)), principal)).toMatchObject({
+    failure: { code: "missing_permission" },
+  });
+  await errorCode(
+    await api.request(path, { method: "PUT", body: { remote_cdp_hosts: ["127.0.0.1"] } }),
+    "validation_error",
+    400,
+  );
+  expect(await run(api, vault.settings())).toEqual(settings);
+  expect(await run(api, vault.setSettings({ remote_cdp_hosts: [] }))).toEqual({
+    remote_cdp_hosts: [],
+  });
+});
+
+test("rolls back captured fields and usage when the event cannot be committed", async ({ api }) => {
+  const vault = makeVault(api.store);
+  const created = await run(
+    api,
+    vault.create(
+      {
+        name: "Atomic capture",
+        url: "https://example.test",
+        fields: { password: "retained-secret-b7F" },
+      },
+      inboxId,
+    ),
+  );
+  const browser = await fakeCdp({ value: "uncommitted-secret-c8P" });
+  try {
+    await api.run(
+      api.store.use((db) =>
+        db.exec(
+          "CREATE TRIGGER reject_capture_event BEFORE INSERT ON event_log WHEN NEW.event_type = 'credential.captured' BEGIN SELECT RAISE(ABORT, 'synthetic event failure'); END",
+        ),
+      ),
+    );
+    api.advance(2000);
+    const response = await api.request(
+      `/v0/inboxes/${inboxId}/credentials/${created.credential_id}/capture`,
+      {
+        method: "POST",
+        body: { cdp_endpoint: browser.endpoint, field: "password", selector: "#password" },
+      },
+    );
+    expect(response.status).toBe(503);
+    const error: unknown = await response.json();
+    expect(error).toMatchObject({ code: "service_unavailable", fix: expect.any(String) });
+    expect((await run(api, vault.reveal(created.credential_id, inboxId))).fields.password).toBe(
+      "retained-secret-b7F",
+    );
+    expect(await run(api, vault.get(created.credential_id, inboxId))).toEqual(created);
+    const rows = await api.run(api.store.use((db) => readEvents(db, 0)));
+    expect(rows.filter((row) => row.event_type === "credential.captured")).toEqual([]);
+    noSecrets([error, rows], ["retained-secret-b7F", "uncommitted-secret-c8P"]);
+  } finally {
+    await browser.close();
+  }
 });
