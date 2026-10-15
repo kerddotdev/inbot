@@ -13,20 +13,22 @@ import {
   CaptureCredentialRequest,
   VaultSettings,
   type FillCredentialResponse,
+  ResolveCredentialsRequest,
   type Credential,
   type CredentialFieldsResponse,
   type ListCredentialsResponse,
 } from "../../../../packages/contracts/src/vault.js";
 import type { CredentialEvent } from "../../../../packages/contracts/src/events.js";
 import type { Permission } from "../../../../packages/contracts/src/api-keys.js";
-import { allowedInboxes, authorize } from "../agent/authorization.js";
+import { allowedInboxes, authorize, inScope } from "../agent/authorization.js";
 import { appendEvent } from "../events/log.js";
+import { encrypt } from "../../../../packages/envelope/src/crypto.js";
+import { TunnelTraffic } from "../http/tunnel-policy.js";
 import { wireError } from "../http/errors.js";
 import { MailboxError, notFound, validate, validationError } from "../mailbox/errors.js";
 import { keysetWhere, page, preparePage, Where } from "../mailbox/queries.js";
 import { getInbox } from "../mailbox/rows.js";
 import { Store, type StoreService } from "../store.js";
-import { TunnelTraffic } from "../http/tunnel-policy.js";
 import { CdpError, fillField, readField } from "./cdp.js";
 import { checkCdpEndpoint } from "./endpoint-policy.js";
 import { generatePassword, PasswordRulesError } from "./generate.js";
@@ -350,6 +352,89 @@ export function makeVault(store: StoreService) {
       useCredential(id, request, inboxId, true).pipe(Effect.map((result) => result.credential)),
     settings: () => ownerSettings(),
     setSettings: (request: VaultSettings) => ownerSettings(request),
+    resolve: (request: ResolveCredentialsRequest) =>
+      Effect.gen(function* () {
+        if (yield* TunnelTraffic)
+          return yield* Effect.fail(
+            wireError(
+              "missing_permission",
+              "Credential resolution is local-only.",
+              "Run credential resolution on the Inbot host using its loopback URL.",
+            ),
+          );
+        yield* authorize("credential_run");
+        const input = yield* Effect.try({
+          try: () => validateInput(ResolveCredentialsRequest, request),
+          catch: () => validationError("The credential resolution request is invalid."),
+        });
+        // Validate the recipient before recording use, without holding a database transaction.
+        yield* Effect.tryPromise({
+          try: () => encrypt(input.public_key, new Uint8Array(0)),
+          catch: () => validationError("Invalid age public key.", "Use an X25519 age recipient."),
+        });
+        const values = yield* run("credential_run", undefined, (db, now, principal) => {
+          const used = new Set<string>();
+          return Object.fromEntries(
+            input.refs.map((ref, index) => {
+              const [id = "", field = ""] = ref.slice("inbot://credentials/".length).split("/");
+              const credential = Schema.decodeUnknownSync(Schema.optional(CredentialRow))(
+                db.prepare("SELECT * FROM credentials WHERE credential_id = ?").get(id),
+              );
+              const missing = wireError(
+                "not_found",
+                `Credential reference ${index + 1} was not found.`,
+                "Check the reference and ask the owner to verify its inbox scope and field.",
+              );
+              if (credential === undefined || !inScope(principal, credential.inbox_id))
+                throw missing;
+              const row = Schema.decodeUnknownSync(Schema.optional(FieldRow))(
+                db
+                  .prepare(
+                    "SELECT name, value FROM credential_fields WHERE credential_id = ? AND name = ?",
+                  )
+                  .get(id, field),
+              );
+              if (row === undefined) throw missing;
+              const stored = Redacted.value(row.value);
+              const value = field === "totp" ? totpCode(stored, now).code : stored;
+              if (!used.has(id)) {
+                db.prepare("UPDATE credentials SET last_used_at = ? WHERE credential_id = ?").run(
+                  new Date(now).toISOString(),
+                  id,
+                );
+                appendEvent(
+                  db,
+                  {
+                    type: "event",
+                    event_type: "credential.used",
+                    event_id: randomUUID(),
+                    credential: {
+                      credential_id: id,
+                      inbox_id: credential.inbox_id,
+                      field,
+                      via: "run",
+                    },
+                  },
+                  now,
+                );
+                used.add(id);
+              }
+              return [ref, value];
+            }),
+          );
+        });
+        const ciphertext = yield* Effect.tryPromise({
+          try: () =>
+            encrypt(input.public_key, new TextEncoder().encode(JSON.stringify({ values }))),
+          catch: () =>
+            wireError(
+              "service_unavailable",
+              "Could not encrypt credential values.",
+              "Retry credential resolution on the Inbot host.",
+            ),
+        });
+        return { ciphertext: Buffer.from(ciphertext).toString("base64") };
+      }),
     list: (request: ListCredentialsQuery = {}, inboxId?: string) =>
       run("credential_read", inboxId, (db, _now, principal): ListCredentialsResponse => {
         const query = validateInput(ListCredentialsQuery, request);

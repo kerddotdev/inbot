@@ -20,6 +20,10 @@ if (process.argv[2] === "serve") {
       process.stderr.write(text);
     },
     stdoutIsTTY: process.stdout.isTTY ?? false,
+    stderrBinary: (bytes) =>
+      new Promise<void>((resolve, reject) => {
+        process.stderr.write(bytes, (error) => (error ? reject(error) : resolve()));
+      }),
     stdoutBinary: (bytes) =>
       new Promise<void>((resolve, reject) => {
         process.stdout.write(bytes, (error) => (error ? reject(error) : resolve()));

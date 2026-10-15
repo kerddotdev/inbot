@@ -1249,3 +1249,31 @@ test("guards tunnel CDP in REST and each MCP invocation while keeping vault sett
     await browser.close();
   }
 });
+
+test("credential resolution is blocked over the tunnel including encoded and trailing-slash paths", async ({
+  f,
+}) => {
+  await f.run(f.remote.enable({ hostname }));
+  const key = await f.run(
+    f.keys.create({
+      inbox_ids: ["agent@example.test"],
+      permissions: { credential_run: true },
+      send_policy: "read_only",
+    }),
+  );
+  for (const path of [
+    "/v0/credentials/resolve",
+    "/v0/credentials/resolve/",
+    "/v0/%63redentials/%72esolve",
+    "/v0/credentials/resolve?ref=synthetic",
+  ]) {
+    expect(tunnelRoute(path)).toBe("blocked");
+    const response = await remoteRequest(f, path, {
+      method: "POST",
+      headers: { authorization: `Bearer ${key.api_key}`, "content-type": "application/json" },
+      body: "{}",
+    });
+    expect(response.status).toBe(403);
+    expect(await response.json()).toMatchObject({ code: "missing_permission" });
+  }
+});

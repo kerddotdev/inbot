@@ -12,6 +12,7 @@ describe("HTTP API declarations", () => {
   it("generates an authenticated OpenAPI document with scoped and global routes", () => {
     const document = OpenApi.fromApi(InbotApi);
     expect(document.paths["/v0/inboxes"]?.get).toBeDefined();
+    expect(document.paths["/v0/credentials/resolve"]?.post).toBeDefined();
     expect(document.paths["/v0/inboxes"]?.post).toBeDefined();
     expect(document.paths["/v0/inboxes/search"]?.get).toBeDefined();
     expect(document.paths["/v0/threads/{thread_id}"]?.patch).toBeDefined();
@@ -117,6 +118,12 @@ describe("HTTP API declarations", () => {
         expect([...endpoint.middlewares]).toEqual([OwnerOnly, BearerAuth]);
       }
     }
+    expect(
+      Context.get(
+        InbotApi.groups.credentials.endpoints.credentials_resolve.annotations,
+        RequiredPermission,
+      ),
+    ).toBe("credential_run");
     expect(
       Context.get(
         InbotApi.groups.messages.endpoints.inboxes_messages_send.annotations,

@@ -27,6 +27,7 @@ export const presetPermissions = {
     credential_delete: true,
     credential_totp: true,
     credential_fill: true,
+    credential_run: true,
   },
 } satisfies Record<PermissionPreset, Permissions>;
 

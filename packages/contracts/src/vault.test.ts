@@ -7,6 +7,7 @@ import {
   CreateCredentialRequest,
   UpdateCredentialRequest,
   GenerateFieldRequest,
+  ResolveCredentialsRequest,
 } from "./vault.js";
 
 const id = "1234567890abcdef1234567890abcdef";
@@ -96,6 +97,7 @@ test("enforces request limits and requires an effective update field", () => {
     credential_update: true,
     credential_delete: true,
     credential_totp: false,
+    credential_run: true,
     credential_fill: true,
   };
   expect(Schema.decodeUnknownSync(Permissions, { onExcessProperty: "error" })(permissions)).toEqual(
@@ -176,7 +178,7 @@ test("validates browser targets, owner host settings and metadata-only usage eve
     ).toThrow();
     if (event_type === "credential.used")
       expect(() =>
-        Schema.decodeUnknownSync(Event)({ ...event, credential: { ...credential, via: "run" } }),
+        Schema.decodeUnknownSync(Event)({ ...event, credential: { ...credential, via: "paste" } }),
       ).toThrow();
   }
   expect(() =>
@@ -188,4 +190,20 @@ test("validates browser targets, owner host settings and metadata-only usage eve
       value: "secret",
     }),
   ).toThrow();
+});
+
+test("bounds and deduplicates credential resolution references and requires an age recipient", () => {
+  const request = { refs: [metadata.refs.password], public_key: `age1${"q".repeat(58)}` };
+  const decode = Schema.decodeUnknownSync(ResolveCredentialsRequest, { onExcessProperty: "error" });
+  expect(decode(request)).toEqual(request);
+  for (const refs of [
+    [],
+    [metadata.refs.password, metadata.refs.password],
+    Array.from({ length: 33 }, (_, index) => `inbot://credentials/${id}/field_${index}`),
+    [`inbot://credentials/${id}/Password`],
+    [`inbot://credentials/${id}/password/extra`],
+  ])
+    expect(() => decode({ ...request, refs })).toThrow();
+  for (const public_key of ["not-age", "AGE-SECRET-KEY-1SECRET", "age1invalid"])
+    expect(() => decode({ ...request, public_key })).toThrow();
 });

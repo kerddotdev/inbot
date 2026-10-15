@@ -10,9 +10,12 @@ import {
   CredentialFieldsResponse,
   ListCredentialsResponse,
   TotpCodeResponse,
+  ResolveCredentialsResponse,
   FillCredentialResponse,
   VaultSettings,
 } from "../../../../packages/contracts/src/vault.js";
+import { decrypt, generateIdentity } from "../../../../packages/envelope/src/crypto.js";
+import { TunnelTraffic } from "../http/tunnel-policy.js";
 import { eventVisible, readEvents } from "../events/log.js";
 import { fixture } from "../http/test-fixture.js";
 import { fakeCdp } from "./cdp-test-server.js";
@@ -1041,4 +1044,231 @@ test("rolls back captured fields and usage when the event cannot be committed", 
   } finally {
     await browser.close();
   }
+});
+
+test("resolves only ciphertext over HTTP, uses the injected TOTP clock and audits each credential once", async ({
+  api,
+}) => {
+  const vault = makeVault(api.store);
+  const created = await run(
+    api,
+    vault.create(
+      {
+        name: "Resolve",
+        fields: {
+          password: "synthetic-resolve-password",
+          api_key: "synthetic-resolve-api-key",
+          totp: uri,
+        },
+      },
+      inboxId,
+    ),
+  );
+  api.advance(59_000 - Date.parse(created.created_at));
+  const identity = await generateIdentity();
+  const refs = ["password", "api_key", "totp"].map(
+    (field) => `inbot://credentials/${created.credential_id}/${field}`,
+  );
+  const { principal, token } = await agent(api, { credential_run: true });
+  const response = await api.request("/v0/credentials/resolve", {
+    token,
+    method: "POST",
+    body: { refs, public_key: identity.recipient },
+  });
+  expect(response.status).toBe(200);
+  expect(response.headers.get("cache-control")).toBe("no-store");
+  const text = await response.text();
+  noSecrets(text, [
+    "synthetic-resolve-password",
+    "synthetic-resolve-api-key",
+    seed,
+    uri,
+    "94287082",
+  ]);
+  const wire = Schema.decodeUnknownSync(ResolveCredentialsResponse, { onExcessProperty: "error" })(
+    JSON.parse(text),
+  );
+  expect(Object.keys(JSON.parse(text))).toEqual(["ciphertext"]);
+  const plaintext = new TextDecoder().decode(
+    await decrypt(identity.identity, Buffer.from(wire.ciphertext, "base64")),
+  );
+  expect(JSON.parse(plaintext)).toEqual({
+    values: Object.fromEntries(
+      refs.map((ref, index) => [
+        ref,
+        ["synthetic-resolve-password", "synthetic-resolve-api-key", "94287082"][index],
+      ]),
+    ),
+  });
+  expect(plaintext).not.toContain(seed);
+  expect(plaintext).not.toContain("otpauth");
+  expect((await run(api, vault.get(created.credential_id, inboxId))).last_used_at).toBe(
+    "1970-01-01T00:00:59.000Z",
+  );
+  const events = (await api.run(api.store.use((db) => readEvents(db, 0)))).filter(
+    (row) => row.event_type === "credential.used",
+  );
+  expect(events).toHaveLength(1);
+  const event = events[0];
+  if (event === undefined) throw new Error("Expected usage event");
+  expect(event.payload).toEqual({
+    type: "event",
+    event_type: "credential.used",
+    event_id: expect.any(String),
+    credential: {
+      credential_id: created.credential_id,
+      inbox_id: inboxId,
+      field: "password",
+      via: "run",
+    },
+  });
+  noSecrets(events, ["synthetic-resolve-password", "synthetic-resolve-api-key", seed, "94287082"]);
+  expect(eventVisible(event, principal)).toBe(false);
+  expect(
+    eventVisible(event, {
+      ...principal,
+      grant: { ...principal.grant, permissions: { credential_read: true } },
+    }),
+  ).toBe(true);
+  expect(
+    eventVisible(event, {
+      ...principal,
+      grant: { ...principal.grant, inbox_ids: [otherId], permissions: { credential_read: true } },
+    }),
+  ).toBe(false);
+});
+
+test("conceals unknown, missing-field and out-of-scope refs by index and rolls back usage", async ({
+  api,
+}) => {
+  const vault = makeVault(api.store);
+  const own = await credential(api);
+  const foreign = await credential(api, "Foreign", otherId);
+  const identity = await generateIdentity();
+  const ownRef = `inbot://credentials/${own.credential_id}/password`;
+  const { principal, token } = await agent(api, { credential_run: true });
+  for (const ref of [
+    `inbot://credentials/${foreign.credential_id}/password`,
+    `inbot://credentials/${"0".repeat(32)}/password`,
+    `inbot://credentials/${own.credential_id}/missing`,
+  ]) {
+    const input = { refs: [ownRef, ref], public_key: identity.recipient };
+    const result = await run(api, Effect.result(vault.resolve(input)), principal);
+    expect(result).toMatchObject({
+      failure: { code: "not_found", message: "Credential reference 2 was not found." },
+    });
+    noSecrets(result, [own.credential_id, foreign.credential_id, ref]);
+    const response = await api.request("/v0/credentials/resolve", {
+      token,
+      method: "POST",
+      body: input,
+    });
+    expect(response.status).toBe(404);
+    expect(await response.json()).toMatchObject({
+      code: "not_found",
+      message: "Credential reference 2 was not found.",
+    });
+  }
+  expect((await run(api, vault.get(own.credential_id, inboxId))).last_used_at).toBeUndefined();
+  expect(
+    (await api.run(api.store.use((db) => readEvents(db, 0)))).filter(
+      (row) => row.event_type === "credential.used",
+    ),
+  ).toEqual([]);
+});
+
+test("requires credential_run, validates recipients before auditing and rejects tunnel traffic in the service", async ({
+  api,
+}) => {
+  const vault = makeVault(api.store);
+  const created = await credential(api);
+  const identity = await generateIdentity();
+  const input = {
+    refs: [`inbot://credentials/${created.credential_id}/password`],
+    public_key: identity.recipient,
+  };
+  const denied = await agent(api);
+  expect(await run(api, Effect.result(vault.resolve(input)), denied.principal)).toMatchObject({
+    failure: { code: "missing_permission", fix: expect.stringContaining("credential_run") },
+  });
+  await errorCode(
+    await api.request("/v0/credentials/resolve", {
+      token: denied.token,
+      method: "POST",
+      body: input,
+    }),
+    "missing_permission",
+    403,
+  );
+  for (const public_key of ["not-age", `age1${"q".repeat(58)}`]) {
+    expect(await run(api, Effect.result(vault.resolve({ ...input, public_key })))).toMatchObject({
+      failure: { code: "validation_error" },
+    });
+    await errorCode(
+      await api.request("/v0/credentials/resolve", {
+        method: "POST",
+        body: { ...input, public_key },
+      }),
+      "validation_error",
+      400,
+    );
+  }
+  expect((await run(api, vault.get(created.credential_id, inboxId))).last_used_at).toBeUndefined();
+  const allowed = await agent(api, { credential_run: true });
+  for (const principal of [owner, allowed.principal])
+    expect(
+      await run(
+        api,
+        Effect.result(vault.resolve(input).pipe(Effect.provideService(TunnelTraffic, true))),
+        principal,
+      ),
+    ).toMatchObject({
+      failure: { code: "missing_permission", fix: expect.stringContaining("Inbot host") },
+    });
+  expect(
+    (await api.run(api.store.use((db) => readEvents(db, 0)))).filter(
+      (row) => row.event_type === "credential.used",
+    ),
+  ).toEqual([]);
+});
+
+test("audits each resolved credential and rolls back usage when audit persistence fails", async ({
+  api,
+}) => {
+  const vault = makeVault(api.store);
+  const first = await credential(api, "First");
+  const second = await credential(api, "Second");
+  const identity = await generateIdentity();
+  const input = {
+    refs: [first, second].map((value) => `inbot://credentials/${value.credential_id}/password`),
+    public_key: identity.recipient,
+  };
+  await run(api, vault.resolve(input));
+  const events = (await api.run(api.store.use((db) => readEvents(db, 0)))).filter(
+    (row) => row.event_type === "credential.used",
+  );
+  expect(
+    events
+      .map((row) => row.payload)
+      .filter((payload) => "credential" in payload)
+      .map((payload) => payload.credential.credential_id),
+  ).toEqual([first.credential_id, second.credential_id]);
+  const before = await run(api, vault.get(first.credential_id, inboxId));
+  api.advance(1000);
+  await api.run(
+    api.store.use((db) =>
+      db.exec(
+        "CREATE TRIGGER reject_usage_event BEFORE INSERT ON event_log WHEN NEW.event_type = 'credential.used' BEGIN SELECT RAISE(ABORT, 'synthetic audit failure'); END",
+      ),
+    ),
+  );
+  expect(await run(api, Effect.result(vault.resolve(input)))).toMatchObject({
+    failure: { code: "database_failed" },
+  });
+  expect(await run(api, vault.get(first.credential_id, inboxId))).toEqual(before);
+  expect(
+    (await api.run(api.store.use((db) => readEvents(db, 0)))).filter(
+      (row) => row.event_type === "credential.used",
+    ),
+  ).toHaveLength(2);
 });
