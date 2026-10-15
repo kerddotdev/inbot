@@ -1,3 +1,4 @@
+import { CredentialUseLive } from "../vault/approval-handlers.js";
 import { WebhooksLive } from "../events/handlers.js";
 import { CredentialsLive } from "../vault/handlers.js";
 import { Effect, Layer } from "effect";
@@ -362,5 +363,6 @@ export const HandlersLive = Layer.mergeAll(
   ListsLive,
   WebhooksLive,
   CredentialsLive,
+  CredentialUseLive,
   DomainsLive,
 );

@@ -67,6 +67,7 @@ async function account(api: Awaited<ReturnType<typeof fixture>>) {
       inbox_ids: ["agent@example.test"],
       permissions: { credential_run: true },
       send_policy: "read_only",
+      use_policy: "direct",
     }),
   );
   return {

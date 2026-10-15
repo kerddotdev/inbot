@@ -1139,6 +1139,7 @@ test("guards tunnel CDP in REST and each MCP invocation while keeping vault sett
         inbox_id: created.inbox_id,
         permissions: { credential_fill: true },
         send_policy: "read_only",
+        use_policy: "direct",
       }),
     );
     const headers = {
@@ -1276,4 +1277,77 @@ test("credential resolution is blocked over the tunnel including encoded and tra
     expect(response.status).toBe(403);
     expect(await response.json()).toMatchObject({ code: "missing_permission" });
   }
+});
+
+test("credential use decisions allow tunneled owner sessions with CSRF and reject local owner bearer", async ({
+  f,
+}) => {
+  await f.run(f.remote.enable({ hostname }));
+  const session = await ownerSession(f);
+  const key = await f.run(
+    f.keys.create({
+      inbox_id: "agent@example.test",
+      permissions: { credential_fill: true },
+      send_policy: "read_only",
+    }),
+  );
+  const credential = Schema.decodeUnknownSync(Credential)(
+    await (
+      await f.request("/v0/inboxes/agent@example.test/credentials", {
+        method: "POST",
+        body: {
+          name: "Remote approval",
+          url: "https://example.test",
+          fields: { password: "synthetic-remote-use" },
+        },
+      })
+    ).json(),
+  );
+  const requestResponse = await f.request(
+    `/v0/inboxes/${credential.inbox_id}/credentials/${credential.credential_id}/fill`,
+    {
+      token: key.api_key,
+      method: "POST",
+      headers: { "idempotency-key": "remote-use" },
+      body: { cdp_endpoint: "http://127.0.0.1:1", selector: "#password", field: "password" },
+    },
+  );
+  expect(requestResponse.status).toBe(403);
+  const list = Schema.decodeUnknownSync(
+    Schema.Struct({ requests: Schema.Array(Schema.Struct({ request_id: Schema.String })) }),
+  )(await (await f.request("/v0/credential-use-requests")).json());
+  const id = list.requests[0]?.request_id;
+  if (id === undefined) throw new Error("Expected credential use request");
+  const path = `/v0/credential-use-requests/${id}/approve`;
+  for (const [route, method] of [
+    ["/v0/credential-use-requests", "GET"],
+    [path, "POST"],
+    [`/v0/credential-use-requests/${id}/reject`, "POST"],
+  ]) {
+    if (route === undefined) throw new Error("Expected route");
+    expect(tunnelRoute(route)).toBe("agent");
+    const bearer = await remoteRequest(f, route, {
+      method: method ?? "GET",
+      headers: { authorization: `Bearer ${f.token}` },
+    });
+    expect(bearer.status).toBe(403);
+    expect(await bearer.json()).toMatchObject({ message: expect.stringContaining("owner bearer") });
+    expect(
+      (
+        await remoteRequest(f, route, {
+          method: method ?? "GET",
+          headers: { authorization: `Bearer ${key.api_key}` },
+        })
+      ).status,
+    ).toBe(403);
+  }
+  expect((await remoteRequest(f, "/v0/credential-use-requests", { headers: session })).status).toBe(
+    200,
+  );
+  const { "x-inbot-csrf": _csrf, ...withoutCsrf } = session;
+  expect((await remoteRequest(f, path, { method: "POST", headers: withoutCsrf })).status).toBe(403);
+  expect((await remoteRequest(f, path, { method: "POST", headers: session })).status).toBe(200);
+  expect(
+    await (await remoteRequest(f, path, { method: "POST", headers: session })).json(),
+  ).toMatchObject({ state: "approved" });
 });

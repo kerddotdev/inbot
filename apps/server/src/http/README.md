@@ -646,3 +646,38 @@ status. Preferences and last results persist in the home. Browser writes require
 CSRF; agent credentials and tunnel traffic are rejected. These routes never install
 or check releases on demand and have no MCP counterpart. Settings polls this local
 owner state; no update details are added to agent webhook or WebSocket events.
+
+## Credential use approval routes
+
+API key create/update accepts `use_policy: "direct" | "approval"`; responses
+always include the effective policy. Omitted create policy and migrated keys use
+`approval`. OAuth consent accepts the same grant field and issued principals
+carry it. Mail `send_policy` is independent.
+
+Approval agents must send the shared `Idempotency-Key` header on credential fill
+and `POST /v0/credentials/resolve`. A pending use returns 403
+`approval_required` with its request ID and instructions to retry the same key.
+A different payload with the same key returns `idempotency_conflict`. Approval
+permits one use within 15 minutes; pending requests expire in 24 hours. Expired
+or consumed requests need a new key. Rejection returns `missing_permission`.
+Capture, metadata, generation and TOTP codes keep their existing permissions.
+
+Owner-only routes, unavailable to agent API keys and OAuth tokens:
+
+- `GET /v0/credential-use-requests`: optional `state`, `limit`, `page_token` and
+  `ascending`; returns `{ count, limit, requests, next_page_token? }`.
+- `POST /v0/credential-use-requests/:request_id/approve`: approve one use.
+- `POST /v0/credential-use-requests/:request_id/reject`: reject a pending use.
+
+Decisions return metadata with request/key/inbox IDs, optional key name, kind,
+credential names and requested fields, optional `url_hint`, state and timestamps.
+URL hints are agent claims, never verified origins. No values or idempotency
+keys are returned. Same decisions are idempotent before expiry; opposite,
+consumed or expired decisions return `validation_error`. Expiry is lazy:
+`expires_at` signals an expired pending/approved request without a new state.
+
+These routes follow draft approvals through the tunnel: an owner browser session
+may list and decide, with CSRF on unsafe requests and the exact public Origin.
+The local owner bearer is refused on every tunneled route. Credential resolution
+remains local-only. Approval events use inbox scope plus `credential_read` for
+WebSocket and webhook visibility. The credential request UI is deferred.

@@ -15,6 +15,7 @@ import { remoteSchema } from "./remote/schema.js";
 import { provisionSchema } from "./provision/schema.js";
 import { listsSchema, rejectionMetadataSchema } from "./lists/schema.js";
 import { vaultSchema, vaultSettingsSchema } from "./vault/schema.js";
+import { credentialUseSchema, migrateUsePolicy } from "./vault/approval-schema.js";
 
 export class DatabaseKeyInvalid extends Schema.TaggedError<DatabaseKeyInvalid>()(
   "DatabaseKeyInvalid",
@@ -35,6 +36,7 @@ export class DatabaseError extends Schema.TaggedError<DatabaseError>()("Database
 export interface Migration {
   readonly version: number;
   readonly sql: string;
+  readonly apply?: (database: Database.Database) => void;
 }
 
 export const migrations: readonly Migration[] = [
@@ -58,6 +60,7 @@ export const migrations: readonly Migration[] = [
   { version: 15, sql: quarantineSchema },
   { version: 16, sql: vaultSchema },
   { version: 17, sql: vaultSettingsSchema },
+  { version: 18, sql: credentialUseSchema, apply: migrateUsePolicy },
 ];
 
 export function migrate(database: Database.Database, ordered: readonly Migration[] = migrations) {
@@ -74,6 +77,7 @@ export function migrate(database: Database.Database, ordered: readonly Migration
           if (version > ordered.length) throw new DatabaseError({ operation: "migrate" });
           for (const migration of ordered) {
             if (migration.version <= version) continue;
+            migration.apply?.(database);
             database.exec(migration.sql);
             database.pragma(`user_version = ${migration.version}`);
           }

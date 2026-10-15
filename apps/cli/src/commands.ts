@@ -1,3 +1,4 @@
+import { credentialUseCommands } from "./credential-use-commands.js";
 import { quarantineCommands } from "./quarantine-commands.js";
 import type { HttpApiEndpoint } from "effect/http-api";
 import { WebhooksApi } from "../../../packages/contracts/src/api/webhooks.js";
@@ -23,7 +24,7 @@ export interface Command {
   readonly params?: readonly string[];
   readonly body?: Readonly<Record<string, FieldKind>>;
   readonly query?: Readonly<Record<string, FieldKind>>;
-  readonly idempotent?: boolean;
+  readonly idempotent?: boolean | "manual";
   readonly browser?: boolean;
   readonly secret?: boolean;
   readonly download?: boolean;
@@ -399,6 +400,7 @@ export const commands: readonly Command[] = [
       permissions: "object",
       send_policy: "string",
       expires_at: "string",
+      use_policy: "string",
     },
   },
   {
@@ -409,11 +411,12 @@ export const commands: readonly Command[] = [
   },
   {
     name: "api-keys update",
-    description: "Update an API key's name, permissions, or send policy as owner.",
+    description:
+      "Update an API key's name, permissions, send policy, or credential use policy as owner.",
     endpoint: ApiKeysApi.endpoints.apiKeys_update,
     scopedEndpoint: ApiKeysApi.endpoints.inboxes_apiKeys_update,
     params: ["api_key_id"],
-    body: { name: "string", permissions: "object", send_policy: "string" },
+    body: { name: "string", permissions: "object", send_policy: "string", use_policy: "string" },
   },
   {
     name: "api-keys revoke",
@@ -575,8 +578,9 @@ export const commands: readonly Command[] = [
   {
     name: "credentials fill",
     description:
-      "Type a vault field directly into a matching-origin browser page. The totp field types the current code. Requires credential_fill.",
+      "Type a vault field directly into a matching-origin browser page. The totp field types the current code. Approval grants need --idempotency-key; retry unchanged after owner approval. Requires credential_fill.",
     endpoint: CredentialsApi.endpoints.inboxes_credentials_fill,
+    idempotent: "manual",
     params: credential,
     body: credentialTarget,
   },
@@ -726,6 +730,7 @@ export const commands: readonly Command[] = [
     endpoint: RemoteApiGroup.endpoints.remote_disable,
   },
   ...quarantineCommands,
+  ...credentialUseCommands,
 ];
 
 export const flagName = (field: string) => field.replaceAll("_", "-");

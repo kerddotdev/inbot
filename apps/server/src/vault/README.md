@@ -75,3 +75,46 @@ errors. Scope violations return `not_found` before browser access; missing
 Migration 17 adds owner vault settings with `CREATE TABLE IF NOT EXISTS`, keeping
 migration replay from older versions safe. Existing credential deletion, field
 removal and inbox cascading delete remain the way to remove captured values.
+
+## Credential use approvals
+
+Agent grants have an independent `use_policy`: `approval` (the default for new
+and migrated keys, including OAuth grants) or `direct`. Owners bypass it. Only
+browser fill and local credential resolution are gated; capture, metadata CRUD,
+password generation and the TOTP-code endpoint keep their existing permissions.
+The shared API key and OAuth consent editor lets owners choose either policy.
+The owner credential approval UI is deferred; use the owner REST or CLI routes.
+
+Approval grants must supply `Idempotency-Key` on fill/resolve, or `idempotencyKey`
+on MCP fill. The first call commits a pending request and
+`credential.use_requested`, then returns `approval_required` with its request ID.
+No value is read or CDP connection attempted while pending. Retry the unchanged
+operation with the same key after owner approval. Different intent with the same
+key returns `idempotency_conflict`; rejected use returns `missing_permission`.
+
+Pending requests expire after 24 hours. Approval permits one use within 15
+minutes of the decision. Expiry is checked lazily against the injected clock;
+expired requests retain their stored state and show `expires_at`. Consumed and
+expired requests require a new idempotency key. Owner decisions are idempotent
+for the same decision before expiry; opposite decisions, consumed requests and
+expired pending/approved requests return `validation_error`.
+
+Migration 18 adds `credential_use_requests` and a guarded `use_policy` column.
+Requests store only IDs, field names, timestamps, a fingerprint and an optional
+agent-claimed URL hint. `url_hint` is not an observed or authorized browser
+origin. The fingerprint binds the entire fill target, selector, credential and
+field, or the ordered run refs. Run encryption recipients are per-call transport
+data, so restarting the CLI with the same refs and key can use an approval. Endpoint credentials
+are hashed, never stored in request metadata. Multi-inbox resolve requests emit
+inbox-specific event payloads so scoped readers cannot learn foreign IDs.
+`credential.use_requested`, `credential.use_approved` and
+`credential.use_rejected` expose only request ID, inbox, kind, credential IDs and
+field names; visibility requires inbox scope and `credential_read`.
+
+A Store-scoped semaphore serializes fills across REST, MCP and vault instances.
+Successful fill consumes approval in the same final transaction as its usage
+event. CDP failure leaves approval retryable within the window. Resolution
+consumes approval and records all usage events atomically before returning
+ciphertext. Browser effects cannot be rolled back: a CDP timeout, process crash
+or final database failure can leave an uncertain browser outcome. Inspect the
+page before retrying such an outcome, as with direct fill.

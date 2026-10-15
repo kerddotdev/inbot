@@ -26,9 +26,10 @@ const Row = Schema.Struct({
 
 export function keyRow(value: unknown): ApiKey {
   const row = Schema.decodeUnknownSync(Row)(value);
-  return Schema.decodeUnknownSync(ApiKey)(
-    Object.fromEntries(Object.entries(row).filter(([, value]) => value !== null)),
-  );
+  return Schema.decodeUnknownSync(ApiKey)({
+    ...Object.fromEntries(Object.entries(row).filter(([, value]) => value !== null)),
+    use_policy: row.use_policy ?? "approval",
+  });
 }
 
 function keyPrincipal(key: ApiKey): Principal {
@@ -40,6 +41,7 @@ function keyPrincipal(key: ApiKey): Principal {
       ...(key.inbox_ids === undefined ? {} : { inbox_ids: key.inbox_ids }),
       permissions: key.permissions,
       send_policy: key.send_policy,
+      use_policy: key.use_policy ?? "approval",
     },
   };
 }
@@ -95,8 +97,8 @@ function makeApiKeys(store: StoreService) {
         const timestamp = new Date(now).toISOString();
         db.prepare(`
           INSERT INTO api_keys (api_key_id, name, prefix, secret_hash, inbox_id, inbox_ids,
-            permissions, send_policy, expires_at, created_at, updated_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            permissions, send_policy, expires_at, created_at, updated_at, use_policy)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).run(
           id,
           input.name ?? "",
@@ -109,6 +111,7 @@ function makeApiKeys(store: StoreService) {
           input.expires_at ?? null,
           timestamp,
           timestamp,
+          input.use_policy ?? "approval",
         );
         return { ...getKey(db, id), api_key: token };
       }),
@@ -140,13 +143,14 @@ function makeApiKeys(store: StoreService) {
         const input = decode(UpdateApiKeyRequest, request);
         const key = getKey(db, id, inboxId);
         db.prepare(`
-          UPDATE api_keys SET name = ?, permissions = ?, send_policy = ?, updated_at = ?
+          UPDATE api_keys SET name = ?, permissions = ?, send_policy = ?, updated_at = ?, use_policy = ?
           WHERE api_key_id = ?
         `).run(
           input.name ?? key.name,
           JSON.stringify(input.permissions ?? key.permissions),
           input.send_policy ?? key.send_policy,
           new Date(now).toISOString(),
+          input.use_policy ?? key.use_policy ?? "approval",
           id,
         );
         return getKey(db, id, inboxId);

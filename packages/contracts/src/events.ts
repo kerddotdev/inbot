@@ -1,3 +1,4 @@
+import { CredentialUseKind, CredentialUseRequestId } from "./credential-use.js";
 import { Schema } from "effect";
 import { CredentialId, DraftId, InboxId, MessageId, ThreadId, Timestamp } from "./common.js";
 import { CredentialFieldName } from "./vault.js";
@@ -209,6 +210,24 @@ export const QuarantineEvent = Schema.Struct({
   }),
 });
 
+export const CredentialUseApprovalEvent = Schema.Struct({
+  type: Schema.Literal("event"),
+  event_type: Schema.Literals([
+    "credential.use_requested",
+    "credential.use_approved",
+    "credential.use_rejected",
+  ]),
+  event_id: Schema.String,
+  credential_use: Schema.Struct({
+    request_id: CredentialUseRequestId,
+    inbox_id: InboxId,
+    kind: CredentialUseKind,
+    credential_ids: Schema.Array(CredentialId),
+    fields: Schema.Array(CredentialFieldName),
+  }),
+});
+export type CredentialUseApprovalEvent = typeof CredentialUseApprovalEvent.Type;
+
 export const EventEnvelope = Schema.Struct({
   type: Schema.Literal("event"),
   event_type: EventType,
@@ -232,6 +251,7 @@ export const Event = Schema.Union([
   DomainVerifiedEvent,
   OAuthGrantEvent,
   QuarantineEvent,
+  CredentialUseApprovalEvent,
 ]).annotate({ identifier: "Event" });
 export type Event = typeof Event.Type;
 

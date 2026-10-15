@@ -60,7 +60,12 @@ function run<A, E>(
   return api.run(effect.pipe(Effect.provideService(CurrentPrincipal, principal)));
 }
 async function agent(api: Awaited<ReturnType<typeof fixture>>, allowed: Permissions = permissions) {
-  const grant = { inbox_ids: [inboxId], permissions: allowed, send_policy: "read_only" as const };
+  const grant = {
+    inbox_ids: [inboxId],
+    permissions: allowed,
+    send_policy: "read_only" as const,
+    use_policy: "direct" as const,
+  };
   const key = await api.run(api.keys.create(grant));
   const principal: Principal = { kind: "agent", api_key_id: key.api_key_id, grant };
   return { token: key.api_key, principal };

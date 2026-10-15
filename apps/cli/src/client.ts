@@ -67,6 +67,7 @@ export async function request(
   body: unknown,
   idempotencyKey?: string,
   responseKind?: "text",
+  signal?: AbortSignal,
 ): Promise<unknown> {
   let response: Response;
   let text: string;
@@ -74,7 +75,10 @@ export async function request(
     response = await fetch(`${connection.url}${path}`, {
       method: endpoint.method,
       redirect: "error",
-      signal: AbortSignal.timeout(30_000),
+      signal:
+        signal === undefined
+          ? AbortSignal.timeout(30_000)
+          : AbortSignal.any([signal, AbortSignal.timeout(30_000)]),
       headers: {
         authorization: `Bearer ${connection.token}`,
         ...(body === undefined ? {} : { "content-type": "application/json" }),

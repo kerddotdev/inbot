@@ -220,6 +220,7 @@ function KeyDialog({
           name: name.trim(),
           permissions: grant.permissions,
           send_policy: grant.send_policy,
+          use_policy: grant.use_policy ?? "approval",
         });
         onClose();
       } else {

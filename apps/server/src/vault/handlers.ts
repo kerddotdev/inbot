@@ -26,8 +26,10 @@ export const CredentialsLive = HttpApiBuilder.group(ServerApi, "credentials", (h
       .handle("inboxes_credentials_generate", ({ params, payload }) =>
         respond(vault.generate(params.credential_id, payload, params.inbox_id)),
       )
-      .handle("inboxes_credentials_fill", ({ params, payload }) =>
-        respond(vault.fill(params.credential_id, payload, params.inbox_id)),
+      .handle("inboxes_credentials_fill", ({ params, payload, headers }) =>
+        respond(
+          vault.fill(params.credential_id, payload, params.inbox_id, headers["idempotency-key"]),
+        ),
       )
       .handle("inboxes_credentials_capture", ({ params, payload }) =>
         respond(vault.capture(params.credential_id, payload, params.inbox_id)),
@@ -40,7 +42,9 @@ export const CredentialsLive = HttpApiBuilder.group(ServerApi, "credentials", (h
       .handle("inboxes_credentials_reveal", ({ params }) =>
         respond(vault.reveal(params.credential_id, params.inbox_id)),
       )
-      .handle("credentials_resolve", ({ payload }) => respond(vault.resolve(payload)))
+      .handle("credentials_resolve", ({ payload, headers }) =>
+        respond(vault.resolve(payload, headers["idempotency-key"])),
+      )
       .handle("credentials_list", ({ query: { inbox_id, ...query } }) =>
         respond(vault.list(query, inbox_id)),
       );

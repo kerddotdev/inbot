@@ -1095,3 +1095,37 @@ test("the default consent grant holds OAuth sends for owner approval", async ({ 
   expect(pending.drafts[0]).toMatchObject({ inbox_id: inboxId, pending_approval: true });
   expect(f.sent).toHaveLength(0);
 });
+
+test("OAuth consent persists credential use policy and issued principals carry its effective default", async ({
+  f,
+}) => {
+  const { exchange: code } = await flow(f, "/v0");
+  const token = await exchange(f, code);
+  const oauth = makeOAuth(f.store);
+  const principal = await f.run(oauth.authenticate(token.access_token, `${f.url}/v0`));
+  expect(principal).toMatchObject({ kind: "agent", grant: { use_policy: "approval" } });
+  const authorized = (await f.run(oauth.clients())).grants[0];
+  if (authorized === undefined) throw new Error("Expected OAuth grant");
+  expect(authorized.use_policy).toBe("approval");
+  await f.run(
+    f.store.use((db) =>
+      db
+        .prepare("UPDATE api_keys SET use_policy = 'direct' WHERE api_key_id = ?")
+        .run(authorized.grant_id),
+    ),
+  );
+  expect(await f.run(oauth.authenticate(token.access_token, `${f.url}/v0`))).toMatchObject({
+    grant: { use_policy: "direct" },
+  });
+});
+
+test("OAuth browser consent accepts direct credential use independently of send policy", async ({
+  f,
+}) => {
+  const { exchange: code } = await flow(f, "/v0", { ...grant, use_policy: "direct" });
+  const token = await exchange(f, code);
+  const oauth = makeOAuth(f.store);
+  expect(await f.run(oauth.authenticate(token.access_token, `${f.url}/v0`))).toMatchObject({
+    grant: { send_policy: "read_only", use_policy: "direct" },
+  });
+});
