@@ -1,12 +1,19 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Draft, DraftItem } from "@inbot/contracts/src/drafts.js";
 import { api } from "../api";
-import { approvalsQuery, keysQuery } from "../queries";
+import { approvalsQuery, credentialRequestsQuery, credentialUseQuery, keysQuery } from "../queries";
 import { ErrorNotice, LoadError } from "../feedback";
-import { links, navigate } from "../router";
+import { links, navigate, type ApprovalSelection } from "../router";
 import { Icon } from "../icons";
 import { AttachmentDownload } from "../components/AttachmentDownload";
+import {
+  CredentialRequestRow,
+  CredentialRequestView,
+  CredentialUseRow,
+  CredentialUseView,
+} from "./vault/CredentialApprovals";
+import { approvalsCount } from "./vault/format";
 import {
   Button,
   Disclosure,
@@ -42,7 +49,13 @@ function DraftRow({ draft, selected }: { draft: DraftItem; selected: boolean }) 
   );
 }
 
-function DraftView({ draft, onDecision }: { draft: Draft; onDecision: (message: string) => void }) {
+function DraftView({
+  draft,
+  onDecision,
+}: {
+  draft: Draft;
+  onDecision: (message: ReactNode) => void;
+}) {
   const client = useQueryClient();
   const [rejecting, setRejecting] = useState(false);
   const [reason, setReason] = useState("");
@@ -184,7 +197,7 @@ function DraftView({ draft, onDecision }: { draft: Draft; onDecision: (message: 
   );
 }
 
-function DraftReader({ id, onDecision }: { id: string; onDecision: (message: string) => void }) {
+function DraftReader({ id, onDecision }: { id: string; onDecision: (message: ReactNode) => void }) {
   const query = useQuery({
     queryKey: ["draft", id],
     queryFn: ({ signal }) => api.draft(id, signal),
@@ -196,11 +209,57 @@ function DraftReader({ id, onDecision }: { id: string; onDecision: (message: str
   return <DraftView key={id} draft={query.data} onDecision={onDecision} />;
 }
 
-export function Approvals({ selectedId }: { selectedId: string | undefined }) {
+function GroupHeading({ children }: { children: ReactNode }) {
+  return (
+    <h3 className="border-b border-line px-4 pt-3 pb-1.5 text-xs font-semibold text-ink2">
+      {children}
+    </h3>
+  );
+}
+
+function GroupError({ error, retry }: { error: unknown; retry: () => void }) {
+  return (
+    <div className="px-4 pb-3">
+      <ErrorNotice error={error} />
+      <Button icon="refresh" onClick={retry}>
+        Try again
+      </Button>
+    </div>
+  );
+}
+
+export function Approvals({ selection }: { selection: ApprovalSelection | undefined }) {
   const query = useQuery(approvalsQuery);
-  const [notice, setNotice] = useState("");
+  const use = useQuery(credentialUseQuery);
+  const requests = useQuery(credentialRequestsQuery);
+  const [notice, setNotice] = useState<ReactNode>("");
   const drafts = query.data ?? [];
-  const id = selectedId ?? drafts[0]?.draft_id;
+  const uses = use.data ?? [];
+  const asks = requests.data ?? [];
+  const current: ApprovalSelection | undefined =
+    selection ??
+    (drafts[0]
+      ? { kind: "draft", id: drafts[0].draft_id }
+      : uses[0]
+        ? { kind: "credential-use", id: uses[0].request_id }
+        : asks[0]
+          ? { kind: "credential-request", id: asks[0].request_id }
+          : undefined);
+  const selectedUse =
+    current?.kind === "credential-use"
+      ? uses.find((item) => item.request_id === current.id)
+      : undefined;
+  const selectedRequest =
+    current?.kind === "credential-request"
+      ? asks.find((item) => item.request_id === current.id)
+      : undefined;
+  const loading = query.isPending || use.isPending || requests.isPending;
+  const total = approvalsCount(drafts, uses, asks, Date.now());
+  const refresh = () => {
+    void query.refetch();
+    void use.refetch();
+    void requests.refetch();
+  };
   return (
     <>
       {notice ? (
@@ -215,45 +274,106 @@ export function Approvals({ selectedId }: { selectedId: string | undefined }) {
       ) : null}
       <div className="grid min-h-0 flex-1 grid-cols-[minmax(260px,348px)_1fr]">
         <section
-          aria-label="Pending drafts"
+          aria-label="Pending approvals"
           className="flex min-h-0 min-w-0 flex-col border-r border-line bg-list"
         >
           <PaneBar>
             <h2 className="text-[15px] font-[650] tracking-[-0.005em]">Approvals</h2>
             <span className="flex-1" />
-            {query.data ? <span className="text-ink2">{drafts.length} pending</span> : null}
+            {!loading ? <span className="text-ink2">{total} pending</span> : null}
             <Button
               variant="quiet"
               icon="refresh"
-              disabled={query.isFetching}
-              onClick={() => void query.refetch()}
+              disabled={query.isFetching || use.isFetching || requests.isFetching}
+              onClick={refresh}
             >
               Refresh
             </Button>
           </PaneBar>
           <div className="min-h-0 flex-1 overflow-y-auto" onKeyDown={focusSibling}>
-            {query.isPending ? (
+            {loading ? (
               <SkeletonRows />
-            ) : query.error ? (
-              <LoadError error={query.error} retry={() => void query.refetch()} />
-            ) : drafts.length === 0 ? (
-              <ListMessage icon="check-circle" title="Nothing to approve">
-                Drafts from agents with an approval send policy will wait here.
-              </ListMessage>
             ) : (
-              drafts.map((draft) => (
-                <DraftRow key={draft.draft_id} draft={draft} selected={draft.draft_id === id} />
-              ))
+              <>
+                {query.error ? (
+                  <LoadError error={query.error} retry={() => void query.refetch()} />
+                ) : drafts.length > 0 ? (
+                  <>
+                    <GroupHeading>Drafts</GroupHeading>
+                    {drafts.map((draft) => (
+                      <DraftRow
+                        key={draft.draft_id}
+                        draft={draft}
+                        selected={current?.kind === "draft" && draft.draft_id === current.id}
+                      />
+                    ))}
+                  </>
+                ) : null}
+                {use.error ? (
+                  <GroupError error={use.error} retry={() => void use.refetch()} />
+                ) : uses.length > 0 ? (
+                  <>
+                    <GroupHeading>Credential use</GroupHeading>
+                    {uses.map((item) => (
+                      <CredentialUseRow
+                        key={item.request_id}
+                        request={item}
+                        selected={
+                          current?.kind === "credential-use" && item.request_id === current.id
+                        }
+                      />
+                    ))}
+                  </>
+                ) : null}
+                {requests.error ? (
+                  <GroupError error={requests.error} retry={() => void requests.refetch()} />
+                ) : asks.length > 0 ? (
+                  <>
+                    <GroupHeading>Credential requests</GroupHeading>
+                    {asks.map((item) => (
+                      <CredentialRequestRow
+                        key={item.request_id}
+                        request={item}
+                        selected={
+                          current?.kind === "credential-request" && item.request_id === current.id
+                        }
+                      />
+                    ))}
+                  </>
+                ) : null}
+                {!query.error &&
+                !use.error &&
+                !requests.error &&
+                drafts.length + uses.length + asks.length === 0 ? (
+                  <ListMessage icon="check-circle" title="Nothing to approve">
+                    Drafts, credential use and credential requests from agents will wait here.
+                  </ListMessage>
+                ) : null}
+              </>
             )}
           </div>
         </section>
-        {id ? (
-          <DraftReader key={id} id={id} onDecision={setNotice} />
+        {current?.kind === "draft" ? (
+          <DraftReader key={current.id} id={current.id} onDecision={setNotice} />
+        ) : selectedUse ? (
+          <CredentialUseView
+            key={selectedUse.request_id}
+            request={selectedUse}
+            onDecision={setNotice}
+          />
+        ) : selectedRequest ? (
+          <CredentialRequestView
+            key={selectedRequest.request_id}
+            request={selectedRequest}
+            onDecision={setNotice}
+          />
         ) : (
-          <article aria-label="Draft" className="flex min-h-0 min-w-0 flex-col bg-win">
+          <article aria-label="Approval" className="flex min-h-0 min-w-0 flex-col bg-win">
             <PaneBar />
             <div className="grid flex-1 place-items-center text-ink2">
-              Select a draft to review it.
+              {current && !loading
+                ? "This request no longer awaits a decision."
+                : "Select an item to review it."}
             </div>
           </article>
         )}

@@ -13,6 +13,10 @@ import * as Drafts from "@inbot/contracts/src/drafts.js";
 import * as Webhooks from "@inbot/contracts/src/webhooks.js";
 import * as Domains from "@inbot/contracts/src/domains.js";
 import * as Lists from "@inbot/contracts/src/lists.js";
+import * as Vault from "@inbot/contracts/src/vault.js";
+import * as CredentialUse from "@inbot/contracts/src/credential-use.js";
+import * as CredentialRequests from "@inbot/contracts/src/credential-requests.js";
+import * as Bitwarden from "@inbot/contracts/src/bitwarden.js";
 import { ErrorResponse, type ErrorCode } from "@inbot/contracts/src/errors.js";
 
 export class ApiError extends Error {
@@ -40,11 +44,16 @@ const threadPath = (inboxId: string, id: string) => `${inboxPath(inboxId)}/threa
 const draftPath = (draft: Pick<Drafts.DraftItem, "inbox_id" | "draft_id">) =>
   `${inboxPath(draft.inbox_id)}/drafts/${segment(draft.draft_id)}`;
 
-function pageQuery(pageToken: string | null) {
-  const query = new URLSearchParams({ limit: "50" });
+function pageQuery(pageToken: string | null, extra: Record<string, string> = {}) {
+  const query = new URLSearchParams({ limit: "50", ...extra });
   if (pageToken) query.set("page_token", pageToken);
   return `?${query}`;
 }
+
+export type CredentialRef = Pick<Vault.Credential, "inbox_id" | "credential_id">;
+const credentialPath = (credential: CredentialRef) =>
+  `${inboxPath(credential.inbox_id)}/credentials/${segment(credential.credential_id)}`;
+export type CredentialFilter = { inboxId?: string; q?: string };
 
 async function allPages<T, P extends { next_page_token?: string }>(
   load: (token: string | null) => Promise<P>,
@@ -486,6 +495,117 @@ export class ApiClient {
       );
     return response.blob();
   }
+
+  credentials = (filter: CredentialFilter, signal: AbortSignal) =>
+    allPages(
+      (token) =>
+        this.request(
+          `/v0/credentials${pageQuery(token, {
+            ...(filter.inboxId ? { inbox_id: filter.inboxId } : {}),
+            ...(filter.q ? { q: filter.q } : {}),
+          })}`,
+          Vault.ListCredentialsResponse,
+          { signal },
+        ),
+      (page) => page.credentials,
+    );
+
+  credential = (credential: CredentialRef, signal: AbortSignal) =>
+    this.request(credentialPath(credential), Vault.Credential, { signal });
+
+  createCredential = (inboxId: string, body: Vault.CreateCredentialRequest) =>
+    this.request(`${inboxPath(inboxId)}/credentials`, Vault.Credential, { method: "POST", body });
+
+  updateCredential = (credential: CredentialRef, body: Vault.UpdateCredentialRequest) =>
+    this.request(credentialPath(credential), Vault.Credential, { method: "PATCH", body });
+
+  deleteCredential = (credential: CredentialRef) =>
+    this.request(credentialPath(credential), Schema.Undefined, { method: "DELETE" });
+
+  generateCredentialField = (credential: CredentialRef, body: Vault.GenerateFieldRequest) =>
+    this.request(`${credentialPath(credential)}/generate`, Vault.Credential, {
+      method: "POST",
+      body,
+    });
+
+  credentialTotp = (credential: CredentialRef, signal: AbortSignal) =>
+    this.request(`${credentialPath(credential)}/totp`, Vault.TotpCodeResponse, { signal });
+
+  revealCredential = (credential: CredentialRef, signal?: AbortSignal) =>
+    this.request(
+      `${credentialPath(credential)}/fields`,
+      Vault.CredentialFieldsResponse,
+      signal ? { signal } : {},
+    );
+
+  vaultSettings = (signal: AbortSignal) =>
+    this.request("/v0/owner/vault/settings", Vault.VaultSettings, { signal });
+
+  setVaultSettings = (body: Vault.VaultSettings) =>
+    this.request("/v0/owner/vault/settings", Vault.VaultSettings, { method: "PUT", body });
+
+  exportCredentials = (inboxId?: string) =>
+    this.request(
+      `/v0/credentials/export${inboxId ? `?inbox_id=${segment(inboxId)}` : ""}`,
+      Bitwarden.BitwardenExport,
+    );
+
+  importCredentials = (
+    inboxId: string,
+    onDuplicate: "skip" | "create",
+    body: typeof Bitwarden.BitwardenImport.Type,
+  ) =>
+    this.request(
+      `/v0/credentials/import?inbox_id=${segment(inboxId)}&on_duplicate=${onDuplicate}`,
+      Bitwarden.ImportCredentialsResponse,
+      { method: "POST", body },
+    );
+
+  pendingCredentialUse = (signal: AbortSignal) =>
+    allPages(
+      (token) =>
+        this.request(
+          `/v0/credential-use-requests${pageQuery(token, { state: "pending" })}`,
+          CredentialUse.ListCredentialUseRequestsResponse,
+          { signal },
+        ),
+      (page) => page.requests,
+    );
+
+  decideCredentialUse = (id: string, decision: "approve" | "reject") =>
+    this.request(
+      `/v0/credential-use-requests/${segment(id)}/${decision}`,
+      CredentialUse.CredentialUseRequest,
+      { method: "POST" },
+    );
+
+  pendingCredentialRequests = (signal: AbortSignal) =>
+    allPages(
+      (token) =>
+        this.request(
+          `/v0/credential-requests${pageQuery(token, { state: "pending" })}`,
+          CredentialRequests.ListCredentialRequestsResponse,
+          { signal },
+        ),
+      (page) => page.credential_requests,
+    );
+
+  fulfillCredentialRequest = (
+    id: string,
+    body: CredentialRequests.FulfillCredentialRequestRequest,
+  ) =>
+    this.request(
+      `/v0/credential-requests/${segment(id)}/fulfill`,
+      CredentialRequests.CredentialRequest,
+      { method: "POST", body },
+    );
+
+  declineCredentialRequest = (id: string) =>
+    this.request(
+      `/v0/credential-requests/${segment(id)}/decline`,
+      CredentialRequests.CredentialRequest,
+      { method: "POST" },
+    );
 
   pendingDrafts = async (signal: AbortSignal) => {
     const drafts = await allPages(

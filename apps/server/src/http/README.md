@@ -194,7 +194,7 @@ fill/capture. A wildcard matches subdomains, not the bare suffix. Local requests
 can use any CDP endpoint, including loopback Chrome. Tunnel REST and MCP requests
 require HTTPS/WSS, an allowed host, and exclusively public DNS results. Both the
 discovery endpoint and discovered WebSocket are checked; discovery redirects are
-rejected. The web Settings editor is deferred; owners can use REST or the CLI.
+rejected. Settings > Remote browser hosts edits it in the web UI; REST and the CLI also work.
 See [browser credential use](../vault/README.md) for browser setup, errors and the
 residual DNS-rebinding risk.
 
@@ -680,7 +680,7 @@ These routes follow draft approvals through the tunnel: an owner browser session
 may list and decide, with CSRF on unsafe requests and the exact public Origin.
 The local owner bearer is refused on every tunneled route. Credential resolution
 remains local-only. Approval events use inbox scope plus `credential_read` for
-WebSocket and webhook visibility. The credential request UI is deferred.
+WebSocket and webhook visibility. The web Approvals screen lists and decides use requests.
 
 ## Credential requests
 
@@ -713,7 +713,7 @@ Repeated decline is idempotent. Other non-pending decisions fail with
 `validation_error` and an actionable fix. Agents cannot decide requests.
 Fulfillment is completely blocked through the tunnel, including owner browser
 sessions: Cloudflare terminates TLS at its edge. Fulfill from the local web UI
-or CLI on the Inbot host; the request UI itself is deferred. Decline is allowed
+or CLI on the Inbot host; the Approvals screen shows the server's error through the tunnel. Decline is allowed
 with an owner browser session and CSRF, like draft rejection. Local owner bearer
 tokens are never accepted through the tunnel.
 

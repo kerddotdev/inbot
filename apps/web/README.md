@@ -65,6 +65,13 @@ Implemented screens:
   pending and verifying domains refresh while the view is open.
 - Settings webhook creation with one-time signing secret, listing, failure state,
   enable/disable and delete. Metadata refreshes while the section is open.
+- Vault: searchable credential list with inbox filter, field refs, on-demand owner
+  reveal (kept in component state and cleared after a minute), live TOTP code with
+  countdown, create, edit, generate password and delete, plus Bitwarden JSON import and
+  export. Approvals also lists pending credential use requests and agent credential
+  requests (the agent's reason is shown as plain text). Settings > Remote browser
+  hosts edits the remote fill allowlist. Reveal, export, import and fulfill are
+  blocked through the tunnel and show the server's error.
 - Authenticated WebSocket updates invalidate mail, draft, approval and domain
   caches. Reconnect uses backoff, durable event IDs and a cache refresh.
 

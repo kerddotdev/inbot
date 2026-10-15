@@ -13,7 +13,13 @@ import { authRedirect } from "./auth-route";
 import { Shell } from "./components/Shell";
 import { Button, ListMessage, Status } from "./components/ui";
 import { LoadError, ErrorNotice } from "./feedback";
-import { approvalsQuery, inboxesQuery } from "./queries";
+import { approvalsCount } from "./screens/vault/format";
+import {
+  approvalsQuery,
+  credentialRequestsQuery,
+  credentialUseQuery,
+  inboxesQuery,
+} from "./queries";
 import { Approvals } from "./screens/Approvals";
 import { OAuthConsent } from "./screens/OAuth";
 import { ApiKeys } from "./screens/ApiKeys";
@@ -23,6 +29,7 @@ import { Mail } from "./screens/Mail";
 import { CreateInbox, EditInbox } from "./screens/InboxManagement";
 import { Remote } from "./screens/Remote";
 import { Settings } from "./screens/Settings";
+import { Vault } from "./screens/vault/Vault";
 import { links, navigate, useRoute, type Route } from "./router";
 
 type OwnerRoute = Exclude<Route, { name: "setup" | "login" | "locked" }>;
@@ -39,7 +46,9 @@ function Screen({ route, onManageInbox }: { route: OwnerRoute; onManageInbox: ()
         />
       );
     case "approvals":
-      return <Approvals selectedId={route.draftId} />;
+      return <Approvals selection={route.selection} />;
+    case "vault":
+      return <Vault inboxId={route.inboxId} credentialId={route.credentialId} />;
     case "domains":
       return <Domains />;
     case "keys":
@@ -54,7 +63,9 @@ function Screen({ route, onManageInbox }: { route: OwnerRoute; onManageInbox: ()
 function OwnerApp({ route }: { route: OwnerRoute }) {
   useLiveEvents();
   const inboxes = useQuery(inboxesQuery);
-  const approvals = useQuery(approvalsQuery);
+  const drafts = useQuery(approvalsQuery);
+  const credentialUse = useQuery(credentialUseQuery);
+  const credentialRequests = useQuery(credentialRequestsQuery);
   const client = useQueryClient();
   const [management, setManagement] = useState<"create" | { inboxId: string }>();
   const logout = useMutation({
@@ -86,7 +97,11 @@ function OwnerApp({ route }: { route: OwnerRoute }) {
       route={route}
       inboxes={inboxes.data ?? []}
       onNewInbox={() => setManagement("create")}
-      approvalsCount={approvals.data?.length}
+      approvalsCount={
+        drafts.data === undefined
+          ? undefined
+          : approvalsCount(drafts.data, credentialUse.data, credentialRequests.data, Date.now())
+      }
       onLogout={() => logout.mutate()}
       loggingOut={logout.isPending}
       inboxFeedback={

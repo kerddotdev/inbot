@@ -4,16 +4,21 @@ import { Schema } from "effect";
 import { WebSocketFrame, type Event } from "@inbot/contracts/src/events.js";
 import { api, ApiError } from "./api";
 
+const credentialKeys = (eventType: string) =>
+  /^credential\.(use_|request)/.test(eventType) ? ["approvals", "credentials"] : ["credentials"];
+
 export function invalidateEvent(client: QueryClient, event: Event) {
   const keys = event.event_type.startsWith("inbound.")
     ? ["quarantine"]
     : event.event_type.startsWith("oauth.")
       ? ["oauth"]
-      : event.event_type === "domain.verified"
-        ? ["domains", "inboxes"]
-        : event.event_type.startsWith("draft.")
-          ? ["draft", "drafts", "approvals", "inboxes", "threads", "thread"]
-          : ["inboxes", "threads", "thread"];
+      : event.event_type.startsWith("credential.")
+        ? credentialKeys(event.event_type)
+        : event.event_type === "domain.verified"
+          ? ["domains", "inboxes"]
+          : event.event_type.startsWith("draft.")
+            ? ["draft", "drafts", "approvals", "inboxes", "threads", "thread"]
+            : ["inboxes", "threads", "thread"];
   for (const key of keys) void client.invalidateQueries({ queryKey: [key] });
 }
 
@@ -68,6 +73,7 @@ export function useLiveEvents() {
               "draft",
               "drafts",
               "approvals",
+              "credentials",
               "domains",
               "webhooks",
               "oauth",

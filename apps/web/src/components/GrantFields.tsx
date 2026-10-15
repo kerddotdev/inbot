@@ -2,14 +2,19 @@ import { useState } from "react";
 import { Schema } from "effect";
 import {
   Permissions,
-  UsePolicy,
   type Grant,
   type SendPolicy,
+  type UsePolicy,
 } from "@inbot/contracts/src/api-keys.js";
 import type { IconName } from "../icons";
 import { Disclosure, Segmented, type Tone } from "./ui";
 import { LoadError } from "../feedback";
-import { permissionPreset, presetPermissions, type PermissionPreset } from "./grant-presets";
+import {
+  permissionGroups,
+  permissionPreset,
+  presetPermissions,
+  type PermissionPreset,
+} from "./grant-presets";
 
 const presetHint: Record<PermissionPreset, string> = {
   read: "Can read threads. Cannot create drafts or send.",
@@ -35,6 +40,11 @@ export const policyDisplay: Record<
   },
   read_only: { tone: "mute", icon: "eye", label: "Read-only", hint: "This grant can never send." },
 };
+
+const usePolicies: { value: UsePolicy; label: string }[] = [
+  { value: "approval", label: "Owner approval" },
+  { value: "direct", label: "Direct use" },
+];
 
 const presets: { value: PermissionPreset; label: string }[] = [
   { value: "read", label: "Read only" },
@@ -135,27 +145,30 @@ export function GrantFields({
           {customized ? "Only the checked permissions are granted." : presetHint[preset]}
         </p>
         <Disclosure label="Choose individual permissions">
-          <div className="mt-2 grid gap-1.5">
-            {Object.keys(Permissions.fields).map((permission) => (
-              <label key={permission} className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={Object.entries(permissions).some(
-                    ([key, enabled]) => key === permission && enabled,
-                  )}
-                  onChange={(event) => {
-                    setPermissions(
-                      Schema.decodeUnknownSync(Permissions)({
-                        ...permissions,
-                        [permission]: event.target.checked,
-                      }),
-                    );
-                  }}
-                />
-                {permission.replaceAll("_", " ")}
-              </label>
-            ))}
-          </div>
+          {permissionGroups(Object.keys(Permissions.fields)).map((group) => (
+            <div key={group.title} className="mt-2 grid gap-1.5">
+              <h4 className="text-xs font-semibold text-ink2">{group.title}</h4>
+              {group.items.map((permission) => (
+                <label key={permission.name} className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={Object.entries(permissions).some(
+                      ([key, enabled]) => key === permission.name && enabled,
+                    )}
+                    onChange={(event) => {
+                      setPermissions(
+                        Schema.decodeUnknownSync(Permissions)({
+                          ...permissions,
+                          [permission.name]: event.target.checked,
+                        }),
+                      );
+                    }}
+                  />
+                  {permission.label}
+                </label>
+              ))}
+            </div>
+          ))}
         </Disclosure>
       </fieldset>
       <fieldset className="mb-4 min-w-0">
@@ -184,24 +197,15 @@ export function GrantFields({
       </fieldset>
       <fieldset className="mb-4 min-w-0">
         <legend className="mb-[7px] p-0 font-semibold">Credential use policy</legend>
-        <label className="grid gap-1.5">
-          <span className="text-xs text-ink2">
-            Applies to browser fill and local commands. Capture and TOTP codes use their
-            permissions.
-          </span>
-          <select
-            value={value.use_policy ?? "approval"}
-            onChange={(event) =>
-              onChange({
-                ...value,
-                use_policy: Schema.decodeUnknownSync(UsePolicy)(event.target.value),
-              })
-            }
-          >
-            <option value="approval">Owner approval</option>
-            <option value="direct">Direct use</option>
-          </select>
-        </label>
+        <Segmented<UsePolicy>
+          name="use-policy"
+          options={usePolicies}
+          value={value.use_policy ?? "approval"}
+          onChange={(use_policy) => onChange({ ...value, use_policy })}
+        />
+        <p className="mt-1.5 text-xs text-ink2">
+          Applies to browser fill and local commands. Capture and TOTP codes use their permissions.
+        </p>
       </fieldset>
     </>
   );

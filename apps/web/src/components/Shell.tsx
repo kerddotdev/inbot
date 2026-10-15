@@ -17,6 +17,7 @@ interface ShellProps {
 
 const manage: { key: Route["name"]; icon: IconName; label: string; href: string }[] = [
   { key: "approvals", icon: "check-circle", label: "Approvals", href: links.approvals() },
+  { key: "vault", icon: "vault", label: "Vault", href: links.vault() },
   { key: "domains", icon: "globe", label: "Domains", href: links.domains },
   { key: "keys", icon: "key", label: "API keys", href: links.keys },
   { key: "remote", icon: "link", label: "Remote access", href: links.remote },
