@@ -196,7 +196,7 @@ require HTTPS/WSS, an allowed host, and exclusively public DNS results. Both the
 discovery endpoint and discovered WebSocket are checked; discovery redirects are
 rejected. The web Settings editor is deferred; owners can use REST or the CLI.
 See [browser credential use](../vault/README.md) for browser setup, errors and the
-residual DNS-rebinding risk. Approval policies and owner requests are future work.
+residual DNS-rebinding risk.
 
 `POST /v0/credentials/resolve` requires `credential_run` and a loopback connection.
 It is blocked by the tunnel allowlist and rejects `TunnelTraffic` in the service
@@ -723,3 +723,22 @@ tokens are never accepted through the tunnel.
 Owner consumers see all; agent webhook/WebSocket consumers need
 `credential_request`, matching inbox scope and the requesting key.
 Fulfillment also emits the normal `credential.created` event.
+
+## Local owner Bitwarden import and export
+
+- `GET /v0/credentials/export?inbox_id=<optional>` returns unencrypted Bitwarden
+  JSON with `Cache-Control: no-store`. Omit the inbox to export all inboxes.
+- `POST /v0/credentials/import?inbox_id=<required>&on_duplicate=skip|create`
+  accepts the Bitwarden JSON body, up to 5 MiB. The default is `skip`.
+
+Both endpoints use OwnerOnly and are blocked by the tunnel, including for owner
+browser sessions. Agent keys return `missing_permission`; missing authentication
+returns `unauthorized`. Encrypted exports, malformed JSON and oversized requests
+return `validation_error` with an actionable fix. The target inbox must exist.
+
+Import returns `{ imported, skipped, reasons, credentials }` with credential
+metadata only. Counts summarize item omissions and invalid URIs without values.
+Accepted credentials and their normal `credential.created` events commit in one
+transaction. A database failure rolls back the complete import. See
+[Bitwarden interoperability](../vault/README.md#bitwarden-interoperability) for
+mapping, field normalization, per-item limits and duplicate behavior.

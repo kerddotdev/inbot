@@ -1,4 +1,10 @@
 import { runUpdateCommand, updateHelp } from "./update-command.js";
+import {
+  readBitwarden,
+  requireLocalVault,
+  validateBitwardenOutput,
+  writeBitwarden,
+} from "./bitwarden.js";
 import { runCommand } from "./run.js";
 import { followEvents } from "./events.js";
 import { spawn } from "node:child_process";
@@ -61,6 +67,11 @@ function commandOptions(command: Command): ParseArgsOptionsConfig {
     ...(command.download ? { output: { type: "string", short: "o" } } : {}),
     ...(command.tokenInput ? { "token-stdin": { type: "boolean" } } : {}),
     ...(command.fieldsInput ? { "fields-stdin": { type: "boolean" } } : {}),
+    ...(command.bitwarden === undefined ? {} : { inbox: { type: "string" } }),
+    ...(command.bitwarden === "export"
+      ? { output: { type: "string", short: "o" }, force: { type: "boolean" } }
+      : {}),
+    ...(command.bitwarden === "import" ? { file: { type: "string" } } : {}),
     ...(command.generateField
       ? {
           generate: { type: "boolean" },
@@ -198,6 +209,9 @@ export async function runCli(args: readonly string[], io: CliIO): Promise<number
       return 0;
     }
     if (command.download) validateOutput(values.output, values.json, io);
+    if (command.bitwarden === "export") validateBitwardenOutput(values.output, values.json);
+    if (command.bitwarden === "import" && typeof values.inbox !== "string")
+      usage("Credential import requires --inbox <inbox_id>.");
     if (positionals.length !== (command.params?.length ?? 0))
       usage(
         `Expected ${(command.params ?? []).map((param) => `<${param}>`).join(" ") || "no positional arguments"}.`,
@@ -225,6 +239,8 @@ export async function runCli(args: readonly string[], io: CliIO): Promise<number
     for (const [key, value] of Object.entries(fields(command.query, values))) {
       for (const entry of Array.isArray(value) ? value : [value]) query.append(key, String(entry));
     }
+    if (command.bitwarden !== undefined && typeof values.inbox === "string")
+      query.set("inbox_id", values.inbox);
     if (query.size > 0) path += `?${query}`;
     let body: unknown;
     if (command.body !== undefined) {
@@ -296,6 +312,8 @@ export async function runCli(args: readonly string[], io: CliIO): Promise<number
       { flavor, ...(typeof values.home === "string" ? { home: values.home } : {}) },
       io.env,
     );
+    if (command.bitwarden !== undefined) requireLocalVault(auth.url);
+    if (command.bitwarden === "import") body = await readBitwarden(values.file);
     let idempotencyKey: string | undefined;
     if (
       command.idempotent &&
@@ -311,6 +329,11 @@ export async function runCli(args: readonly string[], io: CliIO): Promise<number
       io.stderr(`Idempotency-Key: ${idempotencyKey}\n`);
     }
     let result = await request(auth, endpoint, path, body, idempotencyKey, command.response);
+    if (command.bitwarden === "export") {
+      if (typeof values.output !== "string") usage("Credential export requires -o <file> or -o -.");
+      await writeBitwarden(result, values.output, values.force === true, io);
+      return 0;
+    }
     if (command.download && !values.json) {
       await download(
         auth.url,

@@ -742,3 +742,32 @@ creation; expired or otherwise decided requests cannot be fulfilled. Poll
 A fulfilled request includes metadata even without `credential_read`, while ref
 use retains its own permission checks. Request events contain names/IDs only
 and are visible to their requesting key in scope or the owner.
+
+## Bitwarden import and export
+
+These local owner commands exchange unencrypted Bitwarden JSON:
+
+```sh
+inbot credentials export --inbox agent@example.com -o vault.json
+inbot credentials export -o vault.json --force
+inbot credentials export -o -
+inbot credentials import --inbox other@example.com --file vault.json --json
+inbot credentials import --inbox other@example.com --file vault.json --on-duplicate create
+```
+
+Export requires an explicit `-o`/`--output`. Only `-o -` prints secrets to stdout;
+`--json` is unavailable for export. Files are created with mode 0600 on Unix,
+existing files are refused without `--force`, and forced writes also set mode 0600. Symlink outputs are refused where the platform supports `O_NOFOLLOW`.
+The JSON file contains plaintext secrets, so keep it private and remove it when
+it is no longer needed. Omit `--inbox` on export to include every inbox.
+
+Import requires `--inbox` and `--file`, accepts up to 5 MiB, ignores folders, and
+imports login items only. Encrypted exports are rejected. Item failures are
+summarized by reason without values, and returned credentials contain metadata
+only. Existing inbox/name/username duplicates are skipped by default, including
+those created earlier in the same import. Use `--on-duplicate create` to create
+additional credentials. All imported credentials and events commit atomically.
+
+Both commands require a loopback server URL before transferring secrets, reject
+agent keys, and are blocked through Cloudflare Tunnel even for owner sessions.
+The same configuration and exit codes as other owner commands apply.

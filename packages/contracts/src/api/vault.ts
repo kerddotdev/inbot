@@ -1,3 +1,4 @@
+import * as Bitwarden from "../bitwarden.js";
 import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema } from "effect/http-api";
 import * as Common from "../common.js";
 import * as Errors from "../errors.js";
@@ -116,5 +117,16 @@ export const CredentialsApi = HttpApiGroup.make("credentials")
       success: Vault.ResolveCredentialsResponse,
       error: Errors.WriteErrors,
     }).annotate(RequiredPermission, "credential_run"),
+    HttpApiEndpoint.get("credentials_export", "/v0/credentials/export", {
+      query: Bitwarden.ExportCredentialsQuery,
+      success: Bitwarden.BitwardenExport,
+      error: Errors.ReadErrors,
+    }).middleware(OwnerOnly),
+    HttpApiEndpoint.post("credentials_import", "/v0/credentials/import", {
+      query: Bitwarden.ImportCredentialsQuery,
+      payload: Bitwarden.BitwardenImport,
+      success: Bitwarden.ImportCredentialsResponse,
+      error: Errors.WriteErrors,
+    }).middleware(OwnerOnly),
   )
   .middleware(BearerAuth);

@@ -1,4 +1,6 @@
 import { Effect } from "effect";
+import { HttpServerResponse } from "effect/http";
+import { readBitwardenBody } from "./bitwarden-http.js";
 import { HttpApiBuilder } from "effect/http-api";
 import { ServerApi } from "../http/api.js";
 import { respond } from "../http/errors.js";
@@ -47,6 +49,27 @@ export const CredentialsLive = HttpApiBuilder.group(ServerApi, "credentials", (h
       )
       .handle("credentials_list", ({ query: { inbox_id, ...query } }) =>
         respond(vault.list(query, inbox_id)),
+      )
+      .handle("credentials_export", ({ query }) =>
+        respond(
+          vault
+            .exportBitwarden(query.inbox_id)
+            .pipe(
+              Effect.map((body) =>
+                HttpServerResponse.jsonUnsafe(body, { headers: { "cache-control": "no-store" } }),
+              ),
+            ),
+        ),
+      )
+      .handleRaw("credentials_import", ({ request, query }) =>
+        respond(
+          Effect.gen(function* () {
+            const body = yield* readBitwardenBody(request);
+            return HttpServerResponse.jsonUnsafe(yield* vault.importBitwarden(body, query), {
+              headers: { "cache-control": "no-store" },
+            });
+          }),
+        ).pipe(Effect.map(HttpServerResponse.setHeader("connection", "close"))),
       );
   }),
 );

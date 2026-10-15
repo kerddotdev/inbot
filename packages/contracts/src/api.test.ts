@@ -181,7 +181,11 @@ it("declares vault permissions and keeps reveal owner-only inside the authentica
   const group = InbotApi.groups.credentials;
   for (const [name, endpoint] of Object.entries(group.endpoints)) {
     expect(endpoint.middlewares.has(BearerAuth)).toBe(true);
-    if (name === "inboxes_credentials_reveal" || name.startsWith("owner_vault_")) {
+    if (
+      name === "inboxes_credentials_reveal" ||
+      name.startsWith("owner_vault_") ||
+      ["credentials_export", "credentials_import"].includes(name)
+    ) {
       expect([...endpoint.middlewares]).toContain(OwnerOnly);
       expect(Context.get(endpoint.annotations, RequiredPermission)).toBeUndefined();
     } else {

@@ -153,3 +153,36 @@ Owner fulfillment is blocked both at the tunnel boundary and in the service:
 Cloudflare terminates TLS at its edge, so secret input must stay on the host.
 Decline can use an owner browser session through the tunnel with CSRF. The web
 request/decision UI is deferred; local REST and CLI are available now.
+
+## Bitwarden interoperability
+
+Local owners can export unencrypted Bitwarden JSON or import it into an existing
+inbox. Export uses stable folders named after inbox IDs, credential IDs on items,
+login username/password/TOTP/URIs, notes, and hidden custom fields. Only login
+items are imported; folders are ignored. Imports generate new credential IDs.
+Duplicate detection uses inbox, name, and username, including earlier items in
+the same import. The default skips duplicates; `on_duplicate=create` creates them.
+
+All writes and normal `credential.created` events share one transaction. Events
+contain field names and identity only. Item validation failures skip that item;
+unsupported types, invalid TOTP, limits, and duplicates are summarized as reason
+counts with no values. Invalid URIs are counted as `invalid_uri` and discarded,
+using the existing HTTPS/local HTTP origin policy. Reason counts can exceed the
+number of skipped items because URI and unsupported custom-field counts also
+include omissions within imported items. Text and hidden custom fields are
+supported; other custom-field types count as `unsupported_field`.
+
+Custom field names become lowercase ASCII names with underscores, a leading
+`f_` when needed, a 64-character limit, and numeric suffixes for collisions.
+The names password, totp, and notes are reserved for their login/note mappings.
+Empty values are omitted. Imports enforce 32 fields, 16384 characters per value,
+16 distinct origins, 200 characters per name, and 320 per username. Oversized
+items are skipped, and malformed items count as `invalid_item`. Encrypted exports
+are rejected with a fix to export unencrypted JSON. The request limit is 5 MiB.
+
+REST import/export and their CLI commands require the local owner. Both routes
+are blocked by the tunnel even for owner browser sessions because Cloudflare
+terminates TLS at its edge. They have no MCP tools. Export returns
+`Cache-Control: no-store`; exported files contain plaintext secrets and are
+explicit owner-controlled copies outside the encrypted database. Web UI support
+is deferred to the vault UI change.

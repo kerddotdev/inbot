@@ -4,6 +4,7 @@ import {
   credentialUseLock,
   useFingerprint,
 } from "./approvals.js";
+import { makeBitwarden } from "./bitwarden.js";
 import { randomBytes, randomUUID } from "node:crypto";
 import type Database from "better-sqlite3-multiple-ciphers";
 import { Clock, Context, Effect, Layer, Redacted, Result, Schema } from "effect";
@@ -627,6 +628,7 @@ export function makeVault(store: StoreService) {
           fields: Object.fromEntries(rows.map((row) => [row.name, Redacted.value(row.value)])),
         };
       }),
+    ...makeBitwarden(store),
   };
 }
 
