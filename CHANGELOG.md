@@ -2,6 +2,16 @@
 
 Published changes are recorded in [GitHub releases](https://github.com/kerddotdev/inbot/releases), with notes generated from merged pull requests. This file summarizes each release.
 
+## 0.2.0 - 2026-10-15
+
+- A credential vault stores logins for each inbox in the encrypted database. Agents see names and `inbot://credentials/<id>/<field>` references, never values, and every use is authorized again against the key's `credential_*` permissions and inbox scope.
+- The server generates passwords (Apple-style by default, or matching a site's password rules) and TOTP codes, so a new account's secrets never pass through the agent.
+- Browser fill and capture connect to a CDP endpoint, check the page's origin against the credential and type the value server-side. Remote agents can only reach owner-allowlisted public browser hosts.
+- `inbot run --env NAME=REF -- command` passes credentials to local commands without showing them to the agent. It is not a security boundary.
+- Keys default to `use_policy: approval`: the owner approves each fill or run from Approvals, the CLI or REST.
+- Agents can request a credential the owner fills in locally, and the owner can import and export Bitwarden JSON.
+- The owner UI has a Vault screen with on-demand reveal, live TOTP codes and generation.
+
 ## 0.1.1 - 2026-10-14
 
 - `inbot update` installs a newer release after verifying its checksum and, on macOS, its Developer ID signature, then restarts the background service. `inbot update --check` only reports whether an update exists.
