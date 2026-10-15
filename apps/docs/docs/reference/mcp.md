@@ -1,6 +1,6 @@
 ---
 title: MCP tools
-description: The 36 MCP tools Inbot serves, with the permission each one needs, its annotations and inputs, result truncation and error behavior.
+description: The 48 MCP tools Inbot serves, with the permission each one needs, its annotations and inputs, result truncation and error behavior.
 ---
 
 Inbot serves MCP over streamable HTTP at `/mcp`, protocol version `2025-06-18`. Clients initialize, keep the returned `Mcp-Session-Id`, and send it with `MCP-Protocol-Version: 2025-06-18` on later requests. Authentication is the same as REST: an API key, an OAuth access token issued for `<origin>/mcp`, or the owner's credentials. See [Connect an agent](/agents/connect) for client setup.
@@ -90,9 +90,36 @@ An agent manages only the webhooks its own key created. `request` takes the REST
 | `get_webhook_headers`    | `webhook_read`   | `webhookId`, `inboxId`                                             |
 | `update_webhook_headers` | `webhook_update` | `webhookId`, `inboxId`, `request` with `headers`, `remove_headers` |
 
+## Credentials
+
+Credential tools call the same vault service as REST. Results contain metadata, sorted field names and `inbot://credentials/<credential_id>/<field>` references. Stored values and TOTP seeds are never returned. See [Credential vault](/guides/vault) and [Using credentials](/agents/credentials).
+
+| Tool                       | Permission           | Inputs                                                                                                                                                 |
+| -------------------------- | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `list_credentials`         | `credential_read`    | `inboxId` (optional), `q`, `limit`, `pageToken`, `ascending`                                                                                           |
+| `get_credential`           | `credential_read`    | `inboxId`, `credentialId`                                                                                                                              |
+| `create_credential`        | `credential_create`  | `inboxId`, `request` with `name`, `url`, `origins`, `username`, `fields`, `generate`                                                                   |
+| `update_credential`        | `credential_update`  | `inboxId`, `credentialId`, `request` with the create fields (all optional) and `remove_fields`                                                         |
+| `delete_credential`        | `credential_delete`  | `inboxId`, `credentialId`                                                                                                                              |
+| `generate_password`        | `credential_update`  | `inboxId`, `credentialId`, `field`, `mode`, `length`, `rules`                                                                                          |
+| `get_totp_code`            | `credential_totp`    | `inboxId`, `credentialId`. Returns `{ code, expires_at, period }`.                                                                                     |
+| `fill_credential`          | `credential_fill`    | `inboxId`, `credentialId`, `cdp_endpoint`, `selector`, `field`, `url`, `target_id`, `idempotencyKey`. Returns `{ credential_id, field, origin, url }`. |
+| `capture_credential`       | `credential_fill`    | `inboxId`, `credentialId`, `cdp_endpoint`, `selector`, `field`, `url`, `target_id`. Returns credential metadata and references.                        |
+| `request_credential`       | `credential_request` | `inboxId`, `request` with `name`, `url`, `username`, `fields`, `reason`                                                                                |
+| `get_credential_request`   | `credential_request` | `inboxId`, `requestId`                                                                                                                                 |
+| `list_credential_requests` | `credential_request` | `state`, `limit`, `pageToken`, `ascending`                                                                                                             |
+
+- `request` takes the REST body in snake_case. `generate` is `{ field?, mode?, length?, rules? }`; `mode` is `apple` or `random`, and `rules` uses Apple `passwordrules` syntax.
+- `cdp_endpoint`, `target_id` and the other browser fields keep their REST names. They are not camelCased.
+- `fill_credential` and `capture_credential` are neither read-only nor idempotent. The main page origin must match the credential, and a `totp` fill types the current code, never the seed. After an uncertain result, inspect the page before retrying.
+- With `use_policy: approval`, `fill_credential` requires `idempotencyKey`. The first call returns `approval_required` with a request ID and does not connect to the browser. Ask the owner to approve, then retry the identical call with the same key. A changed call under the same key returns `idempotency_conflict`; a rejected request returns `missing_permission`.
+- Tunnel requests for fill and capture need an HTTPS or WSS endpoint on a host the owner allowlisted.
+- `update_credential` is annotated non-idempotent because it can generate a fresh password.
+- Poll `get_credential_request` later while a request is pending. A fulfilled request carries the credential metadata even without `credential_read`.
+
 ## Not available over MCP
 
-Owner actions are deliberately absent: domains, API keys, the transport, remote access, owner sessions, draft approval and rejection, `send_unknown` resolution, rejected mail, quarantine and OAuth management. Message deletion, batch operations, instance-wide draft reads, raw message downloads, message-scoped attachments and draft attachment downloads are available only over REST. MCP `get_attachment` reads a thread attachment and returns a signed five-minute capability that needs no bearer. It rechecks the issuer's current grant and activity and is bound to the issuing origin; never share or log it.
+Owner actions are deliberately absent: domains, API keys, the transport, remote access, owner sessions, draft approval and rejection, `send_unknown` resolution, rejected mail, quarantine and OAuth management. In the vault, these have no tool: revealing values, resolving references for `inbot run`, approving or rejecting credential use, fulfilling or declining credential requests, Bitwarden import and export, and the browser host allowlist settings. Resolution returns secret material for a local child process, which an MCP client cannot start through Inbot. Message deletion, batch operations, instance-wide draft reads, raw message downloads, message-scoped attachments and draft attachment downloads are available only over REST. MCP `get_attachment` reads a thread attachment and returns a signed five-minute capability that needs no bearer. It rechecks the issuer's current grant and activity and is bound to the issuing origin; never share or log it.
 
 ## Send policies in MCP
 

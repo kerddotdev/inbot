@@ -30,6 +30,12 @@ Notes:
 - Drafts are an addition owners and agents share. `approve` and `reject` also exist (`POST .../drafts/{draft_id}/approve|reject`) but are owner-only. An agent key gets 403 `missing_permission`.
 - API key management (`/api-keys`, `/inboxes/{id}/api-keys`) exists but is owner-only. Do not try to use it.
 
+## Credentials
+
+See [vault.md](vault.md). Paths under `/v0/inboxes/{inbox_id}/credentials`: `GET`/`POST` list and create; `GET`/`PATCH`/`DELETE .../{credential_id}`; `POST .../{credential_id}/generate`; `GET .../{credential_id}/totp`; `POST .../{credential_id}/fill` and `.../capture`. `GET /v0/credentials` lists across inboxes (`inbox_id`, `q`). `POST /v0/credentials/resolve` (`credential_run`, loopback only) backs `inbot run`. Permissions are `credential_read/create/update/delete/totp/fill/run`. Fill and resolve under `use_policy: approval` need an `Idempotency-Key` and first return 403 `approval_required`.
+
+Credential requests: `POST` and `GET /v0/inboxes/{inbox_id}/credential-requests[/{request_id}]` and `GET /v0/credential-requests`, all `credential_request`. `GET .../credentials/{id}/fields` (reveal), `/v0/credentials/export|import`, `/v0/owner/vault/settings`, `/v0/credential-use-requests` and the request `fulfill`/`decline` routes are owner-only; do not use them.
+
 ## Unsupported options
 
 URL attachments return 501 `not_supported` after authentication and validation.

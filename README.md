@@ -32,6 +32,7 @@
 
 - **An inbox for every agent.** Give each agent an address on your own domain, with scoped access through MCP, the CLI or REST. Manage mail, domains and credentials in the owner web app.
 - **Your mail, on your machine.** Mail lives in an encrypted local database. Incoming messages wait encrypted in a Cloudflare buffer while your machine is offline.
+- **A credential vault for agents.** Agents get references, never values. Inbot generates passwords server-side, types them into the browser over CDP after checking the page's origin, and serves TOTP codes. The owner approves uses, answers credential requests and can import or export Bitwarden JSON.
 - **You decide what leaves.** Give agents read-only access, require your approval before sending, or allow direct sends. The service enforces inbox scope, permissions and send policies on every request.
 
 ## Install
@@ -96,6 +97,7 @@ Inbot is **zero-knowledge at rest, not end-to-end encrypted**. Cloudflare sees i
 ## Documentation
 
 - [Owner app](https://inbot.kerd.dev/docs/guides/owner-app): inboxes, keys, approvals and settings.
+- [Credential vault](https://inbot.kerd.dev/docs/guides/vault): references, browser fill, approval and credential requests.
 - [MCP tools](https://inbot.kerd.dev/docs/reference/mcp), [CLI](https://inbot.kerd.dev/docs/reference/cli) and [REST API](https://inbot.kerd.dev/docs/reference/rest): agent interfaces and reference.
 - [Build from source](https://inbot.kerd.dev/docs/development/build): local development with an isolated home.
 - [Packaging and releases](https://inbot.kerd.dev/docs/development/packaging): release archives and verification.

@@ -20,7 +20,7 @@ The local examples below assume `inbot serve --port 8025`. Without `--port`, `se
 
 ## MCP
 
-Inbot serves MCP over streamable HTTP (protocol version `2025-06-18`) at `/mcp`. There is no stdio transport. [MCP tools](/reference/mcp) lists all 36 tools.
+Inbot serves MCP over streamable HTTP (protocol version `2025-06-18`) at `/mcp`. There is no stdio transport. [MCP tools](/reference/mcp) lists all 48 tools, including the credential vault tools described in [Using credentials](/agents/credentials).
 
 ### Claude Code
 

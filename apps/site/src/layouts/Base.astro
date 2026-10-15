@@ -11,7 +11,7 @@ interface Props {
 }
 const { title, description, current, noindex = false } = Astro.props;
 const canonical = new URL(Astro.url.pathname.replace(/\/$/, "") || "/", Astro.site);
-const fullTitle = title === "Inbot" ? "Inbot - private email for AI agents" : `${title} - Inbot`;
+const fullTitle = title === "Inbot" ? "Inbot - private email and credentials for AI agents" : `${title} - Inbot`;
 const image = new URL("/og.png", Astro.site);
 const software = {
   "@context": "https://schema.org",
@@ -49,7 +49,7 @@ const software = {
     <meta property="og:image" content={image} />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
-    <meta property="og:image:alt" content="Inbot - private email for AI agents" />
+    <meta property="og:image:alt" content="Inbot - private email and credentials for AI agents" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content={fullTitle} />
     <meta name="twitter:description" content={description} />

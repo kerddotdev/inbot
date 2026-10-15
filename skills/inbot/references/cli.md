@@ -163,3 +163,9 @@ scope and expiry are immutable. New web key and OAuth forms default to Full
 access with approval and no selected inboxes; CLI callers supply explicit grants.
 
 Release updates and automatic-update preferences are local owner operations. Agents cannot use `inbot update`, its `--auto` option, or `/v0/owner/updates`; no update installation tool is exposed through MCP.
+
+## Credentials
+
+Agent keys with the matching `credential_*` permission can use `inbot credentials list|get|create|update|delete|generate|totp|fill|capture`, and request owner input with `credentials request`, `request-get` and `requests`. Use `--json`. `create --generate` creates the password server-side; read explicit secret fields from `--data-file -`, never from arguments. `fill` and `capture` take `INBOX CREDENTIAL_ID --cdp-endpoint URL --selector CSS --field NAME` and optional `--url`, `--target-id`, plus `--idempotency-key` under `use_policy: approval`.
+
+`inbot run [--env NAME=REF]... [--no-mask] -- command args` resolves references into a child environment. It needs `credential_run` and a loopback `INBOT_URL`, waits for owner approval, and masks output on a best-effort basis. It is not a security boundary. Prefer `credentials fill`. Owner-only: `credentials reveal`, `export`, `import`, `fulfill`, `decline`, `use-requests`, and `vault settings`. See [vault.md](vault.md).

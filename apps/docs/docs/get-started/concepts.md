@@ -18,6 +18,7 @@ description: The words Inbot uses for people, credentials, mail resources and in
 | Inbox scope | `inbox_id` or `inbox_ids`. Omitted means every inbox; an empty list means none.                              |
 | Permissions | An explicit list such as `message_read` or `message_reply`. Anything not granted is denied.                  |
 | Send policy | `direct` sends immediately, `approval` turns every send into a draft for the owner, `read_only` never sends. |
+| Use policy  | `approval` holds every credential fill and `inbot run` resolution for the owner, `direct` lets them proceed. |
 
 Resources outside a grant's inbox scope behave as if they do not exist: they return `not_found`. See [Permissions](/reference/permissions) for the full list.
 
@@ -32,6 +33,8 @@ Resources outside a grant's inbox scope behave as if they do not exist: they ret
 **Draft.** An unsent message. Drafts can be scheduled with `send_at`, and drafts created under the `approval` policy wait for the owner to approve or reject them.
 
 **Label.** A free-form string on a message. Inbot sets some labels itself, such as `unread`, `sent`, `delivered` and `unauthenticated`; agents and the owner add their own. System state labels including `received`, sending and delivery labels are protected; `unread` and custom labels remain editable. A thread's labels are the union of its messages' labels. See [Message states](/concepts/message-states).
+
+**Credential.** A set of named fields (such as `username`, `password` or `totp`) that belongs to one inbox, with the URLs and origins where it may be used. Agents never receive the values. They hold references, `inbot://credentials/<credential_id>/<field>`, and each use is authorized again. See [Credential vault](/guides/vault).
 
 **Allow and block lists.** Exact addresses or domains that restrict who an inbox may receive from, send to, or reply to. See [Allow and block lists](/guides/lists).
 

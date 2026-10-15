@@ -51,3 +51,9 @@ not resend; inform the human. Owner resolution emits `message.sent` or
 `message.failed` with reason `owner_confirmed_sent` or `owner_confirmed_not_sent`.
 
 `message.failed` also comes from a provider failure report with `failure.reason: "delivery_failed"`. Bounce and complaint events currently use `"unknown"` for `type` and `sub_type`. A delivery label does not change `send_status`.
+
+Credential events (`credential.created|updated|deleted|used|captured`) need `credential_read`
+and inbox scope. `credential.use_requested|use_approved|use_rejected` carry `request_id`,
+`kind`, `credential_ids` and `fields`; `credential.requested|request_fulfilled|request_declined`
+need `credential_request` and the requesting key. They contain identifiers and field names only,
+never values. `credential.used` has `via` of `fill` or `run`. Treat them as an audit trail.
