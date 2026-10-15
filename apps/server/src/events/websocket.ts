@@ -82,12 +82,13 @@ export function websocket(origin: string) {
     if (
       !permits(initial, "message_read") &&
       !permits(initial, "draft_read") &&
-      !permits(initial, "credential_read")
+      !permits(initial, "credential_read") &&
+      !permits(initial, "credential_request")
     )
       return errorResponse(
         wireError(
           "missing_permission",
-          "Event streaming requires message_read, draft_read, or credential_read.",
+          "Event streaming requires message_read, draft_read, credential_read, or credential_request.",
           "Ask the owner for an event resource read permission.",
         ),
       );
@@ -169,7 +170,8 @@ export function websocket(origin: string) {
             principal === undefined ||
             (!permits(principal, "message_read") &&
               !permits(principal, "draft_read") &&
-              !permits(principal, "credential_read"))
+              !permits(principal, "credential_read") &&
+              !permits(principal, "credential_request"))
           ) {
             yield* close(1008, "Credentials revoked");
             return;

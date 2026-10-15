@@ -5,6 +5,7 @@ import { InboundBuffer } from "../inbound/cloudflare.js";
 import { QuarantineHandlers } from "./quarantine.js";
 import { EventLog } from "../events/log.js";
 import { Webhooks } from "../events/webhooks.js";
+import { CredentialRequests } from "../vault/requests.js";
 import { Vault } from "../vault/vault.js";
 import { websocket } from "../events/websocket.js";
 import { createHash } from "node:crypto";
@@ -176,6 +177,7 @@ export function startHttpServer(
       Layer.succeed(TransportConfig, config),
       Downloads.layer(url),
       OwnerAuth.layer(url).pipe(Layer.provide(Layer.succeed(Home, home))),
+      CredentialRequests.Live.pipe(Layer.provide(Layer.succeed(Store, store))),
     );
     const context = yield* Layer.build(services);
     const owner = Context.get(context, OwnerAuth);
@@ -240,7 +242,9 @@ export function startHttpServer(
             wireError(
               "missing_permission",
               "This management route is unavailable over the tunnel.",
-              "Use the local Inbot URL for owner management.",
+              /^\/v0\/credential-requests\/[^/]+\/fulfill$/.test(routePath)
+                ? "Fulfill from the local web UI or CLI on the Inbot host."
+                : "Use the local Inbot URL for owner management.",
             ),
           );
         const bearer = request.headers.authorization?.match(/^Bearer\s+(.+)$/i)?.[1] ?? "";

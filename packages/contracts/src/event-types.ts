@@ -32,6 +32,9 @@ export const EventType = Schema.Literals([
   "credential.use_requested",
   "credential.use_approved",
   "credential.use_rejected",
+  "credential.requested",
+  "credential.request_fulfilled",
+  "credential.request_declined",
 ]).annotate({ identifier: "EventType" });
 export type EventType = typeof EventType.Type;
 

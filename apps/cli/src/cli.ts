@@ -51,7 +51,7 @@ function commandOptions(command: Command): ParseArgsOptionsConfig {
         option(kind),
       ]),
     ),
-    ...(command.body === undefined || command.tokenInput
+    ...(command.body === undefined || command.tokenInput || command.fieldsInput
       ? {}
       : { data: { type: "string" }, "data-file": { type: "string" } }),
     ...(command.scopedEndpoint === undefined ? {} : { inbox: { type: "string" } }),
@@ -60,6 +60,7 @@ function commandOptions(command: Command): ParseArgsOptionsConfig {
     ...(command.browser ? { browser: { type: "boolean" } } : {}),
     ...(command.download ? { output: { type: "string", short: "o" } } : {}),
     ...(command.tokenInput ? { "token-stdin": { type: "boolean" } } : {}),
+    ...(command.fieldsInput ? { "fields-stdin": { type: "boolean" } } : {}),
     ...(command.generateField
       ? {
           generate: { type: "boolean" },
@@ -91,7 +92,7 @@ function help(command?: Command, group?: string): string {
     )
     .join(
       "\n",
-    )}\n${command.body === undefined || command.tokenInput ? "" : "\n--data accepts the REST JSON payload; --data-file reads it from a file or '-' for stdin. Do not combine payload JSON with body flags.\n"}${command.idempotent ? "\nThe Idempotency-Key is printed to stderr before sending. Reuse it with the same payload after an uncertain result.\n" : ""}${command.download ? "\n-o, --output <path> creates a private file and refuses to overwrite it. Omit it or use '-' for redirected binary stdout. --json returns download metadata only and cannot be combined with --output.\n" : ""}${command.tokenInput ? "\nProvide the token through INBOT_CLOUDFLARE_API_TOKEN or --token-stdin (raw token, trailing newline allowed). Never put it in command arguments. --account-id is optional when exactly one account is accessible. Configure verifies before saving; there is no separate verify route.\n" : ""}`;
+    )}\n${command.body === undefined || command.tokenInput || command.fieldsInput ? "" : "\n--data accepts the REST JSON payload; --data-file reads it from a file or '-' for stdin. Do not combine payload JSON with body flags.\n"}${command.fieldsInput ? "\nUse --fields-stdin with a JSON object mapping exactly the requested field names to values. Values cannot be passed through flags, --data, or files. --username optionally overrides metadata. Fulfill locally on the Inbot host.\n" : ""}${command.idempotent ? "\nThe Idempotency-Key is printed to stderr before sending. Reuse it with the same payload after an uncertain result.\n" : ""}${command.download ? "\n-o, --output <path> creates a private file and refuses to overwrite it. Omit it or use '-' for redirected binary stdout. --json returns download metadata only and cannot be combined with --output.\n" : ""}${command.tokenInput ? "\nProvide the token through INBOT_CLOUDFLARE_API_TOKEN or --token-stdin (raw token, trailing newline allowed). Never put it in command arguments. --account-id is optional when exactly one account is accessible. Configure verifies before saving; there is no separate verify route.\n" : ""}`;
 }
 
 function fields(
@@ -272,6 +273,16 @@ export async function runCli(args: readonly string[], io: CliIO): Promise<number
           : io.env.INBOT_CLOUDFLARE_API_TOKEN;
         if (token === undefined) usage("Set INBOT_CLOUDFLARE_API_TOKEN or use --token-stdin.");
         body = { ...bodyFlags, api_token: token };
+      }
+      if (command.fieldsInput) {
+        if (!values["fields-stdin"])
+          usage("Use --fields-stdin to provide credential values privately.");
+        try {
+          const fields: unknown = JSON.parse(await (io.readStdin ?? readStdin)());
+          body = { ...bodyFlags, fields };
+        } catch {
+          usage("Cannot read field values. Supply a JSON object through --fields-stdin.");
+        }
       }
       const payload = endpoint.payload.get("application/json");
       if (payload === undefined) throw new Error("Missing payload schema");

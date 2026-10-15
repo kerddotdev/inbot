@@ -1,3 +1,7 @@
+import {
+  CredentialRequest,
+  ListCredentialRequestsResponse,
+} from "../../../packages/contracts/src/credential-requests.js";
 import { ListQuarantineResponse } from "../../../packages/contracts/src/quarantine.js";
 import { mkdtemp, rm, readFile, writeFile, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -2028,4 +2032,146 @@ test("parses browser fill/capture flags and local owner vault settings show/set"
   } finally {
     await browser.close();
   }
+});
+
+test("requests and fulfills credentials using field JSON from stdin only with owner decisions and refs", async ({
+  api,
+}) => {
+  const key = await api.run(
+    api.keys.create({
+      inbox_ids: [inboxId],
+      permissions: { credential_request: true },
+      send_policy: "read_only",
+    }),
+  );
+  const env = agentEnv(api, key.api_key);
+  const requested = await invoke(
+    api,
+    [
+      "credentials",
+      "request",
+      inboxId,
+      "--name",
+      "Owner account",
+      "--url",
+      "https://example.test",
+      "--fields",
+      "password",
+      "--reason",
+      "Use an existing account",
+      "--json",
+    ],
+    { env },
+  );
+  expect(requested.code).toBe(0);
+  const request = Schema.decodeUnknownSync(CredentialRequest)(JSON.parse(requested.stdout));
+  expect(request.state).toBe("pending");
+  const help = await invoke(api, ["credentials", "fulfill", "--help"]);
+  expect(help.stdout).toContain("--fields-stdin");
+  expect(help.stdout).not.toContain("  --data <value>");
+  expect(help.stdout).not.toContain("--fields <value>");
+  const secret = "cli-request-distinctive-secret-t2K";
+  for (const args of [
+    [],
+    ["--fields", JSON.stringify({ password: secret })],
+    ["--data", JSON.stringify({ fields: { password: secret } })],
+    ["--data-file", "-"],
+    ["--fields-stdin", "--fields", JSON.stringify({ password: secret })],
+  ]) {
+    const readStdin = vi.fn(async () => JSON.stringify({ password: secret }));
+    const denied = await invoke(api, ["credentials", "fulfill", request.request_id, ...args], {
+      readStdin,
+    });
+    expect(denied.code).toBe(2);
+    expect(readStdin).not.toHaveBeenCalled();
+    expect(denied.stdout + denied.stderr).not.toContain(secret);
+  }
+  for (const payload of [
+    "not-json",
+    JSON.stringify({ password: "" }),
+    JSON.stringify({ fields: { password: secret } }),
+  ]) {
+    const invalid = await invoke(
+      api,
+      ["credentials", "fulfill", request.request_id, "--fields-stdin", "--json"],
+      { readStdin: async () => payload },
+    );
+    expect(invalid.code).toBe(2);
+    expect(invalid.stdout + invalid.stderr).not.toContain(secret);
+  }
+  const readStdin = vi.fn(async () => JSON.stringify({ password: secret }));
+  const fulfilled = await invoke(
+    api,
+    [
+      "credentials",
+      "fulfill",
+      request.request_id,
+      "--fields-stdin",
+      "--username",
+      "owner",
+      "--json",
+    ],
+    { readStdin },
+  );
+  expect(fulfilled.code).toBe(0);
+  expect(readStdin).toHaveBeenCalledOnce();
+  expect(Schema.decodeUnknownSync(CredentialRequest)(JSON.parse(fulfilled.stdout))).toMatchObject({
+    state: "fulfilled",
+    credential: { username: "owner", fields: ["password"] },
+  });
+  const get = await invoke(
+    api,
+    ["credentials", "request-get", inboxId, request.request_id, "--json"],
+    { env },
+  );
+  expect(get.code).toBe(0);
+  const value = Schema.decodeUnknownSync(CredentialRequest)(JSON.parse(get.stdout));
+  expect(value.requested_by).toBeUndefined();
+  expect(value.credential?.refs.password).toMatch(/^inbot:\/\/credentials\//);
+  const list = await invoke(
+    api,
+    ["credentials", "requests", "--state", "fulfilled", "--limit", "1", "--json"],
+    { env },
+  );
+  expect(list.code).toBe(0);
+  expect(
+    Schema.decodeUnknownSync(ListCredentialRequestsResponse)(JSON.parse(list.stdout))
+      .credential_requests,
+  ).toEqual([value]);
+  const plain = await invoke(api, ["credentials", "request-get", inboxId, request.request_id], {
+    env,
+  });
+  expect(plain.stdout).toContain("Use an existing account");
+  expect(plain.stdout).toContain("fulfilled");
+  expect(JSON.stringify([requested, fulfilled, get, list, plain])).not.toContain(secret);
+  const pending = Schema.decodeUnknownSync(CredentialRequest)(
+    JSON.parse(
+      (
+        await invoke(
+          api,
+          [
+            "credentials",
+            "request",
+            inboxId,
+            "--name",
+            "Decline",
+            "--fields",
+            "password",
+            "--reason",
+            "Account needed",
+            "--json",
+          ],
+          { env },
+        )
+      ).stdout,
+    ),
+  );
+  expect(
+    (await invoke(api, ["credentials", "decline", pending.request_id, "--json"], { env })).code,
+  ).toBe(4);
+  const declined = await invoke(api, ["credentials", "decline", pending.request_id, "--json"]);
+  expect(declined.code).toBe(0);
+  expect(Schema.decodeUnknownSync(CredentialRequest)(JSON.parse(declined.stdout)).state).toBe(
+    "declined",
+  );
 });

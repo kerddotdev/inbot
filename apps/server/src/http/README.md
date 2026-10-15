@@ -681,3 +681,45 @@ may list and decide, with CSRF on unsafe requests and the exact public Origin.
 The local owner bearer is refused on every tunneled route. Credential resolution
 remains local-only. Approval events use inbox scope plus `credential_read` for
 WebSocket and webhook visibility. The credential request UI is deferred.
+
+## Credential requests
+
+`POST /v0/inboxes/:inbox_id/credential-requests` accepts
+`{ name, url?, username?, fields, reason }` and returns a pending request.
+`fields` has 1-8 unique credential field names; `reason` has 1-500 characters.
+URLs are validated with the vault origin policy before storing a request.
+`GET /v0/inboxes/:inbox_id/credential-requests/:request_id` reads it.
+`GET /v0/credential-requests` supports `state` and shared pagination.
+All three require `credential_request`, independently of mail send policy.
+Agents see only their own key's requests within current inbox scope, with
+foreign requests returning `not_found`. Owners list/read all and receive
+`requested_by`; owners cannot create requests (`validation_error`).
+
+Requests expire seven days after creation, checked lazily against the injected
+clock. States are `pending`, `fulfilled`, `declined`, and `expired`.
+The `reason` is agent-authored text and is displayed to the owner as plain text.
+It never grants access. Events exclude it and all secret values.
+
+Owner-only `POST /v0/credential-requests/:request_id/fulfill` accepts
+`{ fields: { password: "value" }, username? }`, with exactly the requested field
+names. It creates an owner-provenance credential, normalizes TOTP, and commits
+state/link/events atomically. The requesting key receives the resulting
+credential metadata and refs without needing `credential_read`; using a ref
+still requires its own permission. After credential deletion, the fulfilled
+request remains but its credential metadata is absent.
+
+Owner-only `POST /v0/credential-requests/:request_id/decline` has no payload.
+Repeated decline is idempotent. Other non-pending decisions fail with
+`validation_error` and an actionable fix. Agents cannot decide requests.
+Fulfillment is completely blocked through the tunnel, including owner browser
+sessions: Cloudflare terminates TLS at its edge. Fulfill from the local web UI
+or CLI on the Inbot host; the request UI itself is deferred. Decline is allowed
+with an owner browser session and CSRF, like draft rejection. Local owner bearer
+tokens are never accepted through the tunnel.
+
+`credential.requested`, `credential.request_fulfilled`, and
+`credential.request_declined` contain
+`credential_request: { request_id, inbox_id, fields, credential_id? }`.
+Owner consumers see all; agent webhook/WebSocket consumers need
+`credential_request`, matching inbox scope and the requesting key.
+Fulfillment also emits the normal `credential.created` event.

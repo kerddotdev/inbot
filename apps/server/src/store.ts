@@ -17,6 +17,8 @@ import { listsSchema, rejectionMetadataSchema } from "./lists/schema.js";
 import { vaultSchema, vaultSettingsSchema } from "./vault/schema.js";
 import { credentialUseSchema, migrateUsePolicy } from "./vault/approval-schema.js";
 
+import { credentialRequestsSchema } from "./vault/requests-schema.js";
+
 export class DatabaseKeyInvalid extends Schema.TaggedError<DatabaseKeyInvalid>()(
   "DatabaseKeyInvalid",
   {},
@@ -61,6 +63,7 @@ export const migrations: readonly Migration[] = [
   { version: 16, sql: vaultSchema },
   { version: 17, sql: vaultSettingsSchema },
   { version: 18, sql: credentialUseSchema, apply: migrateUsePolicy },
+  { version: 19, sql: credentialRequestsSchema },
 ];
 
 export function migrate(database: Database.Database, ordered: readonly Migration[] = migrations) {

@@ -10,6 +10,8 @@ import { ListsApi } from "./api/lists.js";
 import { ApiKeysApi } from "./api/api-keys.js";
 import { CredentialsApi } from "./api/vault.js";
 
+import { CredentialRequestsApi } from "./api/credential-requests.js";
+
 export const InbotApi = HttpApi.make("inbot").add(
   InboxesApi,
   ThreadsApi,
@@ -21,4 +23,5 @@ export const InbotApi = HttpApi.make("inbot").add(
   ApiKeysApi,
   CredentialsApi,
   CredentialUseApi,
+  CredentialRequestsApi,
 );

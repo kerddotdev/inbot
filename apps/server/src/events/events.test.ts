@@ -1,3 +1,4 @@
+import { CredentialRequest } from "../../../../packages/contracts/src/credential-requests.js";
 import { CurrentPrincipal } from "../../../../packages/contracts/src/security.js";
 import { fakeCdp } from "../vault/cdp-test-server.js";
 import { makeVault } from "../vault/vault.js";
@@ -1617,5 +1618,101 @@ test("credential-only agents receive scoped metadata events through WebSocket an
   } finally {
     await ws.close();
     await browser.close();
+  }
+});
+
+test("request-only agents stream and receive webhook events only for their own requests", async ({
+  api,
+}) => {
+  const permissions = { credential_request: true, webhook_create: true, webhook_read: true };
+  const key = await api.run(
+    api.keys.create({ inbox_ids: [inboxId], permissions, send_policy: "read_only" }),
+  );
+  const other = await api.run(
+    api.keys.create({ inbox_ids: [inboxId], permissions, send_policy: "read_only" }),
+  );
+  const event_types = [
+    "credential.requested",
+    "credential.request_fulfilled",
+    "credential.request_declined",
+  ];
+  await hook(
+    api,
+    { url: "https://receiver.example.test/own", inbox_ids: [inboxId], event_types },
+    key.api_key,
+  );
+  await hook(
+    api,
+    { url: "https://receiver.example.test/other", inbox_ids: [inboxId], event_types },
+    other.api_key,
+  );
+  const ws = await client(api, { headers: { authorization: `Bearer ${key.api_key}` } });
+  const secret = "request-stream-distinctive-secret-g8M";
+  const reason = "Agent-authored reason excluded from events";
+  const deliveries: Event[] = [];
+  const sender = async (input: WebhookRequest) => {
+    expect(input.url).toBe("https://receiver.example.test/own");
+    expect(input.body).not.toContain(secret);
+    expect(input.body).not.toContain(reason);
+    deliveries.push(Schema.decodeUnknownSync(Event)(JSON.parse(input.body)));
+    return 204;
+  };
+  const create = async (token: string) => {
+    const response = await api.request(`/v0/inboxes/${inboxId}/credential-requests`, {
+      token,
+      method: "POST",
+      body: { name: "Account", fields: ["password"], reason },
+    });
+    expect(response.status).toBe(200);
+    return Schema.decodeUnknownSync(CredentialRequest)(await response.json());
+  };
+  try {
+    ws.subscribe({ event_types, inbox_ids: [inboxId] });
+    expect(await ws.next()).toMatchObject({ type: "subscribed" });
+    const request = await create(key.api_key);
+    expect(
+      (
+        await api.request(`/v0/credential-requests/${request.request_id}/fulfill`, {
+          method: "POST",
+          body: { fields: { password: secret } },
+        })
+      ).status,
+    ).toBe(200);
+    const declined = await create(key.api_key);
+    expect(
+      (
+        await api.request(`/v0/credential-requests/${declined.request_id}/decline`, {
+          method: "POST",
+        })
+      ).status,
+    ).toBe(200);
+    const frames = [];
+    for (let i = 0; i < 4; i++) frames.push(await ws.next());
+    expect(frames.map((frame) => ("event_type" in frame ? frame.event_type : frame.type))).toEqual([
+      "credential.requested",
+      "credential.request_fulfilled",
+      "credential.requested",
+      "credential.request_declined",
+    ]);
+    expect(JSON.stringify(frames)).not.toContain(secret);
+    expect(JSON.stringify(frames)).not.toContain(reason);
+    for (let i = 0; i < 4; i++) await dispatch(api, sender);
+    expect(deliveries).toEqual(frames);
+    await api.run(
+      api.keys.update(key.api_key_id, {
+        permissions: { webhook_create: true, webhook_read: true },
+      }),
+    );
+    await create(other.api_key);
+    const otherDeliveries: Event[] = [];
+    await dispatch(api, async (input) => {
+      expect(input.url).toBe("https://receiver.example.test/other");
+      otherDeliveries.push(Schema.decodeUnknownSync(Event)(JSON.parse(input.body)));
+      return 204;
+    });
+    expect(deliveries).toHaveLength(4);
+    expect(otherDeliveries).toHaveLength(1);
+  } finally {
+    await ws.close();
   }
 });

@@ -40,7 +40,11 @@ function table(rows: readonly Record<string, unknown>[], columns: readonly strin
 export function humanOutput(value: unknown): string {
   if (value === undefined) return "Done.\n";
   if (!record(value)) return `${cell(value)}\n`;
-  if (typeof value.url === "string" && typeof value.webhook_id !== "string")
+  if (
+    typeof value.url === "string" &&
+    typeof value.webhook_id !== "string" &&
+    typeof value.request_id !== "string"
+  )
     return `${value.url}\n`;
   const collections: Record<string, readonly string[]> = {
     webhooks: ["webhook_id", "url", "enabled", "failure_count", "disabled_reason"],
@@ -70,6 +74,15 @@ export function humanOutput(value: unknown): string {
     ],
     entries: ["entry", "entry_type", "direction", "list_type", "inbox_id", "reason"],
     requests: ["request_id", "api_key_name", "inbox_id", "kind", "state", "expires_at", "url_hint"],
+    credential_requests: [
+      "request_id",
+      "inbox_id",
+      "name",
+      "fields",
+      "reason",
+      "state",
+      "expires_at",
+    ],
   };
   for (const [key, columns] of Object.entries(collections)) {
     const rows = value[key];

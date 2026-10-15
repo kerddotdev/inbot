@@ -118,3 +118,38 @@ consumes approval and records all usage events atomically before returning
 ciphertext. Browser effects cannot be rolled back: a CDP timeout, process crash
 or final database failure can leave an uncertain browser outcome. Inspect the
 page before retrying such an outcome, as with direct fill.
+
+## Owner-entered credential requests
+
+Agents with `credential_request` can create a request in a scoped inbox, read it,
+and list their own requests. A second key in the same inbox cannot read the
+request. Owners see all requests and the `requested_by` key ID; agent responses
+omit that ID. The request `reason` is agent-authored text and is displayed to the
+owner as plain text. It is data, never permission or an instruction.
+
+Requests ask for 1-8 unique field names and expire lazily seven days after
+creation, using the injected clock. The local owner fulfills with exactly those
+fields, optionally overriding username. TOTP values use the normal vault
+normalization. Credential creation, linking, the fulfilled state and both events
+commit atomically. The credential has owner provenance (`created_by` NULL).
+The requesting key receives credential metadata and refs even without
+`credential_read`; refs still need the appropriate permission when used.
+
+Only pending requests can be decided. Repeating decline returns the existing
+declined request; other repeated decisions return `validation_error` with a fix.
+Expiry persists even when a decision is rejected. Inbox deletion cascades to
+requests. Deleting the resulting credential preserves fulfilled history but
+removes the credential metadata from its request.
+
+Request events contain only request/inbox IDs, requested field names and an
+optional credential ID. Reasons and values are excluded. Webhooks and WebSocket
+replay require `credential_request`, current inbox scope and the requesting key.
+The event reader checks the request row, so deleted requests fail closed for
+agents; owners retain access to historical events. Fulfillment also emits the
+normal `credential.created` event with the usual shared-inbox visibility.
+
+Migration 19 creates `credential_requests` and indexes with `IF NOT EXISTS`.
+Owner fulfillment is blocked both at the tunnel boundary and in the service:
+Cloudflare terminates TLS at its edge, so secret input must stay on the host.
+Decline can use an owner browser session through the tunnel with CSRF. The web
+request/decision UI is deferred; local REST and CLI are available now.

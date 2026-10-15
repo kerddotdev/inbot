@@ -1,4 +1,5 @@
 import { credentialUseCommands } from "./credential-use-commands.js";
+import { credentialRequestCommands } from "./credential-request-commands.js";
 import { quarantineCommands } from "./quarantine-commands.js";
 import type { HttpApiEndpoint } from "effect/http-api";
 import { WebhooksApi } from "../../../packages/contracts/src/api/webhooks.js";
@@ -31,6 +32,7 @@ export interface Command {
   readonly response?: "text";
   readonly tokenInput?: boolean;
   readonly generateField?: boolean;
+  readonly fieldsInput?: boolean;
 }
 const pagination = { limit: "number", page_token: "string", ascending: "boolean" } as const;
 const cursor = { limit: "number", page_token: "string" } as const;
@@ -731,6 +733,7 @@ export const commands: readonly Command[] = [
   },
   ...quarantineCommands,
   ...credentialUseCommands,
+  ...credentialRequestCommands,
 ];
 
 export const flagName = (field: string) => field.replaceAll("_", "-");

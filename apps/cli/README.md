@@ -712,3 +712,33 @@ Pending requests expire after 24 hours; approvals permit one use within 15
 minutes. Expiry does not change stored state; inspect `expires_at`. Same owner
 decisions are idempotent before expiry. Expired/consumed requests need a new key.
 Approval events contain IDs and field names only. The owner request UI is deferred.
+
+## Credential request parity
+
+`inbot credentials request INBOX` maps to
+`POST /v0/inboxes/:inbox_id/credential-requests`. Supply `--name`, optional `--url`
+and `--username`, repeatable `--fields` (names only), and `--reason`.
+`credentials request-get INBOX REQUEST_ID` reads the request.
+`credentials requests` lists requests, with `--state`, `--limit`, `--page-token`
+and `--ascending`. All three require `credential_request`; agents see only their
+key's requests in scope. Owners list/read all. The request reason is
+agent-authored text and is displayed to the owner as plain text.
+
+`inbot credentials fulfill REQUEST_ID --fields-stdin` is local owner-only.
+Stdin must be a JSON object mapping exactly the requested field names to string
+values, such as `{ "password": "value", "totp": "BASE32" }`.
+There are no value flags, `--data`, `--data-file`, or environment-variable input
+for this command. Optional `--username` overrides non-secret metadata. This keeps
+values out of shell history and process arguments. Read stdin from a private
+source on the host; do not put secret literals into a shell command.
+The result contains metadata and refs only. TOTP is normalized by the service.
+Fulfillment is blocked through the tunnel even for owner browser sessions,
+because Cloudflare terminates TLS at its edge.
+
+`inbot credentials decline REQUEST_ID` maps to the owner-only decline route.
+It has no body and repeating it is safe. Requests expire seven days after
+creation; expired or otherwise decided requests cannot be fulfilled. Poll
+`request-get` later while pending, never busy-loop. The web request UI is deferred.
+A fulfilled request includes metadata even without `credential_read`, while ref
+use retains its own permission checks. Request events contain names/IDs only
+and are visible to their requesting key in scope or the owner.
