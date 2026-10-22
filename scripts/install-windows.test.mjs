@@ -11,6 +11,8 @@ import { promisify } from "node:util";
 const exec = promisify(execFile);
 const root = fileURLToPath(new URL("../", import.meta.url));
 const windows = process.platform === "win32";
+// PowerShell 7 exports its own module path, which stops Windows PowerShell from loading its cmdlets.
+const { PSModulePath: _, ...baseEnv } = process.env;
 const architecture = windows
   ? (
       await powershell(
@@ -20,7 +22,7 @@ const architecture = windows
   : undefined;
 const target = `win32-${architecture}`;
 
-function powershell(command, env = process.env) {
+function powershell(command, env = baseEnv) {
   return exec("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", command], { env });
 }
 
@@ -49,7 +51,7 @@ function runShim(argument, env) {
 
 function installEnv(temporary, release) {
   return {
-    ...process.env,
+    ...baseEnv,
     INBOT_HOME: join(temporary, "home"),
     INBOT_TEST_MEMORY_KEYCHAIN: "1",
     INBOT_INSTALL_ROOT: join(temporary, "installed app"),
@@ -107,7 +109,7 @@ test(
             } finally { $zip.Dispose() }
           `,
           {
-            ...process.env,
+            ...baseEnv,
             INBOT_TEST_BUNDLE: bundle,
             INBOT_TEST_ARCHIVE: join(release, archive),
           },
@@ -184,7 +186,7 @@ test(
           $zip = [System.IO.Compression.ZipFile]::Open($env:INBOT_TEST_ARCHIVE, 'Create')
           try { $zip.CreateEntry($env:INBOT_TEST_ENTRY) | Out-Null } finally { $zip.Dispose() }
         `,
-          { ...process.env, INBOT_TEST_ARCHIVE: archivePath, INBOT_TEST_ENTRY: entry },
+          { ...baseEnv, INBOT_TEST_ARCHIVE: archivePath, INBOT_TEST_ENTRY: entry },
         );
         const digest = createHash("sha256")
           .update(await readFile(archivePath))
