@@ -42,12 +42,12 @@ Details and rules are in [vault.md](vault.md). Results contain metadata, `fields
 | `generate_password`        | `inboxId`, `credentialId`, `field`, `mode`, `length`, `rules`                                        | `credential_update`  |
 | `get_totp_code`            | `inboxId`, `credentialId`                                                                            | `credential_totp`    |
 | `fill_credential`          | `inboxId`, `credentialId`, `cdp_endpoint`, `selector`, `field`, `url`, `target_id`, `idempotencyKey` | `credential_fill`    |
-| `capture_credential`       | `inboxId`, `credentialId`, `cdp_endpoint`, `selector`, `field`, `url`, `target_id`                   | `credential_fill`    |
+| `capture_credential`       | `inboxId`, `credentialId`, `cdp_endpoint`, `selector`, `field`, `url`, `target_id`, `idempotencyKey` | `credential_fill`    |
 | `request_credential`       | `inboxId`, `request`: `name`, `url`, `username`, `fields`, `reason`                                  | `credential_request` |
 | `get_credential_request`   | `inboxId`, `requestId`                                                                               | `credential_request` |
 | `list_credential_requests` | `state`, `limit`, `pageToken`                                                                        | `credential_request` |
 
-`fill_credential` is not idempotent. Under `use_policy: approval` it needs `idempotencyKey` and returns `approval_required` first. Reveal, `inbot run` resolution, use decisions, request fulfillment, import/export and host settings have no MCP tool.
+`fill_credential` and `capture_credential` are not idempotent. Under `use_policy: approval` they need `idempotencyKey` and return `approval_required` first. Local browser endpoints must be registered by the owner; otherwise `missing_permission`, so ask the owner. Reveal, `inbot run` resolution, use decisions, request fulfillment, import/export and host settings have no MCP tool.
 
 ## Inbox tools
 

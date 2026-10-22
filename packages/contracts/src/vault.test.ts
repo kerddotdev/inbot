@@ -8,6 +8,7 @@ import {
   UpdateCredentialRequest,
   GenerateFieldRequest,
   ResolveCredentialsRequest,
+  UpdateVaultSettingsRequest,
 } from "./vault.js";
 
 const id = "1234567890abcdef1234567890abcdef";
@@ -133,8 +134,10 @@ test("validates browser targets, owner host settings and metadata-only usage eve
   }
   const decode = Schema.decodeUnknownSync(VaultSettings);
   expect(
-    decode({ remote_cdp_hosts: ["browser.test", "*.browserbase.com", "localhost"] })
-      .remote_cdp_hosts,
+    decode({
+      cdp_endpoints: [],
+      remote_cdp_hosts: ["browser.test", "*.browserbase.com", "localhost"],
+    }).remote_cdp_hosts,
   ).toHaveLength(3);
   for (const host of [
     "127.0.0.1",
@@ -156,9 +159,12 @@ test("validates browser targets, owner host settings and metadata-only usage eve
     "999999999999999999999999999",
     "a".repeat(64) + ".test",
   ])
-    expect(() => decode({ remote_cdp_hosts: [host] }), host).toThrow();
+    expect(() => decode({ cdp_endpoints: [], remote_cdp_hosts: [host] }), host).toThrow();
   expect(() =>
-    decode({ remote_cdp_hosts: Array.from({ length: 33 }, (_, i) => `host${i}.test`) }),
+    decode({
+      cdp_endpoints: [],
+      remote_cdp_hosts: Array.from({ length: 33 }, (_, i) => `host${i}.test`),
+    }),
   ).toThrow();
   for (const event_type of ["credential.used", "credential.captured"]) {
     const credential = {
@@ -206,4 +212,34 @@ test("bounds and deduplicates credential resolution references and requires an a
     expect(() => decode({ ...request, refs })).toThrow();
   for (const public_key of ["not-age", "AGE-SECRET-KEY-1SECRET", "age1invalid"])
     expect(() => decode({ ...request, public_key })).toThrow();
+});
+
+test("validates trusted browser origins and partial settings without accepting connect URLs", () => {
+  const decode = Schema.decodeUnknownSync(UpdateVaultSettingsRequest, {
+    onExcessProperty: "error",
+  });
+  for (const endpoint of [
+    "http://127.0.0.1:9222",
+    "ws://localhost:9222",
+    "https://browser.test",
+    "wss://[::1]:9443",
+  ])
+    expect(decode({ cdp_endpoints: [endpoint] })).toEqual({ cdp_endpoints: [endpoint] });
+  expect(decode({ remote_cdp_hosts: [] })).toEqual({ remote_cdp_hosts: [] });
+  for (const endpoint of [
+    "http://localhost:9222/",
+    "http://user:secret@localhost:9222",
+    "https://browser.test/connect",
+    "wss://browser.test?token=secret",
+    "https://browser.test#fragment",
+    "ftp://localhost",
+    "invalid",
+  ])
+    expect(() => decode({ cdp_endpoints: [endpoint] })).toThrow();
+  expect(() => decode({})).toThrow();
+  expect(() =>
+    decode({
+      cdp_endpoints: Array.from({ length: 33 }, (_, index) => `http://localhost:${9222 + index}`),
+    }),
+  ).toThrow();
 });

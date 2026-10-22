@@ -19,6 +19,7 @@ import {
   FillCredentialRequest,
   CaptureCredentialRequest,
   VaultSettings,
+  UpdateVaultSettingsRequest,
   type FillCredentialResponse,
   ResolveCredentialsRequest,
   type Credential,
@@ -119,10 +120,14 @@ function settings(db: Database.Database): VaultSettings {
       Schema.optional(
         Schema.Struct({
           remote_cdp_hosts: Schema.fromJsonString(VaultSettings.fields.remote_cdp_hosts),
+          cdp_endpoints: Schema.fromJsonString(VaultSettings.fields.cdp_endpoints),
         }),
       ),
-    )(db.prepare("SELECT remote_cdp_hosts FROM vault_settings WHERE id = 1").get()) ?? {
+    )(
+      db.prepare("SELECT remote_cdp_hosts, cdp_endpoints FROM vault_settings WHERE id = 1").get(),
+    ) ?? {
       remote_cdp_hosts: [],
+      cdp_endpoints: [],
     }
   );
 }
@@ -134,7 +139,7 @@ function cdpFailure(error: unknown) {
       case "origin_not_allowed":
         return wireError(
           "missing_permission",
-          error.message,
+          "The browser page origin is not allowed.",
           "Open the credential's site, or add the origin to the credential.",
         );
       case "target_not_found":
@@ -249,20 +254,24 @@ export function makeVault(store: StoreService) {
             .get(id, input.field)
         )
           throw notFound();
-        const approval = capture
-          ? {}
-          : checkUseApproval(
-              db,
-              principal,
-              {
-                kind: "fill",
-                credentials: [{ credential_id: id, inbox_id: inboxId, fields: [input.field] }],
-                fingerprint: useFingerprint({ kind: "fill", credential_id: id, ...input }),
-                ...(input.url === undefined ? {} : { urlHint: input.url }),
-              },
-              now,
-              idempotencyKey,
-            );
+        const kind = capture ? "capture" : "fill";
+        const approval = checkUseApproval(
+          db,
+          principal,
+          {
+            kind,
+            credentials: [{ credential_id: id, inbox_id: inboxId, fields: [input.field] }],
+            fingerprint: useFingerprint({ kind, credential_id: id, ...input }),
+            browser: {
+              endpoint: new URL(input.cdp_endpoint).origin,
+              selector: input.selector,
+              ...(input.target_id === undefined ? {} : { target_id: input.target_id }),
+            },
+            ...(input.url === undefined ? {} : { urlHint: input.url }),
+          },
+          now,
+          idempotencyKey,
+        );
         const row =
           capture || approval.error !== undefined
             ? undefined
@@ -285,7 +294,13 @@ export function makeVault(store: StoreService) {
       if (snapshot.approval.error !== undefined) return yield* Effect.fail(snapshot.approval.error);
       const tunnel = yield* TunnelTraffic;
       const checkEndpoint = (endpoint: string) =>
-        checkCdpEndpoint(endpoint, tunnel, snapshot.settings);
+        checkCdpEndpoint(
+          endpoint,
+          tunnel,
+          snapshot.settings,
+          undefined,
+          snapshot.input.cdp_endpoint,
+        );
       const { cdp_endpoint, field, ...target } = snapshot.input;
       const input = {
         ...target,
@@ -359,7 +374,7 @@ export function makeVault(store: StoreService) {
     });
   }
 
-  function ownerSettings(request?: VaultSettings) {
+  function ownerSettings(request?: UpdateVaultSettingsRequest) {
     return Effect.gen(function* () {
       const principal = yield* CurrentPrincipal;
       if (principal.kind !== "owner")
@@ -372,10 +387,13 @@ export function makeVault(store: StoreService) {
         );
       return yield* run("credential_read", undefined, (db) => {
         if (request !== undefined) {
-          const input = validateInput(VaultSettings, request);
-          db.prepare(`INSERT INTO vault_settings (id, remote_cdp_hosts) VALUES (1, ?)
-            ON CONFLICT(id) DO UPDATE SET remote_cdp_hosts = excluded.remote_cdp_hosts`).run(
-            JSON.stringify(input.remote_cdp_hosts),
+          const input = validateInput(UpdateVaultSettingsRequest, request);
+          const current = settings(db);
+          db.prepare(`INSERT INTO vault_settings (id, remote_cdp_hosts, cdp_endpoints) VALUES (1, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET remote_cdp_hosts = excluded.remote_cdp_hosts,
+            cdp_endpoints = excluded.cdp_endpoints`).run(
+            JSON.stringify(input.remote_cdp_hosts ?? current.remote_cdp_hosts),
+            JSON.stringify(input.cdp_endpoints ?? current.cdp_endpoints),
           );
         }
         return settings(db);
@@ -389,10 +407,18 @@ export function makeVault(store: StoreService) {
         credentialUseLock(store),
         Effect.map((result) => result.filled),
       ),
-    capture: (id: string, request: CaptureCredentialRequest, inboxId: string) =>
-      useCredential(id, request, inboxId, true).pipe(Effect.map((result) => result.credential)),
+    capture: (
+      id: string,
+      request: CaptureCredentialRequest,
+      inboxId: string,
+      idempotencyKey?: string,
+    ) =>
+      useCredential(id, request, inboxId, true, idempotencyKey).pipe(
+        credentialUseLock(store),
+        Effect.map((result) => result.credential),
+      ),
     settings: () => ownerSettings(),
-    setSettings: (request: VaultSettings) => ownerSettings(request),
+    setSettings: (request: UpdateVaultSettingsRequest) => ownerSettings(request),
     resolve: (request: ResolveCredentialsRequest, idempotencyKey?: string) =>
       Effect.gen(function* () {
         if (yield* TunnelTraffic)

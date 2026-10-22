@@ -89,9 +89,9 @@ Keys that may use credentials also have a `use_policy`, set with `--use-policy a
 | Policy     | Effect                                                                                                                              |
 | ---------- | ----------------------------------------------------------------------------------------------------------------------------------- |
 | `approval` | The default. Each browser fill and each `inbot run` resolution waits for you in the credential use requests, and uses one approval. |
-| `direct`   | Fill and `inbot run` proceed immediately.                                                                                           |
+| `direct`   | Fill, capture and `inbot run` proceed immediately.                                                                                  |
 
-Capture, metadata changes, password generation and TOTP codes are not gated. See the [credential vault](/guides/vault#approve-credential-use). The grant editor's **Full access** preset includes every `credential_*` permission, including `credential_run`, and the read presets include `credential_read`; check the individual permissions before you hand a key to an agent.
+Metadata changes, password generation and TOTP codes are not gated. See the [credential vault](/guides/vault#approve-credential-use). The grant editor's **Full access** preset includes every `credential_*` permission, including `credential_run`, and the read presets include `credential_read`; check the individual permissions before you hand a key to an agent.
 
 ### Expiry and revocation
 

@@ -29,7 +29,7 @@ See [MCP tools](/reference/mcp#credentials) for parameters.
 
 ## Fill and capture
 
-Both need a CDP endpoint of a browser the Inbot server can reach, such as `http://127.0.0.1:9222` for Chrome started with `--remote-debugging-port=9222`. Pass `inboxId`, `credentialId`, `cdp_endpoint`, `selector` and `field`. Add `url` or `target_id` when the browser has several pages. The credential must list the page's origin.
+Both need a CDP endpoint of a browser the Inbot server can reach and the owner has registered as trusted, such as `http://127.0.0.1:9222` for Chrome started with `--remote-debugging-port=9222`. Pass `inboxId`, `credentialId`, `cdp_endpoint`, `selector` and `field`. Add `url` or `target_id` when the browser has several pages. The credential must list the page's origin.
 
 ```json
 {
@@ -44,11 +44,13 @@ Both need a CDP endpoint of a browser the Inbot server can reach, such as `http:
 
 Filling `totp` types the current code. Capturing `totp` stores a base32 setup key or `otpauth://` URI shown on the page. Neither returns a value.
 
+The owner must register the browser first. If a call fails with `missing_permission` and a fix that asks for a trusted browser, the endpoint is not registered. Ask your human to have the owner add it under Settings > Trusted browsers (or `inbot vault settings set --cdp-endpoints <origin>`); you cannot do this yourself, and retrying will not help.
+
 ## When the owner has to approve
 
-If your key has `use_policy: approval`, a fill needs an idempotency key. The first call returns `approval_required` with a request ID and does nothing else. Tell your human that the owner must approve that request, then retry the identical call with the same key later. Approval covers one successful use within 15 minutes. Do not change the selector or field between attempts, and use a new key if the request expired or was used.
+If your key has `use_policy: approval`, a fill or capture needs an idempotency key. The first call returns `approval_required` with a request ID and does nothing else. Tell your human that the owner must approve that request, then retry the identical call with the same key later. Approval covers one successful use within 15 minutes. Do not change the selector or field between attempts, and use a new key if the request expired or was used.
 
-A rejected request returns `missing_permission`. Do not look for another way to use the same credential.
+`capture_credential` follows the same rule. A rejected request returns `missing_permission`. Do not look for another way to use the same credential.
 
 ## Asking the owner for a credential
 

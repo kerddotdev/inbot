@@ -141,10 +141,41 @@ const remoteCdpHost = Schema.String.check(
     }
   }),
 );
+// An owner-trusted browser for local requests: scheme, host and port only, so endpoint
+// credentials, paths and queries never become part of the trust decision or its display.
+const cdpEndpointOrigin = Schema.String.check(
+  Schema.isMaxLength(300),
+  Schema.makeFilter((value) => {
+    try {
+      const url = new URL(value);
+      return (
+        ["http:", "https:", "ws:", "wss:"].includes(url.protocol) &&
+        url.username === "" &&
+        url.password === "" &&
+        url.pathname === "/" &&
+        url.search === "" &&
+        url.hash === "" &&
+        !value.endsWith("/")
+      );
+    } catch {
+      return false;
+    }
+  }),
+);
+const remoteCdpHosts = Schema.Array(remoteCdpHost).check(Schema.isMaxLength(32));
+const cdpEndpoints = Schema.Array(cdpEndpointOrigin).check(Schema.isMaxLength(32));
 export const VaultSettings = Schema.Struct({
-  remote_cdp_hosts: Schema.Array(remoteCdpHost).check(Schema.isMaxLength(32)),
+  remote_cdp_hosts: remoteCdpHosts,
+  cdp_endpoints: cdpEndpoints,
 }).annotate({ identifier: "VaultSettings" });
 export type VaultSettings = typeof VaultSettings.Type;
+export const UpdateVaultSettingsRequest = Schema.Struct({
+  remote_cdp_hosts: Schema.optionalKey(remoteCdpHosts),
+  cdp_endpoints: Schema.optionalKey(cdpEndpoints),
+})
+  .check(Schema.isMinProperties(1))
+  .annotate({ identifier: "UpdateVaultSettingsRequest" });
+export type UpdateVaultSettingsRequest = typeof UpdateVaultSettingsRequest.Type;
 export const ResolveCredentialsRequest = Schema.Struct({
   refs: Schema.Array(CredentialRef).check(
     Schema.isMinLength(1),

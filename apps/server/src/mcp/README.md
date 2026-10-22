@@ -111,7 +111,9 @@ capture on `totp` accepts a setup key or otpauth URI.
 Use Chrome/Chromium launched with `--remote-debugging-port=9222`, Playwright
 `chromium.launch({ args: ["--remote-debugging-port=9222"] })`, Chrome DevTools MCP
 `--browserUrl`, or a remote browser connect URL allowlisted by the owner. Local
-requests can use loopback CDP. Tunnel requests require an owner-allowed public
+requests require an owner-registered `cdp_endpoints` origin or an allowed remote
+host. Loopback is not implicitly trusted; discovered sockets must match the same
+trusted origin entry. Tunnel requests require an owner-allowed public
 HTTPS/WSS host, including any discovered WebSocket. Owner vault settings have no
 MCP tool. See [browser credential use](../vault/README.md).
 Credential resolution (`POST /v0/credentials/resolve`, `inbot run`) deliberately
@@ -204,16 +206,18 @@ System state labels (`received`, `queued`, `sent`, `send_unknown`, `failed`, `de
 
 ## Credential use approval
 
-`fill_credential` accepts optional `idempotencyKey`. Agent grants with
+`fill_credential` and `capture_credential` accept optional `idempotencyKey`. Agent grants with
 `use_policy: "approval"` (including omitted policy) require it. The first call
 returns `approval_required` with the request ID without connecting to CDP. Ask
 the owner to approve, then retry the unchanged call with the same key. Approval
-permits one successful fill within 15 minutes. A failed CDP fill can be retried
+permits one successful fill/capture within 15 minutes. A failed CDP operation can be retried
 within that window; consumed or expired requests require a new key. A changed
 intent returns `idempotency_conflict`; rejection returns `missing_permission`.
-Owner and `direct` grants proceed immediately. Capture, generation, metadata and
+Owner and `direct` grants proceed immediately. Generation, metadata and
 TOTP-code tools are not gated by this policy. Owner request list/approve/reject
-are REST/CLI only and are never MCP tools.
+are REST/CLI only and are never MCP tools. Approval metadata includes the concrete
+browser origin, selector and optional target ID; connect tokens are excluded.
+The fingerprint binds the entire target, including its full CDP connect URL.
 
 ## Credential requests
 

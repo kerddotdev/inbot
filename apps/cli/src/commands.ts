@@ -590,8 +590,9 @@ export const commands: readonly Command[] = [
   {
     name: "credentials capture",
     description:
-      "Capture a matching-origin browser field into the vault; returns refs only. Requires credential_fill.",
+      "Capture a matching-origin browser field into the vault; returns refs only. Approval grants need --idempotency-key; retry unchanged after owner approval. Requires credential_fill.",
     endpoint: CredentialsApi.endpoints.inboxes_credentials_capture,
+    idempotent: "manual",
     params: credential,
     body: credentialTarget,
   },
@@ -610,15 +611,15 @@ export const commands: readonly Command[] = [
   },
   {
     name: "vault settings show",
-    description: "Inspect remote CDP host settings as local owner.",
+    description: "Inspect trusted browser and remote CDP host settings as local owner.",
     endpoint: CredentialsApi.endpoints.owner_vault_settings,
   },
   {
     name: "vault settings set",
     description:
-      "Replace remote CDP hosts as local owner. Use --data '{\"remote_cdp_hosts\":[]}' to disable remote fill and capture.",
+      "Update cdp_endpoints (trusted browser origins, e.g. http://127.0.0.1:9222) and remote CDP hosts as local owner. Omitted keys keep their values. Use --data '{\"remote_cdp_hosts\":[]}' to disable remote fill and capture.",
     endpoint: CredentialsApi.endpoints.owner_vault_setSettings,
-    body: { remote_cdp_hosts: "array" },
+    body: { remote_cdp_hosts: "array", cdp_endpoints: "array" },
   },
   {
     name: "domains list",

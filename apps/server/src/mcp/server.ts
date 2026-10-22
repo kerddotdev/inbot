@@ -270,15 +270,21 @@ export const McpTools = (origin: string) =>
         read,
         (input) => vault.totp(input.credentialId, input.inboxId),
       );
+      const browserUseKey = Schema.optionalKey(
+        Common.IdempotencyKey.annotate({
+          description:
+            "Required for approval grants. Retry unchanged with the same key after owner approval; successful use consumes approval.",
+        }),
+      );
       const browserConnection =
-        'Get a CDP endpoint from Chrome/Chromium launched with --remote-debugging-port, Playwright chromium.launch({ args: ["--remote-debugging-port=9222"] }), Chrome DevTools MCP --browserUrl, or a remote browser connect URL allowlisted by the owner.';
+        'Get a CDP endpoint from Chrome/Chromium launched with --remote-debugging-port, Playwright chromium.launch({ args: ["--remote-debugging-port=9222"] }), Chrome DevTools MCP --browserUrl, or a remote browser connect URL allowlisted by the owner. Local endpoints must be registered by the owner as trusted browsers.';
       yield* register(
         "fill_credential",
         `The server types the value itself; the agent never sees it. The main page origin must match the credential. The totp field types the current code, never the seed. Requires credential_fill. Approval grants require idempotencyKey; on approval_required ask the owner to approve the request, then retry unchanged with the same key. A successful use consumes approval. ${browserConnection}`,
         Schema.Struct({
           ...credential,
           ...VaultContracts.FillCredentialRequest.fields,
-          idempotencyKey: send.idempotencyKey,
+          idempotencyKey: browserUseKey,
         }),
         create,
         ({ inboxId, credentialId, idempotencyKey, ...input }) =>
@@ -286,10 +292,15 @@ export const McpTools = (origin: string) =>
       );
       yield* register(
         "capture_credential",
-        `The server reads a page field directly into the vault and returns refs; the agent never sees the secret. The main page origin must match the credential, as when the server types a value itself. Requires credential_fill. ${browserConnection}`,
-        Schema.Struct({ ...credential, ...VaultContracts.CaptureCredentialRequest.fields }),
+        `The server reads a page field directly into the vault and returns refs; the agent never sees the secret. The main page origin must match the credential, as when the server types a value itself. Requires credential_fill. Approval grants require idempotencyKey; on approval_required ask the owner to approve the request, then retry unchanged with the same key. A successful capture consumes approval. ${browserConnection}`,
+        Schema.Struct({
+          ...credential,
+          ...VaultContracts.CaptureCredentialRequest.fields,
+          idempotencyKey: browserUseKey,
+        }),
         create,
-        ({ inboxId, credentialId, ...input }) => vault.capture(credentialId, input, inboxId),
+        ({ inboxId, credentialId, idempotencyKey, ...input }) =>
+          vault.capture(credentialId, input, inboxId, idempotencyKey),
       );
       const list = {
         inboxId: Schema.optionalKey(Common.InboxId),

@@ -58,7 +58,7 @@ Approve and reject are owner-only. There is no MCP tool for them, and agent keys
 
 ## Credential use approvals
 
-Approval also applies to the [credential vault](/guides/vault). A key with `use_policy: approval`, the default, cannot fill a credential into a browser page or resolve it for `inbot run` without you. The first attempt stores a pending request, emits `credential.use_requested` and returns `approval_required` with the request ID. Nothing is read and no browser is contacted.
+Approval also applies to the [credential vault](/guides/vault). A key with `use_policy: approval`, the default, cannot fill a credential into a browser page, capture a value from one, or resolve a credential for `inbot run` without you. The first attempt stores a pending request, emits `credential.use_requested` and returns `approval_required` with the request ID. Nothing is read and no browser is contacted.
 
 ```sh
 inbot credentials use-requests list --state pending
@@ -66,7 +66,7 @@ inbot credentials use-requests approve <request_id>
 inbot credentials use-requests reject <request_id>
 ```
 
-Each request shows the key, the inbox, the credential names, the fields and the kind (`fill` or `run`). A `url_hint` is only what the agent claimed; Inbot checks the real page origin when it fills. Approving permits one use within 15 minutes, after which the agent repeats the identical call with the same idempotency key. Rejecting is final for that request. Pending requests expire after 24 hours, and an expired or used approval needs a new request with a new key.
+Each request shows the key, the inbox, the credential names, the fields and the kind (`fill`, `capture` or `run`). Fill and capture requests also show the browser: the origin of the agent's `cdp_endpoint`, the selector and any `target_id`. A `url_hint` is only what the agent claimed; Inbot checks the real page origin when it fills. Approving permits one use within 15 minutes, after which the agent repeats the identical call with the same idempotency key. Rejecting is final for that request. Pending requests expire after 24 hours, and an expired or used approval needs a new request with a new key.
 
 Listing and deciding are owner-only and have no MCP tool. They work in an owner browser session through the tunnel, like draft approval.
 

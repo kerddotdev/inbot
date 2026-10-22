@@ -27,6 +27,7 @@ interface Options {
   readonly reply?: (command: Command, result: unknown) => unknown;
   readonly closeOn?: string;
   readonly handshake?: "silent" | "reject";
+  readonly webSocketDebuggerUrl?: string;
   readonly version?: "silent" | "invalid" | "error";
 }
 
@@ -71,6 +72,7 @@ export async function fakeCdp(options: Options = {}) {
   const sockets = new Set<Duplex>();
   const connections: { path: string; closed: Promise<void> }[] = [];
   let frameChecks = 0;
+  let connectionCount = 0;
   let endpoint = "";
   const pageUrl = options.pageUrl ?? "https://example.test/login";
   const document: {
@@ -109,12 +111,15 @@ export async function fakeCdp(options: Options = {}) {
         options.version === "invalid"
           ? {}
           : {
-              webSocketDebuggerUrl: endpoint.replace("http:", "ws:") + "/devtools/browser/test",
+              webSocketDebuggerUrl:
+                options.webSocketDebuggerUrl ??
+                endpoint.replace("http:", "ws:") + "/devtools/browser/test",
             },
       ),
     );
   });
   server.on("connection", (socket) => {
+    connectionCount++;
     sockets.add(socket);
     socket.on("close", () => sockets.delete(socket));
     socket.on("error", () => {});
@@ -143,7 +148,7 @@ export async function fakeCdp(options: Options = {}) {
     );
     let buffer = Buffer.from(head);
     let fragments: Buffer[] = [];
-    const answer = (text: string) => {
+    const answer = async (text: string) => {
       const parsed: unknown = JSON.parse(text);
       const received = command(parsed);
       messages.push(received);
@@ -218,7 +223,7 @@ export async function fakeCdp(options: Options = {}) {
                   }
                 : {
                     id: received.id,
-                    result: options.reply ? options.reply(received, result) : result,
+                    result: options.reply ? await options.reply(received, result) : result,
                   },
             ),
           ),
@@ -278,6 +283,9 @@ export async function fakeCdp(options: Options = {}) {
     messages,
     requests,
     connections,
+    get connectionCount() {
+      return connectionCount;
+    },
     browserSocket: endpoint.replace("http:", "ws:") + "/devtools/browser/test",
     pageSocket: endpoint.replace("http:", "ws:") + "/devtools/page/page-1",
     async closed() {

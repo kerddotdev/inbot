@@ -12,6 +12,7 @@ import { relativeTime } from "./format";
 
 const kindLabel: Record<CredentialUseRequest["kind"], string> = {
   fill: "Browser fill",
+  capture: "Browser capture",
   run: "Local command",
 };
 
@@ -68,7 +69,7 @@ export function CredentialUseRow({
       title={`${kindLabel[request.kind]} by ${request.api_key_name ?? "an agent key"}`}
       lines={[
         request.credentials.map((credential) => credential.name).join(", "),
-        request.inbox_id,
+        request.browser ? `${request.inbox_id} in ${request.browser.endpoint}` : request.inbox_id,
       ]}
     />
   );
@@ -124,6 +125,13 @@ function Detail({
     </article>
   );
 }
+
+const effect: Record<CredentialUseRequest["kind"], string> = {
+  fill: "Approving lets Inbot type these values into the browser above once within 15 minutes. The agent never receives them from Inbot.",
+  capture:
+    "Approving lets Inbot read this field from the browser above into the vault once within 15 minutes, replacing the stored value.",
+  run: "Approving permits this one use for 15 minutes. The agent never receives the values.",
+};
 
 const when = (iso: string) => (
   <time dateTime={iso} title={new Date(iso).toLocaleString()}>
@@ -182,6 +190,32 @@ export function CredentialUseView({
             ))}
           </ul>,
         ],
+        ...(request.browser
+          ? ([
+              [
+                "Browser",
+                <span key="browser" className="font-mono">
+                  {request.browser.endpoint}
+                </span>,
+              ],
+              [
+                "Field selector",
+                <span key="selector" className="font-mono">
+                  {request.browser.selector}
+                </span>,
+              ],
+              ...(request.browser.target_id
+                ? ([
+                    [
+                      "Page target",
+                      <span key="target" className="font-mono">
+                        {request.browser.target_id}
+                      </span>,
+                    ],
+                  ] as const)
+                : []),
+            ] as const)
+          : []),
         ...(request.url_hint
           ? ([["Agent-provided URL (unverified)", request.url_hint]] as const)
           : []),
@@ -189,9 +223,7 @@ export function CredentialUseView({
         ["Expires", when(request.expires_at)],
       ]}
     >
-      <p className="mb-5 text-ink2">
-        Approving permits this one use for 15 minutes. The agent never receives the values.
-      </p>
+      <p className="mb-5 text-ink2">{effect[request.kind]}</p>
       <ErrorNotice error={decision.error} />
       <div className="flex flex-wrap items-center gap-2.5">
         <Button

@@ -15,7 +15,11 @@ import { remoteSchema } from "./remote/schema.js";
 import { provisionSchema } from "./provision/schema.js";
 import { listsSchema, rejectionMetadataSchema } from "./lists/schema.js";
 import { vaultSchema, vaultSettingsSchema } from "./vault/schema.js";
-import { credentialUseSchema, migrateUsePolicy } from "./vault/approval-schema.js";
+import {
+  credentialUseSchema,
+  migrateUsePolicy,
+  migrateTrustedBrowsers,
+} from "./vault/approval-schema.js";
 
 import { credentialRequestsSchema } from "./vault/requests-schema.js";
 
@@ -64,6 +68,7 @@ export const migrations: readonly Migration[] = [
   { version: 17, sql: vaultSettingsSchema },
   { version: 18, sql: credentialUseSchema, apply: migrateUsePolicy },
   { version: 19, sql: credentialRequestsSchema },
+  { version: 20, sql: "", apply: migrateTrustedBrowsers },
 ];
 
 export function migrate(database: Database.Database, ordered: readonly Migration[] = migrations) {

@@ -19,7 +19,7 @@ import { TunnelTraffic } from "../http/tunnel-policy.js";
 import { eventVisible, readEvents } from "../events/log.js";
 import { fixture } from "../http/test-fixture.js";
 import { fakeCdp } from "./cdp-test-server.js";
-import { migrate } from "../store.js";
+import { migrate, type StoreService } from "../store.js";
 import { normalizeTotp } from "./totp.js";
 import { makeVault } from "./vault.js";
 
@@ -653,6 +653,10 @@ test("fills through HTTP with the secret only in native insertion and records sc
       return result;
     },
   });
+  await api.request("/v0/owner/vault/settings", {
+    method: "PUT",
+    body: { cdp_endpoints: [browser.endpoint] },
+  });
   const logs = (["log", "error", "warn", "info", "debug"] as const).map((method) =>
     vi.spyOn(console, method).mockImplementation(() => {}),
   );
@@ -737,6 +741,10 @@ test("fills the current TOTP from the injected clock without returning the code 
   api,
 }) => {
   const browser = await fakeCdp();
+  await api.request("/v0/owner/vault/settings", {
+    method: "PUT",
+    body: { cdp_endpoints: [browser.endpoint] },
+  });
   try {
     const vault = makeVault(api.store);
     const created = await run(
@@ -787,6 +795,10 @@ test("captures browser fields and normalizes TOTP setup keys while returning ref
     ["totp", uri],
   ] as const) {
     const browser = await fakeCdp({ value });
+    await api.request("/v0/owner/vault/settings", {
+      method: "PUT",
+      body: { cdp_endpoints: [browser.endpoint] },
+    });
     try {
       const response = await api.request(
         `/v0/inboxes/${inboxId}/credentials/${created.credential_id}/capture`,
@@ -842,6 +854,10 @@ test("rejects missing origins, fields, permissions and foreign inboxes before co
   const created = await credential(api);
   const foreign = await credential(api, "Foreign", otherId);
   const browser = await fakeCdp();
+  await api.request("/v0/owner/vault/settings", {
+    method: "PUT",
+    body: { cdp_endpoints: [browser.endpoint] },
+  });
   const input = { cdp_endpoint: browser.endpoint, field: "password", selector: "#password" };
   try {
     const { principal, token } = await agent(api, { credential_fill: true });
@@ -920,6 +936,10 @@ test("maps CDP failures to safe wire errors without recording usage", async ({ a
     ],
   ] as const) {
     const browser = await fakeCdp(options);
+    await api.request("/v0/owner/vault/settings", {
+      method: "PUT",
+      body: { cdp_endpoints: [browser.endpoint] },
+    });
     try {
       const response = await api.request(
         `/v0/inboxes/${inboxId}/credentials/${created.credential_id}/fill`,
@@ -934,7 +954,7 @@ test("maps CDP failures to safe wire errors without recording usage", async ({ a
       noSecrets(error, [secret]);
       if (code === "missing_permission") {
         expect(error).toMatchObject({
-          message: expect.stringContaining("https://evil.test"),
+          message: "The browser page origin is not allowed.",
           fix: "Open the credential's site, or add the origin to the credential.",
         });
         expect(browser.messages.some((message) => message.method === "Input.insertText")).toBe(
@@ -946,6 +966,10 @@ test("maps CDP failures to safe wire errors without recording usage", async ({ a
     }
   }
   const browser = await fakeCdp({ pageUrl: "https://evil.test", value: secret });
+  await api.request("/v0/owner/vault/settings", {
+    method: "PUT",
+    body: { cdp_endpoints: [browser.endpoint] },
+  });
   try {
     await errorCode(
       await api.request(`/v0/inboxes/${inboxId}/credentials/${created.credential_id}/capture`, {
@@ -973,8 +997,11 @@ test("stores local owner vault settings safely across migration replay and denie
   const vault = makeVault(api.store);
   const { principal, token } = await agent(api);
   const path = "/v0/owner/vault/settings";
-  expect(await run(api, vault.settings())).toEqual({ remote_cdp_hosts: [] });
-  const settings = { remote_cdp_hosts: ["browser.test", "*.browserbase.com"] };
+  expect(await run(api, vault.settings())).toEqual({ remote_cdp_hosts: [], cdp_endpoints: [] });
+  const settings = {
+    remote_cdp_hosts: ["browser.test", "*.browserbase.com"],
+    cdp_endpoints: ["http://127.0.0.1:9222"],
+  };
   const saved = await api.request(path, { method: "PUT", body: settings });
   expect(saved.status).toBe(200);
   expect(Schema.decodeUnknownSync(VaultSettings)(await saved.json())).toEqual(settings);
@@ -1001,8 +1028,18 @@ test("stores local owner vault settings safely across migration replay and denie
     400,
   );
   expect(await run(api, vault.settings())).toEqual(settings);
+  const partial = await api.request(path, {
+    method: "PUT",
+    body: { cdp_endpoints: ["ws://localhost:9333"] },
+  });
+  expect(await partial.json()).toEqual({ ...settings, cdp_endpoints: ["ws://localhost:9333"] });
+  expect(await (await api.request(path, { method: "PUT", body: {} })).json()).toMatchObject({
+    code: "validation_error",
+  });
+  await api.request(path, { method: "PUT", body: { cdp_endpoints: settings.cdp_endpoints } });
   expect(await run(api, vault.setSettings({ remote_cdp_hosts: [] }))).toEqual({
     remote_cdp_hosts: [],
+    cdp_endpoints: settings.cdp_endpoints,
   });
 });
 
@@ -1020,6 +1057,10 @@ test("rolls back captured fields and usage when the event cannot be committed", 
     ),
   );
   const browser = await fakeCdp({ value: "uncommitted-secret-c8P" });
+  await api.request("/v0/owner/vault/settings", {
+    method: "PUT",
+    body: { cdp_endpoints: [browser.endpoint] },
+  });
   try {
     await api.run(
       api.store.use((db) =>
@@ -1276,4 +1317,176 @@ test("audits each resolved credential and rolls back usage when audit persistenc
       (row) => row.event_type === "credential.used",
     ),
   ).toHaveLength(2);
+});
+
+test("denies unregistered local and remote-looking browser sinks without any connection or secret disclosure", async ({
+  api,
+}) => {
+  const vault = makeVault(api.store);
+  const secret = "untrusted-cdp-seeded-secret";
+  const created = await run(
+    api,
+    vault.create(
+      { name: "Untrusted sink", url: "https://example.test", fields: { password: secret } },
+      inboxId,
+    ),
+  );
+  const { principal } = await agent(api);
+  const browser = await fakeCdp();
+  const network = vi.spyOn(globalThis, "fetch");
+  try {
+    for (const cdp_endpoint of [
+      browser.endpoint,
+      browser.pageSocket,
+      "https://user:synthetic-password@unregistered.test/connect?token=synthetic-token",
+      "http://192.0.2.1:9222",
+    ])
+      for (const kind of ["fill", "capture"] as const) {
+        const input = { cdp_endpoint, field: "password", selector: "#password" };
+        const operation =
+          kind === "fill"
+            ? vault.fill(created.credential_id, input, inboxId).pipe(Effect.asVoid)
+            : vault.capture(created.credential_id, input, inboxId).pipe(Effect.asVoid);
+        const result = await run(api, Effect.result(operation), principal);
+        expect(result).toMatchObject({
+          failure: {
+            code: "missing_permission",
+            fix: expect.stringContaining("inbot vault settings set"),
+          },
+        });
+        noSecrets(result, [secret, "synthetic-password", "synthetic-token", cdp_endpoint]);
+      }
+    expect(network).not.toHaveBeenCalled();
+    expect(browser.connectionCount).toBe(0);
+    expect(browser.connections).toEqual([]);
+    expect(browser.requests).toEqual([]);
+    expect(browser.messages).toEqual([]);
+    expect((await run(api, vault.reveal(created.credential_id, inboxId))).fields.password).toBe(
+      secret,
+    );
+  } finally {
+    network.mockRestore();
+    await browser.close();
+  }
+});
+
+test("refuses discovered sockets on another host or port even if both browser origins are trusted", async ({
+  api,
+}) => {
+  const vault = makeVault(api.store);
+  const created = await run(
+    api,
+    vault.create(
+      { name: "Discovery", url: "https://example.test", fields: { password: "discovery-secret" } },
+      inboxId,
+    ),
+  );
+  const other = await fakeCdp();
+  try {
+    for (const socket of [
+      other.browserSocket,
+      other.browserSocket.replace("127.0.0.1", "localhost"),
+    ]) {
+      const browser = await fakeCdp({ webSocketDebuggerUrl: socket });
+      try {
+        await run(
+          api,
+          vault.setSettings({
+            cdp_endpoints: [
+              browser.endpoint,
+              other.endpoint,
+              other.endpoint.replace("127.0.0.1", "localhost"),
+            ],
+          }),
+        );
+        const result = await run(
+          api,
+          Effect.result(
+            vault.fill(
+              created.credential_id,
+              { cdp_endpoint: browser.endpoint, field: "password", selector: "#password" },
+              inboxId,
+            ),
+          ),
+        );
+        expect(result).toMatchObject({ failure: { code: "missing_permission" } });
+        expect(browser.requests).toEqual(["/json/version"]);
+        expect(browser.connections).toEqual([]);
+        expect(other.connectionCount).toBe(0);
+        expect(other.messages).toEqual([]);
+      } finally {
+        await browser.close();
+      }
+    }
+  } finally {
+    await other.close();
+  }
+});
+
+test("serializes capture with fill across vault instances until fill commits", async ({ api }) => {
+  const vault = makeVault(api.store);
+  const created = await run(
+    api,
+    vault.create(
+      {
+        name: "Serialized",
+        url: "https://example.test",
+        fields: { password: "fill-before-capture" },
+      },
+      inboxId,
+    ),
+  );
+  const entered = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  const order: string[] = [];
+  const browser = await fakeCdp({
+    value: "capture-after-fill",
+    reply: async (command, result) => {
+      if (command.method === "Input.insertText") {
+        order.push("fill");
+        entered.resolve();
+        await release.promise;
+      }
+      return result;
+    },
+  });
+  const observedStore: StoreService = {
+    use: (operation) =>
+      api.store.use((db) => {
+        const value = operation(db);
+        const used = db
+          .prepare("SELECT last_used_at FROM credentials WHERE credential_id = ?")
+          .get(created.credential_id);
+        if (order.includes("fill") && Schema.is(Schema.Struct({ last_used_at: Schema.Null }))(used))
+          order.push("capture-before-commit");
+        if (
+          Schema.is(Schema.Struct({ last_used_at: Schema.String }))(used) &&
+          !order.includes("committed")
+        )
+          order.push("committed");
+        return value;
+      }),
+  };
+  try {
+    await run(api, vault.setSettings({ cdp_endpoints: [browser.endpoint] }));
+    const target = { cdp_endpoint: browser.endpoint, field: "password", selector: "#password" };
+    const fill = run(api, makeVault(observedStore).fill(created.credential_id, target, inboxId));
+    await entered.promise;
+    const capture = run(
+      api,
+      makeVault(observedStore).capture(created.credential_id, target, inboxId),
+    ).then((result) => {
+      order.push("captured");
+      return result;
+    });
+    release.resolve();
+    await Promise.all([fill, capture]);
+    expect(order).toEqual(["fill", "committed", "captured"]);
+    expect((await run(api, vault.reveal(created.credential_id, inboxId))).fields.password).toBe(
+      "capture-after-fill",
+    );
+  } finally {
+    release.resolve();
+    await browser.close();
+  }
 });

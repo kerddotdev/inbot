@@ -10,7 +10,7 @@ import {
 import { CredentialFieldName } from "./vault.js";
 
 export const CredentialUseRequestId = Schema.String.check(Schema.isPattern(/^[0-9a-f]{32}$/));
-export const CredentialUseKind = Schema.Literals(["fill", "run"]);
+export const CredentialUseKind = Schema.Literals(["fill", "capture", "run"]);
 export const CredentialUseState = Schema.Literals(["pending", "approved", "rejected", "consumed"]);
 export const CredentialUseRequest = Schema.Struct({
   request_id: CredentialUseRequestId,
@@ -26,6 +26,13 @@ export const CredentialUseRequest = Schema.Struct({
     }),
   ),
   url_hint: Schema.optionalKey(Schema.String),
+  browser: Schema.optionalKey(
+    Schema.Struct({
+      endpoint: Schema.String,
+      selector: Schema.String,
+      target_id: Schema.optionalKey(Schema.String),
+    }),
+  ),
   state: CredentialUseState,
   created_at: Timestamp,
   decided_at: Schema.optionalKey(Timestamp),

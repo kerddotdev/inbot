@@ -103,13 +103,13 @@ Credential events reach webhooks and WebSocket clients with `credential_read` an
 
 ### Use policy
 
-`use_policy` is independent of `send_policy`. It applies to browser fill and `inbot run` resolution, the two operations that put a value to use.
+`use_policy` is independent of `send_policy`. It applies to browser fill, browser capture and `inbot run` resolution, the operations that put a value to use or change it from a page.
 
-| Policy     | Fill and `inbot run`                                                                                                                                              |
+| Policy     | Fill, capture and `inbot run`                                                                                                                                     |
 | ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `approval` | The default for new and migrated keys and OAuth grants. The first call returns `403 approval_required` and waits for the owner. An `Idempotency-Key` is required. |
 | `direct`   | Proceeds immediately                                                                                                                                              |
 
-Capture, metadata changes, password generation and TOTP codes are not gated by `use_policy`. The owner is never gated.
+Metadata changes, password generation and TOTP codes are not gated by `use_policy`. The owner is never gated.
 
 The owner always sends directly, regardless of any policy.

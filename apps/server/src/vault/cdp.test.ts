@@ -264,13 +264,13 @@ describe("CDP fields", () => {
     await server.closed();
   });
 
-  it("preserves protocol error messages and closes the socket", async () => {
+  it("conceals protocol error messages and closes the socket", async () => {
     const server = await fake({
       protocolError: { method: "Runtime.evaluate", message: "Invalid selector" },
     });
     await expect(fillField(input(server.pageSocket))).rejects.toMatchObject({
       code: "cdp_protocol",
-      message: "Invalid selector",
+      message: "CDP command failed",
     });
     await server.closed();
   });
@@ -280,7 +280,7 @@ describe("CDP fields", () => {
       protocolError: { method: "Input.insertText", message: `Refused ${secret}` },
     });
     const error = await fillField(input(server.pageSocket)).catch((error: unknown) => error);
-    expect(error).toMatchObject({ code: "cdp_protocol", message: "Refused [redacted]" });
+    expect(error).toMatchObject({ code: "cdp_protocol", message: "CDP command failed" });
     expect(String(error)).not.toContain(secret);
     await server.closed();
   });
@@ -517,4 +517,19 @@ it("refuses HTTP discovery redirects before contacting the redirected address", 
   });
   expect(target.requests).toEqual([]);
   expect(target.connections).toEqual([]);
+});
+
+it("never echoes connection credentials or tokens from a protocol peer during fill or capture", async () => {
+  const details = "synthetic-user:synthetic-password token=synthetic-connect-token";
+  const server = await fake({ protocolError: { method: "Runtime.evaluate", message: details } });
+  for (const operation of [
+    () => fillField(input(`${server.pageSocket}?token=synthetic-connect-token`)),
+    () => readField(input(`${server.pageSocket}?token=synthetic-connect-token`)),
+  ]) {
+    const error = await operation().catch((error: unknown) => error);
+    expect(error).toMatchObject({ code: "cdp_protocol", message: "CDP command failed" });
+    for (const concealed of ["synthetic-user", "synthetic-password", "synthetic-connect-token"])
+      expect(String(error)).not.toContain(concealed);
+  }
+  await server.closed();
 });
