@@ -20,6 +20,12 @@ import { activeBundle, Build, bundlePaths, renderShim, type InstalledLayout } fr
 import { assetUrl } from "./release.js";
 import { compareVersions, parseVersion } from "./version.js";
 
+// Windows archives are zip files that only the bundled bsdtar reads, and a PATH lookup can pick another tar.
+export const tarProgram =
+  process.platform === "win32"
+    ? join(process.env.SystemRoot ?? "C:\\Windows", "System32", "tar.exe")
+    : "tar";
+
 async function download(url: string, limit: number, fetcher: typeof fetch, signal?: AbortSignal) {
   const response = await fetcher(url, {
     signal: AbortSignal.any([AbortSignal.timeout(10 * 60_000), ...(signal ? [signal] : [])]),
@@ -147,7 +153,7 @@ export async function prepareUpdate(
     if (!existing) {
       const file = join(work, archive);
       await writeFile(file, bytes, { mode: 0o600 });
-      const listing = await run("tar", ["-tf", file]);
+      const listing = await run(tarProgram, ["-tf", file]);
       if (
         listing.code !== 0 ||
         !listing.stdout.trim() ||
@@ -162,7 +168,7 @@ export async function prepareUpdate(
           )
       )
         throw new UpdateError("Archive contains an unsafe path or cannot be read.");
-      if ((await run("tar", ["-xf", file, "-C", work])).code !== 0)
+      if ((await run(tarProgram, ["-xf", file, "-C", work])).code !== 0)
         throw new UpdateError("Release extraction failed.");
       await verifyBundle(join(work, "inbot"), layout, version, run);
       await writeFile(join(work, "inbot", ".archive-sha256"), `${hash}\n`, { mode: 0o600 });
