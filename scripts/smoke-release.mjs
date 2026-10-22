@@ -76,7 +76,7 @@ try {
     : await exec(launcher, ["--help"], { env: helpEnv });
   assert.match(help.stdout, /Usage: inbot/);
   const node = join(bundle, windows ? "runtime/node.exe" : "runtime/bin/node");
-  assert.equal((await exec(node, ["--version"], { env: bundledEnv })).stdout.trim(), "v24.21.0");
+  assert.equal((await exec(node, ["--version"], { env: bundledEnv })).stdout.trim(), "v24.22.1");
   if (windows)
     assert.equal(
       (await exec(node, ["-p", "process.arch"], { env: bundledEnv })).stdout.trim(),

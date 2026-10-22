@@ -99,7 +99,7 @@ test(
           assertArchitecture(await readFile(join(temporary, file)), target);
         const build = JSON.parse(await readFile(join(temporary, "inbot/BUILD.json")));
         assert.equal(build.target, target);
-        assert.equal(build.node, "24.21.0");
+        assert.equal(build.node, "24.22.1");
         assert.equal(
           JSON.parse(await readFile(join(temporary, "inbot/application/package.json"))).license,
           "MIT",

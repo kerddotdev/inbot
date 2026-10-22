@@ -2,7 +2,7 @@
 
 Inbot's original code is licensed under the MIT License in `LICENSE`. Third-party components retain their own licenses. This notice does not replace their license texts or source-distribution requirements.
 
-- Release archives include Node.js 24.21.0 with its upstream `runtime/LICENSE`, covering Node and its bundled components.
+- Release archives include Node.js 24.22.1 with its upstream `runtime/LICENSE`, covering Node and its bundled components.
 - Production JavaScript dependencies retain the license files supplied by their publishers under `application/node_modules`. Each archive includes a generated `licenses/` directory and `licenses/INDEX.md` recording exact package versions, declared licenses, and copied license and notice materials, including dependencies compiled into the owner UI and Email Worker.
 - `better-sqlite3-multiple-ciphers` includes the MIT-licensed better-sqlite3 and SQLite3 Multiple Ciphers work and a target-specific native prebuild. Its upstream `LICENSE` is retained. SQLite itself is public domain.
 - `@napi-rs/keyring` and its target-specific native prebuild are MIT-licensed. Their upstream license texts are included with the archive notices.

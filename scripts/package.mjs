@@ -20,7 +20,19 @@ import { releaseTargets as targets, writeReleaseChecksums } from "./release-chec
 import { stagePackageNotices } from "./package-notices.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const nodeVersion = "24.21.0";
+const nodeVersion = "24.22.1";
+const nodeChecksums = {
+  "node-v24.22.1-darwin-arm64.tar.gz":
+    "89c682593d76cd44233fa53b1563264e7de9cbb189cad169135c5b4fadfbc0a7",
+  "node-v24.22.1-darwin-x64.tar.gz":
+    "d132557e7ee2b85af08b0c8c34338e65c6430f2238d01f727728ef42dc83b035",
+  "node-v24.22.1-linux-x64.tar.gz":
+    "eb6728e77c576a35162c122c45ccadf224d89ff00abc8dae46cc2897c6002d7c",
+  "node-v24.22.1-linux-arm64.tar.gz":
+    "33c37be234ba8bee041961047b19160f4d7d0f164e8e246f78bdd10feff148b3",
+  "node-v24.22.1-win-x64.zip": "d2046d28c2c3dcd211ac5145c0bf30e2047ef9dfb306693c8c6e2eccd8b95fa5",
+  "node-v24.22.1-win-arm64.zip": "a0c807319fede24c4a0d8f84564c82a619bd313b16b10c007c383c2609e99171",
+};
 const { values } = parseArgs({
   options: {
     target: { type: "string", multiple: true },
@@ -144,6 +156,11 @@ try {
   });
   if (!sumsResponse.ok) throw new Error("Cannot fetch official Node checksums.");
   const sums = await sumsResponse.text();
+  for (const [filename, checksum] of Object.entries(nodeChecksums)) {
+    const published = sums.split(/\r?\n/).filter((line) => line.endsWith(`  ${filename}`));
+    if (published.length !== 1 || published[0].split(/\s+/)[0] !== checksum)
+      throw new Error(`Official Node checksum disagrees with pin: ${filename}`);
+  }
   const sqliteVersion = manifest.dependencies["better-sqlite3-multiple-ciphers"];
   const sqliteArchive = await npmArchive("better-sqlite3-multiple-ciphers", sqliteVersion);
   const keyringVersion = manifest.dependencies["@napi-rs/keyring"];
@@ -151,12 +168,9 @@ try {
     const windows = target.startsWith("win32-");
     const runtimeName = `node-v${nodeVersion}-${target.replace("win32-", "win-")}`;
     const runtimeFile = `${runtimeName}.${windows ? "zip" : "tar.gz"}`;
-    const checksum = sums
-      .split("\n")
-      .find((line) => line.endsWith(`  ${runtimeFile}`))
-      ?.split(/\s+/)[0];
+    const checksum = nodeChecksums[runtimeFile];
     if (!checksum || !/^[a-f0-9]{64}$/.test(checksum))
-      throw new Error(`No official checksum: ${runtimeFile}`);
+      throw new Error(`No pinned Node checksum: ${runtimeFile}`);
     const runtimeArchive = await download(
       `https://nodejs.org/dist/v${nodeVersion}/${runtimeFile}`,
       runtimeFile,

@@ -74,14 +74,14 @@ Paths must be absolute. A custom install root does not change the default bin di
 
 ## What gets installed
 
-| Path                       | Contents                                                                        |
-| -------------------------- | ------------------------------------------------------------------------------- |
-| `inbot` or `inbot.cmd`     | Launcher                                                                        |
-| `runtime/`                 | Node.js 24.21.0, verified against nodejs.org's published checksums at packaging |
-| `application/dist`         | Server, CLI, shared packages and the inbound Email Worker bundle                |
-| `application/web`          | Owner web app                                                                   |
-| `application/node_modules` | Production dependencies, including prebuilt SQLite and keychain native modules  |
-| `BUILD.json`               | Version, target and integrity values of the bundled runtime and native modules  |
+| Path                       | Contents                                                                                                  |
+| -------------------------- | --------------------------------------------------------------------------------------------------------- |
+| `inbot` or `inbot.cmd`     | Launcher                                                                                                  |
+| `runtime/`                 | Node.js 24.22.1, verified against pinned SHA-256 hashes and nodejs.org's published checksums at packaging |
+| `application/dist`         | Server, CLI, shared packages and the inbound Email Worker bundle                                          |
+| `application/web`          | Owner web app                                                                                             |
+| `application/node_modules` | Production dependencies, including prebuilt SQLite and keychain native modules                            |
+| `BUILD.json`               | Version, target and integrity values of the bundled runtime and native modules                            |
 
 Installed commands default to the production flavor: the home is `~/.inbot` (`%USERPROFILE%\.inbot` on Windows), and `inbot serve` serves the bundled web app. The home is separate from the install directory and holds your encrypted mail database and key files. See [Configuration](/operations/configuration).
 
