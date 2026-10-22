@@ -29,7 +29,7 @@ Rules:
 
 ## The `unauthenticated` label
 
-On arrival Inbot reads the `Authentication-Results` header added by the receiving mail provider. If any of SPF, DKIM, or DMARC reports `pass` in a trusted header, the message is treated as authenticated. In every other case, including no header, a malformed header, or only failures, the message gets the `unauthenticated` label next to `received` and `unread`.
+On arrival Inbot reads the `Authentication-Results` header added by the receiving mail provider. Only the topmost header with a trusted authserv-id is evaluated; lower headers are ignored even if they pass. If any of SPF, DKIM, or DMARC reports `pass` in it, the message is treated as authenticated. In every other case, including no header, a malformed header, or only failures, the message gets the `unauthenticated` label next to `received` and `unread`.
 
 - Inbot interprets the receiver's results. It does not perform SPF, DKIM, or DMARC checks itself.
 - `unauthenticated` is a warning, not a ban. Messages are still stored.
