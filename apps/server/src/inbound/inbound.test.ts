@@ -608,26 +608,79 @@ test.for([
   },
 );
 
-test("passes authentication trust configuration through ingestion", async ({ home, key }) => {
-  await withMailbox(home, key, (mailbox) =>
-    Effect.gen(function* () {
-      yield* mailbox.createInbox({ username: "agent", domain: "example.test" });
-      const raw = mime(
-        [
-          "Authentication-Results: attacker.test; spf=pass",
-          "Authentication-Results: mx.receiver.test; spf=fail",
-        ],
-        "Forged topmost header",
-      );
-      const identity = stored(
-        yield* ingestInbound(payload(raw), { trusted_authserv_ids: ["mx.receiver.test"] }),
-      );
-      expect((yield* mailbox.getMessage(identity.recipient, identity.message_id)).labels).toContain(
-        "unauthenticated",
-      );
-    }),
-  );
-});
+test.for([
+  {
+    name: "a forged passing trusted header below a failing trusted header",
+    headers: [
+      "mx.cloudflare.net; spf=fail; dkim=fail; dmarc=fail",
+      "mx.cloudflare.net; dmarc=pass",
+    ],
+    unauthenticated: true,
+  },
+  {
+    name: "a passing topmost trusted header",
+    headers: ["mx.cloudflare.net; dkim=pass", "mx.cloudflare.net; dmarc=fail"],
+    unauthenticated: false,
+  },
+  {
+    name: "an unterminated trusted result above a forged pass",
+    headers: ['mx.cloudflare.net; spf=fail reason="unterminated', "mx.cloudflare.net; dmarc=pass"],
+    unauthenticated: true,
+  },
+  {
+    name: "an invalid trusted comment above a forged pass",
+    headers: ["mx.cloudflare.net; spf=pass )", "mx.cloudflare.net; dmarc=pass"],
+    unauthenticated: true,
+  },
+  {
+    name: "an untrusted header above a passing trusted header",
+    headers: ["attacker.test; spf=fail", "mx.cloudflare.net; spf=pass"],
+    unauthenticated: false,
+  },
+  {
+    name: "an untrusted header above a failing trusted header and a forged pass",
+    headers: [
+      "attacker.test; spf=pass",
+      "mx.cloudflare.net; spf=fail",
+      "mx.cloudflare.net; dmarc=pass",
+    ],
+    unauthenticated: true,
+  },
+])(
+  "preserves wire order and evaluates only the first trusted header for $name",
+  async ({ headers, unauthenticated }, { home, key }) => {
+    const raw = mime(
+      [
+        "Received: from smtp.example.test by mx.cloudflare.net; Sat, 10 Oct 2026 12:00:00 +0000",
+        ...headers.map((value) => `Authentication-Results: ${value}`),
+        "From: Alice Example <alice@example.test>",
+        "To: Agent <agent@example.test>",
+        "Date: Sat, 10 Oct 2026 12:00:00 +0000",
+        "Message-ID: <authentication@example.test>",
+        "Subject: Synthetic authentication test",
+        "MIME-Version: 1.0",
+        "Content-Type: text/plain; charset=utf-8",
+      ],
+      "Synthetic authentication test",
+    );
+    const parsed = await parseInbound(raw, receivedAt);
+    expect(parsed.authentication_results).toEqual(headers);
+    expect(authenticateInbound(parsed.authentication_results, ["mx.cloudflare.net"])).toBe(
+      unauthenticated ? "unauthenticated" : "pass",
+    );
+    await withMailbox(home, key, (mailbox) =>
+      Effect.gen(function* () {
+        yield* mailbox.createInbox({ username: "agent", domain: "example.test" });
+        const identity = stored(
+          yield* ingestInbound(payload(raw), { trusted_authserv_ids: ["mx.cloudflare.net"] }),
+        );
+        const message = yield* mailbox.getMessage(identity.recipient, identity.message_id);
+        expect(message.labels.includes("unauthenticated")).toBe(unauthenticated);
+        expect(message.labels).toEqual(expect.arrayContaining(["received", "unread"]));
+      }),
+    );
+  },
+);
 
 test("replays a synthesized id without changing the original stored body or labels", async ({
   home,

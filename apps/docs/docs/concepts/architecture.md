@@ -34,7 +34,7 @@ While your machine is off, mail waits in R2 as ciphertext. It is fetched when th
 
 **Parsing.** The `Message-ID` falls back to a hash of the raw message, and an unparseable `Date` falls back to the receive time. `extracted_text` and `extracted_html` remove quoted history and boilerplate heuristically; the original `text`, `html` and raw MIME are always kept. Attachments are stored in the database.
 
-**Authentication.** Inbot reads Cloudflare's `Authentication-Results` header. If SPF, DKIM or DMARC passed, the message is treated as authenticated; otherwise it gets the `unauthenticated` label. Inbot does not run its own checks and never rejects mail for failed authentication.
+**Authentication.** Inbot reads Cloudflare's `Authentication-Results` header. Only the topmost header whose authserv-id is Cloudflare's (`mx.cloudflare.net`) is evaluated, and any headers below it are ignored even if they pass. If SPF, DKIM or DMARC passed there, the message is treated as authenticated; otherwise it gets the `unauthenticated` label. Inbot does not run its own checks and never rejects mail for failed authentication.
 
 **Threading.** `In-Reply-To` is resolved first, then `References` from newest to oldest, within the same inbox. Subjects never join threads, and a parent that arrives late does not merge existing threads.
 

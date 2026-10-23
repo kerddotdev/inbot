@@ -20,7 +20,7 @@ function clauses(header: string) {
       if (commentDepth === 0) part += " ";
       commentDepth++;
     } else if (character === ")" && !quoted) {
-      if (commentDepth === 0) return [];
+      if (commentDepth === 0) return parts.slice(0, 1);
       commentDepth--;
     } else if (commentDepth > 0) {
       continue;
@@ -31,7 +31,7 @@ function clauses(header: string) {
       part += character;
     }
   }
-  if (commentDepth > 0 || quoted || escaped) return [];
+  if (commentDepth > 0 || quoted || escaped) return parts.slice(0, 1);
   parts.push(part.trim());
   return parts;
 }
@@ -47,8 +47,11 @@ export function authenticateInbound(
     const authservId = service?.match(/^(?:"([^"\\]+)"|([^\s";]+))(?:\s+\d+)?$/);
     const id = authservId?.[1] ?? authservId?.[2];
     if (id === undefined || (trusted.size > 0 && !trusted.has(id.toLowerCase()))) continue;
-    if (results.some((result) => /^(?:spf|dkim|dmarc)(?:\/\d+)?\s*=\s*pass(?:\s|$)/i.test(result)))
-      return "pass";
+    return results.some((result) =>
+      /^(?:spf|dkim|dmarc)(?:\/\d+)?\s*=\s*pass(?:\s|$)/i.test(result),
+    )
+      ? "pass"
+      : "unauthenticated";
   }
   return "unauthenticated";
 }

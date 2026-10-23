@@ -90,14 +90,17 @@ result, and malformed headers fail closed.
 With the default empty `trusted_authserv_ids`, only the topmost
 Authentication-Results header is trusted. This assumes the receiving service
 prepends its own header. A later untrusted `pass` cannot override a failing top
-header. With a configured list, only exact, case-insensitive authserv-id matches
-are considered; the topmost header is not implicitly trusted in that mode.
+header. With a configured list, only the topmost header with an exact,
+case-insensitive authserv-id match is evaluated. Untrusted headers above it are
+skipped, and all headers below it are ignored, including passing results claiming
+the same trusted id. The parser preserves wire order, with index 0 topmost.
 
 An authserv-id is not a cryptographic credential. The receiving transport must
 strip sender-supplied headers claiming its own trusted ids and prepend its
 observed results. This module cannot distinguish a forged header with the same
-id after that trust boundary has been lost. Cloudflare SMTP DMARC rejection is
-outside this unit; ingestion only labels and never rejects based on these results.
+id when no authentic receiver header precedes it. Whether Cloudflare strips such
+sender-supplied headers is unknown. Cloudflare SMTP DMARC rejection is outside
+this unit; ingestion only labels and never rejects based on these results.
 
 ## Cloudflare buffer consumer
 
