@@ -1,6 +1,6 @@
 # Loopback HTTP API
 
-Build with Node 24.21.0 and run against an explicit home:
+Build with Node 24.22.1 and run against an explicit home:
 
 ```sh
 pnpm build

@@ -9,7 +9,7 @@ override both defaults.
 
 ## Development
 
-Requires Node 24.21.0 and pnpm 10.24.0. Build from the workspace root:
+Requires Node 24.22.1 and pnpm 10.24.0. Build from the workspace root:
 
 ```sh
 pnpm install
@@ -26,7 +26,7 @@ dependencies resolve from the root package. No additional dependency is needed.
 
 ## Packaged installation
 
-Release archives include Node 24.21.0, production dependencies with the target's
+Release archives include Node 24.22.1, production dependencies with the target's
 native prebuilds, the server, CLI, inbound Worker bundle, and owner UI. No external
 Node runtime is required. See the [installation guide](https://inbot.kerd.dev/docs/get-started/install)
 for the one-line checksum-verifying installers, supported platforms, updating and removal.

@@ -5,7 +5,7 @@ description: Build and run Inbot from a source checkout, run the checks the proj
 
 ## Requirements
 
-- Node.js 24.21.0 or newer, below 25
+- Node.js 24.22.1 or newer, below 25
 - pnpm 10.24.0
 - An OS keychain, or the test-only memory keychain described below
 

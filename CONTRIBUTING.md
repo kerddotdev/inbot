@@ -10,7 +10,7 @@ Thanks for helping. Read [AGENTS.md](AGENTS.md) first: it describes what Inbot n
 
 ## Development
 
-Use Node 24.21.0 and pnpm 10.24.0:
+Use Node 24.22.1 and pnpm 10.24.0:
 
 ```sh
 pnpm install --frozen-lockfile

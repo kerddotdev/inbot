@@ -5,7 +5,7 @@ description: Build release archives for every platform, smoke-test them locally,
 
 ## Build archives
 
-Packaging runs on macOS or Linux with Node.js exactly 24.21.0, pnpm 10.24.0, `tar`, `zip` and `unzip`:
+Packaging runs on macOS or Linux with Node.js exactly 24.22.1, pnpm 10.24.0, `tar`, `zip` and `unzip`:
 
 ```sh
 pnpm install --frozen-lockfile --ignore-scripts
@@ -20,7 +20,7 @@ pnpm package --target darwin-arm64 --target linux-x64
 | `--output <dir>`  | Release directory, default `dist-release`                                                                             |
 | `--skip-build`    | Reuse an existing complete build                                                                                      |
 
-The output is `inbot-<version>-<target>.tar.gz` (Windows: `.zip`) plus `SHA256SUMS`. One machine can build all six targets: Node.js runtimes are downloaded and verified against nodejs.org's `SHASUMS256.txt`, and the SQLite and keychain native modules come from official npm prebuilds verified against the lockfile's integrity hashes. Nothing is compiled natively. Download caches live in the output's `.cache` directory and are not part of the release.
+The output is `inbot-<version>-<target>.tar.gz` (Windows: `.zip`) plus `SHA256SUMS`. One machine can build all six targets: Node.js runtimes are downloaded and verified against SHA-256 pins in `scripts/package.mjs`. Packaging also fetches nodejs.org's `SHASUMS256.txt` and fails if any pinned checksum disagrees. The SQLite and keychain native modules come from official npm prebuilds verified against the lockfile's integrity hashes. Nothing is compiled natively. Download caches live in the output's `.cache` directory and are not part of the release.
 
 See [Install Inbot](/get-started/install#what-gets-installed) for what each archive contains.
 
