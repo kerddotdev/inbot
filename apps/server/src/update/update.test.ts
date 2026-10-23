@@ -5,7 +5,7 @@ import { dirname, join } from "node:path";
 import { expect, test, vi } from "vitest";
 import { runCommand, type CommandRunner } from "../../../cli/src/service.js";
 import { runCli } from "../../../cli/src/cli.js";
-import { prepareUpdate } from "./install.js";
+import { prepareUpdate, tarProgram } from "./install.js";
 import {
   activeBundle,
   bundlePaths,
@@ -43,7 +43,7 @@ export async function updateFixture(target = `${process.platform}-${process.arch
   await createBundle(join(stage, "inbot"), "0.2.0");
   const archive = `inbot-0.2.0-${target}.${windows ? "zip" : "tar.gz"}`;
   const archivePath = join(root, archive);
-  const packed = await runCommand("tar", [
+  const packed = await runCommand(tarProgram, [
     windows ? "-acf" : "-czf",
     archivePath,
     "-C",
@@ -251,7 +251,7 @@ test("CLI update reinstalls the service on the new runtime and preserves its por
       username: "synthetic",
       health: async () => registered,
       run: async (program: string, args: readonly string[]) => {
-        if (program === "tar" || program.includes("codesign")) return f.run(program, args);
+        if (program === tarProgram || program.includes("codesign")) return f.run(program, args);
         managerCalls.push([...args]);
         if (args.includes("bootout") || args.includes("disable") || args.includes("/Delete"))
           registered = false;
