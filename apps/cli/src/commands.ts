@@ -581,7 +581,7 @@ export const commands: readonly Command[] = [
   {
     name: "credentials fill",
     description:
-      "Type a vault field directly into a matching-origin browser page. The totp field types the current code. Approval grants need --idempotency-key; retry unchanged after owner approval. Requires credential_fill.",
+      "Type a vault field directly into a matching-origin page of an owner-trusted browser. The totp field types the current code. Approval grants need --idempotency-key; retry unchanged after owner approval. Requires credential_fill.",
     endpoint: CredentialsApi.endpoints.inboxes_credentials_fill,
     idempotent: "manual",
     params: credential,
@@ -590,7 +590,7 @@ export const commands: readonly Command[] = [
   {
     name: "credentials capture",
     description:
-      "Capture a matching-origin browser field into the vault; returns refs only. Approval grants need --idempotency-key; retry unchanged after owner approval. Requires credential_fill.",
+      "Capture a matching-origin field from an owner-trusted browser into the vault; returns refs only. Approval grants need --idempotency-key; retry unchanged after owner approval. Requires credential_fill.",
     endpoint: CredentialsApi.endpoints.inboxes_credentials_capture,
     idempotent: "manual",
     params: credential,

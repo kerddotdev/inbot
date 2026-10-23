@@ -32,7 +32,7 @@
 
 - **An inbox for every agent.** Give each agent an address on your own domain, with scoped access through MCP, the CLI or REST. Manage mail, domains and credentials in the owner web app.
 - **Your mail, on your machine.** Mail lives in an encrypted local database. Incoming messages wait encrypted in a Cloudflare buffer while your machine is offline.
-- **A credential vault for agents.** Agents get references, never values. Inbot generates passwords server-side, types them into the browser over CDP after checking the page's origin, and serves TOTP codes. The owner approves uses, answers credential requests and can import or export Bitwarden JSON.
+- **A credential vault for agents.** Agents get references, never values. Inbot generates passwords server-side, types them over CDP into a browser the owner registered, after checking the page's origin, and serves TOTP codes. The owner approves uses, answers credential requests and can import or export Bitwarden JSON.
 - **You decide what leaves.** Give agents read-only access, require your approval before sending, or allow direct sends. The service enforces inbox scope, permissions and send policies on every request.
 
 ## Install
