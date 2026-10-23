@@ -75,6 +75,7 @@ export const CredentialsApi = HttpApiGroup.make("credentials")
       {
         params,
         payload: Vault.CaptureCredentialRequest,
+        headers: Common.SendHeaders,
         success: Vault.Credential,
         error: Errors.WriteErrors,
       },
@@ -84,7 +85,7 @@ export const CredentialsApi = HttpApiGroup.make("credentials")
       error: Errors.ReadErrors,
     }).middleware(OwnerOnly),
     HttpApiEndpoint.put("owner_vault_setSettings", "/v0/owner/vault/settings", {
-      payload: Vault.VaultSettings,
+      payload: Vault.UpdateVaultSettingsRequest,
       success: Vault.VaultSettings,
       error: Errors.WriteErrors,
     }).middleware(OwnerOnly),

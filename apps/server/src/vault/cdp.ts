@@ -124,7 +124,7 @@ class Client {
           const pending = this.pending.get(message.id);
           if (!pending) return;
           if (message.error !== undefined)
-            pending.reject(new CdpError("cdp_protocol", string(record(message.error).message)));
+            pending.reject(new CdpError("cdp_protocol", "CDP command failed"));
           else pending.resolve(message.result);
           this.pending.delete(message.id);
         } catch {

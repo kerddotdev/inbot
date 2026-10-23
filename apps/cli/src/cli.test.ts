@@ -1909,6 +1909,10 @@ test("parses browser fill/capture flags and local owner vault settings show/set"
   );
   const overrides = { env: agentEnv(api, key.api_key) };
   const browser = await fakeCdp({ value: "cli-capture-secret-g2P" });
+  await api.request("/v0/owner/vault/settings", {
+    method: "PUT",
+    body: { cdp_endpoints: [browser.endpoint] },
+  });
   try {
     for (const operation of ["fill", "capture"]) {
       const help = await invoke(api, ["credentials", operation, "--help"]);
@@ -1960,6 +1964,7 @@ test("parses browser fill/capture flags and local owner vault settings show/set"
     const initial = await invoke(api, ["vault", "settings", "show", "--json"]);
     expect(initial.code).toBe(0);
     expect(Schema.decodeUnknownSync(VaultSettings)(JSON.parse(initial.stdout))).toEqual({
+      cdp_endpoints: [browser.endpoint],
       remote_cdp_hosts: [],
     });
     const saved = await invoke(api, [
@@ -1974,6 +1979,7 @@ test("parses browser fill/capture flags and local owner vault settings show/set"
     ]);
     expect(saved.code, saved.stderr).toBe(0);
     expect(Schema.decodeUnknownSync(VaultSettings)(JSON.parse(saved.stdout))).toEqual({
+      cdp_endpoints: [browser.endpoint],
       remote_cdp_hosts: ["browser.test", "*.browserbase.com"],
     });
     for (const args of [
@@ -1993,7 +1999,10 @@ test("parses browser fill/capture flags and local owner vault settings show/set"
       "--json",
     ]);
     expect(disabled.code).toBe(0);
-    expect(JSON.parse(disabled.stdout)).toEqual({ remote_cdp_hosts: [] });
+    expect(JSON.parse(disabled.stdout)).toEqual({
+      remote_cdp_hosts: [],
+      cdp_endpoints: [browser.endpoint],
+    });
     const denied = await agent(api);
     expect(
       (
@@ -2174,4 +2183,80 @@ test("requests and fulfills credentials using field JSON from stdin only with ow
   expect(Schema.decodeUnknownSync(CredentialRequest)(JSON.parse(declined.stdout)).state).toBe(
     "declined",
   );
+});
+
+test("capture CLI passes approval keys and displays the concrete browser sink in owner use requests", async ({
+  api,
+}) => {
+  const credential = Schema.decodeUnknownSync(Credential)(
+    await (
+      await api.request(`/v0/inboxes/${inboxId}/credentials`, {
+        method: "POST",
+        body: { name: "Capture approval", url: "https://example.test" },
+      })
+    ).json(),
+  );
+  const key = await api.run(
+    api.keys.create({
+      inbox_ids: [inboxId],
+      permissions: { credential_fill: true },
+      send_policy: "read_only",
+    }),
+  );
+  const browser = await fakeCdp({ value: "cli-approved-capture" });
+  try {
+    const saved = await invoke(api, [
+      "vault",
+      "settings",
+      "set",
+      "--cdp-endpoints",
+      browser.endpoint,
+      "--json",
+    ]);
+    expect(saved.code, saved.stderr).toBe(0);
+    expect(JSON.parse(saved.stdout)).toMatchObject({ cdp_endpoints: [browser.endpoint] });
+    const args = [
+      "credentials",
+      "capture",
+      inboxId,
+      credential.credential_id,
+      "--cdp-endpoint",
+      `${browser.endpoint}/connect?token=private-token`,
+      "--selector",
+      "#password",
+      "--field",
+      "password",
+      "--idempotency-key",
+      "cli-capture-once",
+      "--json",
+    ];
+    const options = { env: agentEnv(api, key.api_key) };
+    const pending = await invoke(api, args, options);
+    expect(pending.code).toBe(4);
+    expect(pending.stderr).toContain("approval_required");
+    expect(browser.connectionCount).toBe(0);
+    const listed = await invoke(api, ["credentials", "use-requests", "list"]);
+    for (const text of ["capture", browser.endpoint, "#password"])
+      expect(listed.stdout).toContain(text);
+    expect(listed.stdout).not.toContain("private-token");
+    const page = await (await api.request("/v0/credential-use-requests")).json();
+    const { ListCredentialUseRequestsResponse } =
+      await import("../../../packages/contracts/src/credential-use.js");
+    const request = Schema.decodeUnknownSync(ListCredentialUseRequestsResponse)(page).requests[0];
+    if (request === undefined) throw new Error("Expected capture approval request");
+    expect(
+      (await invoke(api, ["credentials", "use-requests", "approve", request.request_id])).code,
+    ).toBe(0);
+    const captured = await invoke(api, args, options);
+    expect(captured.code, captured.stderr).toBe(0);
+    expect(Schema.decodeUnknownSync(Credential)(JSON.parse(captured.stdout)).fields).toEqual([
+      "password",
+    ]);
+    const count = browser.messages.length;
+    expect((await invoke(api, args, options)).code).toBe(4);
+    expect(browser.messages).toHaveLength(count);
+    expect(captured.stdout).not.toContain("cli-approved-capture");
+  } finally {
+    await browser.close();
+  }
 });

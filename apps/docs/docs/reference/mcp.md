@@ -104,7 +104,7 @@ Credential tools call the same vault service as REST. Results contain metadata, 
 | `generate_password`        | `credential_update`  | `inboxId`, `credentialId`, `field`, `mode`, `length`, `rules`                                                                                          |
 | `get_totp_code`            | `credential_totp`    | `inboxId`, `credentialId`. Returns `{ code, expires_at, period }`.                                                                                     |
 | `fill_credential`          | `credential_fill`    | `inboxId`, `credentialId`, `cdp_endpoint`, `selector`, `field`, `url`, `target_id`, `idempotencyKey`. Returns `{ credential_id, field, origin, url }`. |
-| `capture_credential`       | `credential_fill`    | `inboxId`, `credentialId`, `cdp_endpoint`, `selector`, `field`, `url`, `target_id`. Returns credential metadata and references.                        |
+| `capture_credential`       | `credential_fill`    | `inboxId`, `credentialId`, `cdp_endpoint`, `selector`, `field`, `url`, `target_id`, `idempotencyKey`. Returns credential metadata and references.      |
 | `request_credential`       | `credential_request` | `inboxId`, `request` with `name`, `url`, `username`, `fields`, `reason`                                                                                |
 | `get_credential_request`   | `credential_request` | `inboxId`, `requestId`                                                                                                                                 |
 | `list_credential_requests` | `credential_request` | `state`, `limit`, `pageToken`, `ascending`                                                                                                             |
@@ -113,7 +113,8 @@ Credential tools call the same vault service as REST. Results contain metadata, 
 - `cdp_endpoint`, `target_id` and the other browser fields keep their REST names. They are not camelCased.
 - `fill_credential` and `capture_credential` are neither read-only nor idempotent. The main page origin must match the credential, and a `totp` fill types the current code, never the seed. After an uncertain result, inspect the page before retrying.
 - With `use_policy: approval`, `fill_credential` requires `idempotencyKey`. The first call returns `approval_required` with a request ID and does not connect to the browser. Ask the owner to approve, then retry the identical call with the same key. A changed call under the same key returns `idempotency_conflict`; a rejected request returns `missing_permission`.
-- Tunnel requests for fill and capture need an HTTPS or WSS endpoint on a host the owner allowlisted.
+- With `use_policy: approval`, `capture_credential` follows the same rule and also requires `idempotencyKey`.
+- The owner must register the browser first. Local fill and capture need the endpoint's host and port in the owner's trusted browsers, otherwise `missing_permission` before any connection; ask the owner. Tunnel requests need an HTTPS or WSS endpoint on a host the owner allowlisted.
 - `update_credential` is annotated non-idempotent because it can generate a fresh password.
 - Poll `get_credential_request` later while a request is pending. A fulfilled request carries the credential metadata even without `credential_read`.
 

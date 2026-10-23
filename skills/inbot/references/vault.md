@@ -36,7 +36,7 @@ Use `update_credential` to change metadata, set or remove fields, or regenerate.
 
 ## Fill and capture
 
-You need a CDP endpoint the Inbot server can reach:
+You need a CDP endpoint the Inbot server can reach and the owner has registered as a trusted browser (Settings > Trusted browsers, or `inbot vault settings set --cdp-endpoints <origin>`). Loopback is not trusted by default. If a call fails with `missing_permission` and a fix about trusted browsers, ask your human to have the owner register the endpoint; you cannot, and retrying will not help:
 
 - Chrome or Chromium started with `--remote-debugging-port=9222`: `http://127.0.0.1:9222`.
 - Playwright `chromium.launch({ args: ["--remote-debugging-port=9222"] })` or the Puppeteer equivalent.
@@ -60,11 +60,11 @@ Inbot's server connects, checks that the page's main-frame origin matches the cr
 - Fill returns `{ credential_id, field, origin, url }` only.
 - `field: "totp"` types the current code and never the seed. `capture_credential` with `field: "totp"` stores a base32 setup key or `otpauth://` URI shown on the page.
 - `get_totp_code` returns `{ code, expires_at, period }`. Codes last about 30 seconds. Use it only when a form cannot be filled; prefer filling.
-- Errors: origin mismatch is `missing_permission` (the error names the observed origin; navigate to the right site, do not edit origins). A missing page, element or non-editable element is `validation_error`. An unreachable endpoint is `service_unavailable`.
+- Errors: origin mismatch is `missing_permission` (the error does not name the observed origin; navigate to the right site, do not edit origins). A missing page, element or non-editable element is `validation_error`. An unreachable endpoint is `service_unavailable`.
 
 ## Approval
 
-New keys default to `use_policy: approval`. Then `fill_credential` needs an `idempotencyKey`. The first call returns `approval_required` with a request ID in `message` and `fix`, and does nothing else. Ask your human to have the owner approve it, then repeat the identical call with the same key. Approval covers one successful use within 15 minutes; pending requests last 24 hours. A changed call with the same key returns `idempotency_conflict`; a rejected request returns `missing_permission`. After expiry or use, start again with a new key. Capture, generation and TOTP are not gated.
+New keys default to `use_policy: approval`. Then `fill_credential` and `capture_credential` need an `idempotencyKey`. The first call returns `approval_required` with a request ID in `message` and `fix`, and does nothing else. Ask your human to have the owner approve it, then repeat the identical call with the same key. Approval covers one successful use within 15 minutes; pending requests last 24 hours. A changed call with the same key returns `idempotency_conflict`; a rejected request returns `missing_permission`. After expiry or use, start again with a new key. `capture_credential` is gated the same way and needs its own `idempotencyKey`. Generation and TOTP are not gated.
 
 ## Ask the owner
 

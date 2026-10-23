@@ -5,7 +5,7 @@ import {
   CredentialUseKind,
   CredentialUseState,
   ListCredentialUseRequestsQuery,
-  type CredentialUseRequest,
+  CredentialUseRequest,
   type ListCredentialUseRequestsResponse,
 } from "../../../../packages/contracts/src/credential-use.js";
 import { IdempotencyKey } from "../../../../packages/contracts/src/common.js";
@@ -29,6 +29,7 @@ const Row = Schema.Struct({
   credential_ids: Schema.fromJsonString(Schema.Array(Schema.String)),
   fields: Schema.fromJsonString(Schema.Record(Schema.String, Schema.Array(CredentialFieldName))),
   origin: Schema.NullOr(Schema.String),
+  browser: Schema.NullOr(Schema.fromJsonString(CredentialUseRequest.fields.browser)),
   fingerprint: Schema.String,
   state: CredentialUseState,
   created_at: Schema.String,
@@ -46,6 +47,7 @@ export interface UseIntent {
   readonly credentials: readonly UseCredential[];
   readonly fingerprint: string;
   readonly urlHint?: string;
+  readonly browser?: CredentialUseRequest["browser"];
 }
 export interface UseApproval {
   readonly requestId?: string;
@@ -174,9 +176,9 @@ export function checkUseApproval(
     if (inboxId === undefined) throw validationError("No credentials were requested.");
     const id = randomBytes(16).toString("hex");
     db.prepare(`INSERT INTO credential_use_requests
-      (request_id, api_key_id, inbox_id, kind, credential_ids, fields, origin,
+      (request_id, api_key_id, inbox_id, kind, credential_ids, fields, origin, browser,
        idempotency_key, fingerprint, state, created_at, expires_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)`).run(
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)`).run(
       id,
       principal.api_key_id,
       inboxId,
@@ -188,6 +190,7 @@ export function checkUseApproval(
         ),
       ),
       intent.urlHint ?? null,
+      intent.browser === undefined ? null : JSON.stringify(intent.browser),
       key,
       intent.fingerprint,
       new Date(now).toISOString(),
@@ -250,6 +253,7 @@ function wire(db: Database.Database, row: Row): CredentialUseRequest {
       return { credential_id: id, name: credential?.name ?? id, fields: row.fields[id] ?? [] };
     }),
     ...(row.origin === null ? {} : { url_hint: row.origin }),
+    ...(row.browser === null ? {} : { browser: row.browser }),
     state: row.state,
     created_at: row.created_at,
     ...(row.decided_at === null ? {} : { decided_at: row.decided_at }),

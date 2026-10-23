@@ -609,8 +609,9 @@ values are never printed. After an uncertain browser result, inspect the page
 before retrying; these operations are not idempotent.
 
 ```sh
-inbot credentials fill bot@example.test CREDENTIAL_ID --cdp-endpoint http://127.0.0.1:9222 --selector '#password' --field password --json
-inbot credentials capture bot@example.test CREDENTIAL_ID --cdp-endpoint http://127.0.0.1:9222 --selector '#setup-key' --field totp --json
+inbot vault settings set --cdp-endpoints http://127.0.0.1:9222 --json
+inbot credentials fill bot@example.test CREDENTIAL_ID --idempotency-key browser-fill-1 --cdp-endpoint http://127.0.0.1:9222 --selector '#password' --field password --json
+inbot credentials capture bot@example.test CREDENTIAL_ID --idempotency-key browser-capture-1 --cdp-endpoint http://127.0.0.1:9222 --selector '#setup-key' --field totp --json
 inbot vault settings show --json
 inbot vault settings set --remote-cdp-hosts browser.example.com --remote-cdp-hosts '*.browserbase.com' --json
 inbot vault settings set --data '{"remote_cdp_hosts":[]}' --json
@@ -619,10 +620,15 @@ inbot vault settings set --data '{"remote_cdp_hosts":[]}' --json
 The owner `vault settings show`/`set` commands follow the existing grouped
 operation pattern (`transport status`/`configure`, `remote status`/`enable`), under
 a nested settings group. They map to GET/PUT `/v0/owner/vault/settings` and require
-the local owner connection. Set replaces the entire list; an empty list disables
-remote fill/capture. Hostnames are lowercase DNS names or wildcard suffixes, with
+the local owner connection. Set updates supplied lists and preserves omitted keys.
+`--cdp-endpoints` registers trusted browser origins (HTTP/HTTPS/WS/WSS, scheme,
+host and optional port only, no trailing slash). Matching uses hostname, effective
+port and TLS transport, pairing HTTP/WS and HTTPS/WSS. Loopback requires explicit
+registration. Discovery must match the same trusted entry. Empty settings deny
+all browser use. `--data '{"cdp_endpoints":[]}'` clears local registrations.
+An empty `remote_cdp_hosts` list disables remote fill/capture. Hostnames are lowercase DNS names or wildcard suffixes, with
 no schemes, IPs or ports. Wildcards exclude the bare apex. Tunnel browser use
-requires HTTPS/WSS and public DNS addresses; local loopback CDP remains usable.
+requires HTTPS/WSS and public DNS addresses and ignores local `cdp_endpoints`.
 See [browser credential use](../server/src/vault/README.md) for setup and limits.
 rejected. Credential read/create/update/delete/TOTP/run permissions and inbox scope
 apply independently of mail send policy. Events contain field names only.
@@ -681,12 +687,13 @@ Inbot. REST/CLI are the supported surfaces for this operation.
 Omitted create policy defaults to `approval`; metadata and table output include
 its effective value. This is independent of `--send-policy`.
 
-`credentials fill <inbox_id> <credential_id> --idempotency-key <key>` requests
-approval when required by the grant. Fill does not generate a key; supply one
+`credentials fill <inbox_id> <credential_id> --idempotency-key <key>` and
+`credentials capture <inbox_id> <credential_id> --idempotency-key <key>` request
+approval when required by the grant. Neither generates a key; supply one
 and retry the identical target, selector and field with the same key after owner
 approval. The command returns the usual `approval_required` error and exit 4
-while pending. Direct grants and owners can fill without a key. Capture,
-metadata CRUD, generation and TOTP codes keep their existing permissions.
+while pending. Direct grants and owners can fill/capture without a key.
+Metadata CRUD, generation and TOTP codes keep their existing permissions.
 
 `inbot run` generates one key when `--idempotency-key` is omitted. On a pending
 approval it prints `Waiting for owner approval (request <id>)...` to stderr and
@@ -707,7 +714,9 @@ Local owner commands use the same owner-only REST endpoints:
 - `inbot credentials use-requests reject <request_id>`
 
 List supports `--limit`, `--page-token`, `--ascending` and `--json`; decisions
-support `--json`. URL hints are agent claims, not verified browser origins.
+support `--json`. List output includes the use kind, browser endpoint origin and
+selector. Endpoint credentials and query tokens are excluded from metadata; the
+full connect URL remains bound by the fingerprint. URL hints are agent claims, not verified browser origins.
 Pending requests expire after 24 hours; approvals permit one use within 15
 minutes. Expiry does not change stored state; inspect `expires_at`. Same owner
 decisions are idempotent before expiry. Expired/consumed requests need a new key.

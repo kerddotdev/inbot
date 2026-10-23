@@ -541,7 +541,7 @@ export class ApiClient {
   vaultSettings = (signal: AbortSignal) =>
     this.request("/v0/owner/vault/settings", Vault.VaultSettings, { signal });
 
-  setVaultSettings = (body: Vault.VaultSettings) =>
+  setVaultSettings = (body: Vault.UpdateVaultSettingsRequest) =>
     this.request("/v0/owner/vault/settings", Vault.VaultSettings, { method: "PUT", body });
 
   exportCredentials = (inboxId?: string) =>

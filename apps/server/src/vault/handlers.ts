@@ -33,8 +33,10 @@ export const CredentialsLive = HttpApiBuilder.group(ServerApi, "credentials", (h
           vault.fill(params.credential_id, payload, params.inbox_id, headers["idempotency-key"]),
         ),
       )
-      .handle("inboxes_credentials_capture", ({ params, payload }) =>
-        respond(vault.capture(params.credential_id, payload, params.inbox_id)),
+      .handle("inboxes_credentials_capture", ({ params, payload, headers }) =>
+        respond(
+          vault.capture(params.credential_id, payload, params.inbox_id, headers["idempotency-key"]),
+        ),
       )
       .handle("owner_vault_settings", () => respond(vault.settings()))
       .handle("owner_vault_setSettings", ({ payload }) => respond(vault.setSettings(payload)))

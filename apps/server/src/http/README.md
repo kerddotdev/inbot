@@ -186,15 +186,21 @@ normalizes a displayed base32 setup key or otpauth URI. Success records
 `last_used_at` and the corresponding metadata-only event in a short transaction;
 CDP I/O never holds a SQLite transaction.
 
-`GET` and `PUT /v0/owner/vault/settings` read/replace
-`{ remote_cdp_hosts: string[] }`. These are local owner-only routes, blocked through
-the tunnel and absent from MCP. The maximum is 32 lowercase DNS hostnames or
-`*.suffix` patterns, without IPs, schemes or ports. An empty list disables remote
-fill/capture. A wildcard matches subdomains, not the bare suffix. Local requests
-can use any CDP endpoint, including loopback Chrome. Tunnel REST and MCP requests
-require HTTPS/WSS, an allowed host, and exclusively public DNS results. Both the
-discovery endpoint and discovered WebSocket are checked; discovery redirects are
-rejected. Settings > Remote browser hosts edits it in the web UI; REST and the CLI also work.
+`GET` and `PUT /v0/owner/vault/settings` read/update
+`{ remote_cdp_hosts: string[], cdp_endpoints: string[] }`. PUT accepts either key
+or both, retaining omitted values. These are local owner-only routes, blocked
+through the tunnel and absent from MCP. Each list is limited to 32 entries.
+`cdp_endpoints` contains trusted browser origins (HTTP/HTTPS/WS/WSS, no userinfo,
+path, query, fragment or trailing slash). Local requests match hostname, effective
+port and TLS transport, treating HTTP/WS and HTTPS/WSS as pairs. Discovery must
+stay on the same trusted entry. Local endpoints without a matching entry must
+satisfy remote rules. Empty settings deny browser use, including loopback.
+
+`remote_cdp_hosts` accepts lowercase DNS hostnames or `*.suffix` patterns,
+without IPs, schemes or ports. Wildcards exclude the bare suffix. Tunnel REST
+and MCP ignore `cdp_endpoints`: they require HTTPS/WSS, an allowed remote host,
+and exclusively public DNS results. Both the discovery endpoint and discovered
+WebSocket are checked before connecting; discovery redirects are rejected.
 See [browser credential use](../vault/README.md) for browser setup, errors and the
 residual DNS-rebinding risk.
 
@@ -654,13 +660,13 @@ always include the effective policy. Omitted create policy and migrated keys use
 `approval`. OAuth consent accepts the same grant field and issued principals
 carry it. Mail `send_policy` is independent.
 
-Approval agents must send the shared `Idempotency-Key` header on credential fill
+Approval agents must send the shared `Idempotency-Key` header on credential fill/capture
 and `POST /v0/credentials/resolve`. A pending use returns 403
 `approval_required` with its request ID and instructions to retry the same key.
 A different payload with the same key returns `idempotency_conflict`. Approval
 permits one use within 15 minutes; pending requests expire in 24 hours. Expired
 or consumed requests need a new key. Rejection returns `missing_permission`.
-Capture, metadata, generation and TOTP codes keep their existing permissions.
+Metadata, generation and TOTP codes keep their existing permissions.
 
 Owner-only routes, unavailable to agent API keys and OAuth tokens:
 
@@ -671,6 +677,10 @@ Owner-only routes, unavailable to agent API keys and OAuth tokens:
 
 Decisions return metadata with request/key/inbox IDs, optional key name, kind,
 credential names and requested fields, optional `url_hint`, state and timestamps.
+Fill/capture include `browser: { endpoint, selector, target_id? }`, with only the
+CDP origin in `endpoint`. Endpoint userinfo, paths and query tokens are not stored
+in metadata. The fingerprint still binds the entire submitted target. Fill and
+capture share a Store-scoped lock and consume approval in their final transaction.
 URL hints are agent claims, never verified origins. No values or idempotency
 keys are returned. Same decisions are idempotent before expiry; opposite,
 consumed or expired decisions return `validation_error`. Expiry is lazy:

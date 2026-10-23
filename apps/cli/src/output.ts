@@ -73,7 +73,17 @@ export function humanOutput(value: unknown): string {
       "rules",
     ],
     entries: ["entry", "entry_type", "direction", "list_type", "inbox_id", "reason"],
-    requests: ["request_id", "api_key_name", "inbox_id", "kind", "state", "expires_at", "url_hint"],
+    requests: [
+      "request_id",
+      "api_key_name",
+      "inbox_id",
+      "kind",
+      "state",
+      "expires_at",
+      "url_hint",
+      "browser_endpoint",
+      "browser_selector",
+    ],
     credential_requests: [
       "request_id",
       "inbox_id",
@@ -88,7 +98,16 @@ export function humanOutput(value: unknown): string {
     const rows = value[key];
     if (Array.isArray(rows) && rows.every(record)) {
       return (
-        table(rows, columns) +
+        table(
+          key === "requests"
+            ? rows.map((row) => ({
+                ...row,
+                browser_endpoint: record(row.browser) ? row.browser.endpoint : undefined,
+                browser_selector: record(row.browser) ? row.browser.selector : undefined,
+              }))
+            : rows,
+          columns,
+        ) +
         (typeof value.next_page_token === "string"
           ? `Next page token: ${cell(value.next_page_token)}\n`
           : "")

@@ -36,11 +36,18 @@ test("approval contracts expose only metadata, owner-only decisions, and the sha
   };
   const decode = Schema.decodeUnknownSync(CredentialUseRequest, { onExcessProperty: "error" });
   expect(decode(request)).toEqual(request);
+  const capture = {
+    ...request,
+    kind: "capture",
+    browser: { endpoint: "http://127.0.0.1:9222", selector: "#password", target_id: "page-1" },
+  };
+  expect(decode(capture)).toEqual(capture);
   expect(() => decode({ ...request, values: { password: "secret" } })).toThrow();
   for (const endpoint of Object.values(CredentialUseApi.endpoints))
     expect(endpoint.middlewares.has(OwnerOnly)).toBe(true);
   for (const endpoint of [
     CredentialsApi.endpoints.inboxes_credentials_fill,
+    CredentialsApi.endpoints.inboxes_credentials_capture,
     CredentialsApi.endpoints.credentials_resolve,
   ]) {
     if (endpoint.headers === undefined) throw new Error("Expected idempotency headers");
@@ -61,6 +68,18 @@ test("approval contracts expose only metadata, owner-only decisions, and the sha
     },
   };
   expect(Schema.decodeUnknownSync(Event)(event)).toEqual(event);
+  for (const event_type of [
+    "credential.use_requested",
+    "credential.use_approved",
+    "credential.use_rejected",
+  ])
+    expect(
+      Schema.decodeUnknownSync(Event)({
+        ...event,
+        event_type,
+        credential_use: { ...event.credential_use, kind: "capture" },
+      }),
+    ).toMatchObject({ credential_use: { kind: "capture" } });
   expect(() =>
     Schema.decodeUnknownSync(Event, { onExcessProperty: "error" })({
       ...event,

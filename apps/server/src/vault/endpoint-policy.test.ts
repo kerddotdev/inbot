@@ -1,18 +1,85 @@
 import { expect, test, vi } from "vitest";
 import { checkCdpEndpoint } from "./endpoint-policy.js";
 
-const settings = { remote_cdp_hosts: ["browser.test", "*.browserbase.com"] };
+const settings = { cdp_endpoints: [], remote_cdp_hosts: ["browser.test", "*.browserbase.com"] };
 const publicDns = vi.fn(async () => [{ address: "8.8.8.8", family: 4 }]);
 
-test("permits local CDP without consulting hosts, schemes or DNS", async () => {
+test("denies unregistered local endpoints before DNS and never echoes endpoint credentials", async () => {
   const resolve = vi.fn(async () => {
     throw new Error("DNS must not run");
   });
-  for (const endpoint of ["http://127.0.0.1:9222", "ws://[::1]:9222/page", "https://private.test"])
+  for (const endpoint of [
+    "http://127.0.0.1:9222",
+    "ws://[::1]:9222/page",
+    "https://user:password@private.test/connect?token=private-token",
+  ])
     await expect(
-      checkCdpEndpoint(endpoint, false, { remote_cdp_hosts: [] }, resolve),
-    ).resolves.toBeUndefined();
+      checkCdpEndpoint(endpoint, false, { remote_cdp_hosts: [], cdp_endpoints: [] }, resolve),
+    ).rejects.toMatchObject({
+      code: "missing_permission",
+      fix: expect.stringContaining("Trusted browsers"),
+    });
   expect(resolve).not.toHaveBeenCalled();
+});
+
+test("matches owner browser hostname, effective port and transport while ignoring endpoint tokens", async () => {
+  const resolve = vi.fn(async () => {
+    throw new Error("DNS must not run");
+  });
+  for (const [trusted, endpoint] of [
+    ["http://127.0.0.1:9222", "ws://127.0.0.1:9222/devtools/browser/test"],
+    ["ws://localhost", "http://localhost:80"],
+    ["https://browser.test", "wss://user:password@browser.test:443/connect?token=secret"],
+    ["wss://[::1]:9443", "https://[::1]:9443"],
+  ]) {
+    if (trusted === undefined || endpoint === undefined) throw new Error("Missing test endpoint");
+    await expect(
+      checkCdpEndpoint(
+        endpoint,
+        false,
+        { remote_cdp_hosts: [], cdp_endpoints: [trusted] },
+        resolve,
+      ),
+    ).resolves.toBeUndefined();
+  }
+  for (const endpoint of [
+    "https://localhost:9222",
+    "ws://localhost:9223",
+    "ws://127.0.0.1:9222",
+    "ftp://localhost:9222",
+    "invalid",
+  ])
+    await expect(
+      checkCdpEndpoint(
+        endpoint,
+        false,
+        { remote_cdp_hosts: [], cdp_endpoints: ["http://localhost:9222"] },
+        resolve,
+      ),
+    ).rejects.toMatchObject({ code: "missing_permission" });
+  expect(resolve).not.toHaveBeenCalled();
+});
+
+test("local requests may use remote rules but tunnel requests ignore trusted browser origins", async () => {
+  await expect(
+    checkCdpEndpoint("wss://browser.test/connect?token=secret", false, settings, publicDns),
+  ).resolves.toBeUndefined();
+  await expect(
+    checkCdpEndpoint(
+      "http://127.0.0.1:9222",
+      true,
+      { ...settings, cdp_endpoints: ["http://127.0.0.1:9222"] },
+      publicDns,
+    ),
+  ).rejects.toMatchObject({ code: "missing_permission" });
+  await expect(
+    checkCdpEndpoint(
+      "wss://browser.test",
+      true,
+      { remote_cdp_hosts: [], cdp_endpoints: ["wss://browser.test"] },
+      publicDns,
+    ),
+  ).rejects.toMatchObject({ code: "missing_permission" });
 });
 
 test("matches exact hosts and wildcard subdomains with TLS and no suffix tricks", async () => {
@@ -39,7 +106,7 @@ test("matches exact hosts and wildcard subdomains with TLS and no suffix tricks"
     checkCdpEndpoint(
       "wss://browserbase.com",
       true,
-      { remote_cdp_hosts: ["browserbase.com"] },
+      { remote_cdp_hosts: ["browserbase.com"], cdp_endpoints: [] },
       publicDns,
     ),
   ).resolves.toBeUndefined();
@@ -48,7 +115,12 @@ test("matches exact hosts and wildcard subdomains with TLS and no suffix tricks"
 test("disables remote use by default and rejects empty or failed DNS without leaking details", async () => {
   const resolve = vi.fn(async () => []);
   await expect(
-    checkCdpEndpoint("wss://browser.test", true, { remote_cdp_hosts: [] }, resolve),
+    checkCdpEndpoint(
+      "wss://browser.test",
+      true,
+      { remote_cdp_hosts: [], cdp_endpoints: [] },
+      resolve,
+    ),
   ).rejects.toMatchObject({
     code: "missing_permission",
     message: "Remote credential fill and capture are disabled.",

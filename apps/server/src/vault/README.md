@@ -37,20 +37,30 @@ contains a value. The final transaction rechecks the credential and its origin.
 Browser operations are non-idempotent: after a timeout or final database failure,
 inspect the page and current vault state before retrying.
 
-## Remote endpoint policy
+## Trusted browser policy
 
 Only the dedicated tunnel listener classifies traffic as remote. The REST context
 and each MCP invocation preserve that classification, including when a session
 moves between listeners. Client headers cannot mark requests as local.
 
-Local requests may use any HTTP(S)/WS(S) endpoint, including loopback. Tunnel
-requests require an owner allowlist in GET/PUT `/v0/owner/vault/settings`:
-`{ "remote_cdp_hosts": ["browser.example.com", "*.browserbase.com"] }`.
-The list accepts at most 32 lowercase DNS hostnames or wildcard suffixes, with no
+Local requests require an owner-trusted browser origin in `cdp_endpoints`, or a
+remote host satisfying the rules below. Loopback is not implicitly trusted.
+GET/PUT `/v0/owner/vault/settings` returns both lists:
+`{ "cdp_endpoints": ["http://127.0.0.1:9222"], "remote_cdp_hosts": ["browser.example.com", "*.browserbase.com"] }`.
+PUT updates only supplied keys; omitted keys retain their stored value. Each list
+has at most 32 entries. `cdp_endpoints` accepts HTTP/HTTPS/WS/WSS origins only,
+without userinfo, paths, queries, fragments or trailing slashes. Matching requires
+the same hostname, effective port (80/443 by default) and TLS transport;
+HTTP/WS and HTTPS/WSS are equivalent pairs. A discovered socket must match the
+same trusted entry as the initial endpoint, even if another entry is trusted.
+Tunnel traffic ignores `cdp_endpoints` and always uses remote rules.
+
+`remote_cdp_hosts` accepts lowercase DNS hostnames or wildcard suffixes, with no
 IPs, ports or schemes. Wildcards require a subdomain; list an apex separately.
-An empty list disables remote fill and capture. Owners can replace or clear the
-list through local REST or `inbot vault settings show`/`set`. Agent credentials,
-tunnel requests and MCP cannot manage it. Settings > Remote browser hosts edits the list in the web UI.
+An empty list disables remote fill/capture. Both empty lists deny all browser
+use, including local requests. Register a browser through local owner REST or
+`inbot vault settings set --cdp-endpoints http://127.0.0.1:9222`.
+Agent credentials, tunnel requests and MCP cannot manage settings.
 
 Tunnel endpoints must use HTTPS/WSS. All resolved addresses must be public;
 loopback, private, link-local, unique-local, CGNAT, multicast and reserved ranges
@@ -64,7 +74,7 @@ browser providers and hosts controlled by the owner.
 ## Errors
 
 Every error uses existing wire codes and an actionable fix. Origin mismatch is
-`missing_permission` and includes the observed origin; absent origins are
+`missing_permission` without echoing peer-supplied details; absent origins are
 `validation_error` with a fix to set the credential URL or origins. Missing pages,
 missing elements and non-editable elements are `validation_error`. Unreachable,
 timed-out or invalid CDP connections are `service_unavailable`. Protocol peer
@@ -72,21 +82,21 @@ messages, captured values and endpoint credentials are never echoed in wire
 errors. Scope violations return `not_found` before browser access; missing
 `credential_fill` returns `missing_permission`.
 
-Migration 17 adds owner vault settings with `CREATE TABLE IF NOT EXISTS`, keeping
-migration replay from older versions safe. Existing credential deletion, field
+Migration 17 adds owner vault settings. Migration 20 adds `cdp_endpoints` and
+rebuilds credential use requests to allow capture and store browser metadata,
+preserving existing rows and indexes. Migration replay preserves both settings. Existing credential deletion, field
 removal and inbox cascading delete remain the way to remove captured values.
 
 ## Credential use approvals
 
 Agent grants have an independent `use_policy`: `approval` (the default for new
-and migrated keys, including OAuth grants) or `direct`. Owners bypass it. Only
-browser fill and local credential resolution are gated; capture, metadata CRUD,
+and migrated keys, including OAuth grants) or `direct`. Owners bypass it. Browser fill, capture and local credential resolution are gated; metadata CRUD,
 password generation and the TOTP-code endpoint keep their existing permissions.
 The shared API key and OAuth consent editor lets owners choose either policy.
 Approvals in the web UI lists and decides pending credential use requests; owner REST and CLI routes remain available.
 
-Approval grants must supply `Idempotency-Key` on fill/resolve, or `idempotencyKey`
-on MCP fill. The first call commits a pending request and
+Approval grants must supply `Idempotency-Key` on fill/capture/resolve, or `idempotencyKey`
+on MCP fill/capture. The first call commits a pending request and
 `credential.use_requested`, then returns `approval_required` with its request ID.
 No value is read or CDP connection attempted while pending. Retry the unchanged
 operation with the same key after owner approval. Different intent with the same
@@ -100,9 +110,11 @@ for the same decision before expiry; opposite decisions, consumed requests and
 expired pending/approved requests return `validation_error`.
 
 Migration 18 adds `credential_use_requests` and a guarded `use_policy` column.
-Requests store only IDs, field names, timestamps, a fingerprint and an optional
-agent-claimed URL hint. `url_hint` is not an observed or authorized browser
-origin. The fingerprint binds the entire fill target, selector, credential and
+Requests store IDs, field names, timestamps, a fingerprint, an optional
+agent-claimed URL hint and `browser: { endpoint, selector, target_id? }` for fill
+and capture. The endpoint is the concrete CDP origin, excluding userinfo, path,
+query and fragment. `url_hint` is not an observed or authorized browser
+origin. The fingerprint binds the entire fill/capture target, selector, credential and
 field, or the ordered run refs. Run encryption recipients are per-call transport
 data, so restarting the CLI with the same refs and key can use an approval. Endpoint credentials
 are hashed, never stored in request metadata. Multi-inbox resolve requests emit
@@ -111,13 +123,20 @@ inbox-specific event payloads so scoped readers cannot learn foreign IDs.
 `credential.use_rejected` expose only request ID, inbox, kind, credential IDs and
 field names; visibility requires inbox scope and `credential_read`.
 
-A Store-scoped semaphore serializes fills across REST, MCP and vault instances.
-Successful fill consumes approval in the same final transaction as its usage
+A Store-scoped semaphore serializes fills and captures across REST, MCP and vault instances.
+Successful fill/capture consumes approval in the same final transaction as its usage
 event. CDP failure leaves approval retryable within the window. Resolution
 consumes approval and records all usage events atomically before returning
 ciphertext. Browser effects cannot be rolled back: a CDP timeout, process crash
 or final database failure can leave an uncertain browser outcome. Inspect the
 page before retrying such an outcome, as with direct fill.
+
+Trusting an origin trusts whichever process controls that host and port. If a
+registered local browser stops, another process able to bind its port can
+impersonate CDP and receive approved/direct fills or supply captured values.
+Origin and approval checks cannot authenticate the browser process. Keep the
+browser port protected and remove stale registrations. This also applies to a
+compromised trusted remote provider.
 
 ## Owner-entered credential requests
 

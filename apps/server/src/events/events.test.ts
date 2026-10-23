@@ -1565,6 +1565,10 @@ test("credential-only agents receive scoped metadata events through WebSocket an
   const seed = "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ";
   const vault = makeVault(api.store);
   const browser = await fakeCdp({ value: secret });
+  await api.request("/v0/owner/vault/settings", {
+    method: "PUT",
+    body: { cdp_endpoints: [browser.endpoint] },
+  });
   const run = <A, E>(effect: Effect.Effect<A, E, CurrentPrincipal>) =>
     api.run(effect.pipe(Effect.provideService(CurrentPrincipal, { kind: "owner" })));
   try {

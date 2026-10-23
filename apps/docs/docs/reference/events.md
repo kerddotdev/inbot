@@ -49,7 +49,7 @@ Credential events carry identifiers and field names only, never values, request 
 - Credential events need `credential_read` and a matching inbox scope. Request events need `credential_request`, matching scope and the key that made the request. The owner sees all of them.
 - `credential.used` is written by a successful browser fill (`via: "fill"`, with the checked `origin`) and by `inbot run` resolution (`via: "run"`, no origin; one event per credential, naming the first requested field).
 - An agent reading a TOTP code updates the credential's `last_used_at` but emits no event. Owner reads leave it unchanged.
-- `credential.use_requested` fires when a key with `use_policy: approval` first asks to fill or run. A resolution request that spans several inboxes emits one event per inbox, so scoped readers never see foreign IDs.
+- `credential.use_requested` fires when a key with `use_policy: approval` first asks to fill, capture or run. A resolution request that spans several inboxes emits one event per inbox, so scoped readers never see foreign IDs.
 - Fulfilling a credential request also emits `credential.created`. Importing credentials emits `credential.created` for each item.
 
 - A `message.received` event uses the hidden variant if the message has a hidden label, checked in the order blocked, spam, unauthenticated.

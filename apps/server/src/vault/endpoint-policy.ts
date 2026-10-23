@@ -52,7 +52,18 @@ function denied(message: string) {
   return wireError(
     "missing_permission",
     message,
-    "Ask the owner to add public CDP hosts in Settings, then use an HTTPS or WSS endpoint on an allowed host.",
+    "Ask the owner to register the browser in Settings > Trusted browsers or with inbot vault settings set (cdp_endpoints). Tunnel access requires an allowed remote_cdp_hosts host with public HTTPS or WSS.",
+  );
+}
+
+function sameBrowser(trusted: URL, endpoint: URL) {
+  const tls = (url: URL) => url.protocol === "https:" || url.protocol === "wss:";
+  const port = (url: URL) => url.port || (tls(url) ? "443" : "80");
+  return (
+    ["http:", "https:", "ws:", "wss:"].includes(endpoint.protocol) &&
+    trusted.hostname === endpoint.hostname &&
+    tls(trusted) === tls(endpoint) &&
+    port(trusted) === port(endpoint)
   );
 }
 
@@ -61,11 +72,29 @@ export async function checkCdpEndpoint(
   tunnel: boolean,
   settings: VaultSettings,
   resolve: CdpResolver = (hostname) => lookup(hostname, { all: true }),
+  initialEndpoint: string = endpoint,
 ): Promise<void> {
-  if (!tunnel) return;
+  let url: URL;
+  let initial: URL;
+  try {
+    url = new URL(endpoint);
+    initial = new URL(initialEndpoint);
+  } catch {
+    throw denied("The CDP endpoint is invalid.");
+  }
+  if (!tunnel) {
+    const trusted = settings.cdp_endpoints.find((entry) => sameBrowser(new URL(entry), initial));
+    if (trusted !== undefined) {
+      if (sameBrowser(new URL(trusted), url)) return;
+      throw denied("The discovered CDP socket must belong to the same trusted browser.");
+    }
+  }
   if (settings.remote_cdp_hosts.length === 0)
-    throw denied("Remote credential fill and capture are disabled.");
-  const url = new URL(endpoint);
+    throw denied(
+      tunnel
+        ? "Remote credential fill and capture are disabled."
+        : "The CDP browser is not trusted by the owner.",
+    );
   const hostname = url.hostname;
   if (
     !["https:", "wss:"].includes(url.protocol) ||

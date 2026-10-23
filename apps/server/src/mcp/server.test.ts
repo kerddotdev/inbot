@@ -651,6 +651,10 @@ test("fills and captures without exposing values in MCP content and enforces cre
   const mcp = await client(api, key.api_key);
   const denied = await client(api);
   const browser = await fakeCdp({ value: captured });
+  await api.request("/v0/owner/vault/settings", {
+    method: "PUT",
+    body: { cdp_endpoints: [browser.endpoint] },
+  });
   try {
     const input = {
       inboxId,

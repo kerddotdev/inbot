@@ -93,20 +93,25 @@ async function error(response: Response, code: string) {
   return wire;
 }
 
-for (const kind of ["fill", "run"] as const) {
+for (const kind of ["fill", "capture", "run"] as const) {
   test(`${kind} requests approval before use, deduplicates, binds the intent and consumes exactly once`, async ({
     api,
   }) => {
     const account = await setup(api);
     const browser = await fakeCdp();
+    await api.request("/v0/owner/vault/settings", {
+      method: "PUT",
+      body: { cdp_endpoints: [browser.endpoint] },
+    });
     const path =
-      kind === "fill"
-        ? `/v0/inboxes/${inboxId}/credentials/${account.credential.credential_id}/fill`
+      kind !== "run"
+        ? `/v0/inboxes/${inboxId}/credentials/${account.credential.credential_id}/${kind}`
         : "/v0/credentials/resolve";
     const body =
-      kind === "fill"
+      kind !== "run"
         ? {
-            cdp_endpoint: browser.endpoint,
+            cdp_endpoint: `${browser.endpoint}/connect?token=synthetic-provider-token`,
+            target_id: "page-1",
             selector: "#password",
             field: "password",
             url: "https://example.test/login",
@@ -131,7 +136,13 @@ for (const kind of ["fill", "run"] as const) {
         api_key_name: "Approval agent",
         credentials: [{ name: "Approval account", fields: ["password"] }],
       });
-      expect(row.url_hint).toBe(kind === "fill" ? "https://example.test/login" : undefined);
+      expect(row.url_hint).toBe(kind !== "run" ? "https://example.test/login" : undefined);
+      expect(row.browser).toEqual(
+        kind === "run"
+          ? undefined
+          : { endpoint: browser.endpoint, selector: "#password", target_id: "page-1" },
+      );
+      expect(JSON.stringify(row)).not.toContain("synthetic-provider-token");
       expect(pending.fix).toContain(row.request_id);
       expect(pending.fix).toContain("same idempotency key");
       await error(await use("use-once"), "approval_required");
@@ -139,12 +150,20 @@ for (const kind of ["fill", "run"] as const) {
       await error(
         await use(
           "use-once",
-          kind === "fill"
+          kind !== "run"
             ? { ...body, selector: "#other" }
             : { ...account.resolve, refs: [account.credential.refs.api_key] },
         ),
         "idempotency_conflict",
       );
+      if (kind !== "run")
+        await error(
+          await use("use-once", {
+            ...body,
+            cdp_endpoint: `${browser.endpoint}/connect?token=swapped-token`,
+          }),
+          "idempotency_conflict",
+        );
       expect(browser.requests).toEqual([]);
       expect(browser.connections).toEqual([]);
       expect(
@@ -165,6 +184,28 @@ for (const kind of ["fill", "run"] as const) {
         "missing_permission",
       );
       const approved = await decision(api, row.request_id, "approve");
+      expect(approved.browser).toEqual(row.browser);
+      if (kind !== "run") {
+        await error(
+          await use("use-once", {
+            ...body,
+            cdp_endpoint: `${browser.endpoint}/connect?token=swapped-after-approval`,
+          }),
+          "idempotency_conflict",
+        );
+        await error(
+          await api.request(
+            path.replace(/(?:fill|capture)$/, kind === "fill" ? "capture" : "fill"),
+            {
+              token: account.key.api_key,
+              method: "POST",
+              body,
+              headers: { "idempotency-key": "use-once" },
+            },
+          ),
+          "idempotency_conflict",
+        );
+      }
       expect(await decision(api, row.request_id, "approve")).toEqual(approved);
       expect(Date.parse(approved.expires_at) - Date.parse(approved.decided_at ?? "")).toBe(
         15 * 60_000,
@@ -186,10 +227,18 @@ for (const kind of ["fill", "run"] as const) {
             await decrypt(account.identity.identity, Buffer.from(wire.ciphertext, "base64")),
           ),
         ).toBe(JSON.stringify({ values: { [account.credential.refs.password ?? ""]: secret } }));
-      } else
+      } else if (kind === "fill")
         expect(
           browser.messages.filter((message) => message.method === "Input.insertText"),
         ).toHaveLength(1);
+      if (kind === "capture") {
+        expect(
+          browser.messages.filter((message) => message.method === "Runtime.callFunctionOn"),
+        ).toHaveLength(1);
+        expect(browser.messages.some((message) => message.method === "Input.insertText")).toBe(
+          false,
+        );
+      }
       expect((await first(api)).state).toBe("consumed");
       expect((await error(await use("use-once"), "approval_required")).fix).toContain(
         "new idempotency key",
@@ -248,12 +297,16 @@ for (const kind of ["fill", "run"] as const) {
   test(`${kind} rejection and lazy pending/approved expiry never perform use`, async ({ api }) => {
     const account = await setup(api);
     const browser = await fakeCdp();
+    await api.request("/v0/owner/vault/settings", {
+      method: "PUT",
+      body: { cdp_endpoints: [browser.endpoint] },
+    });
     const path =
-      kind === "fill"
-        ? `/v0/inboxes/${inboxId}/credentials/${account.credential.credential_id}/fill`
+      kind !== "run"
+        ? `/v0/inboxes/${inboxId}/credentials/${account.credential.credential_id}/${kind}`
         : "/v0/credentials/resolve";
     const body =
-      kind === "fill"
+      kind !== "run"
         ? { cdp_endpoint: browser.endpoint, selector: "#password", field: "password" }
         : account.resolve;
     const use = (key: string) =>
@@ -317,55 +370,74 @@ for (const kind of ["fill", "run"] as const) {
   });
 }
 
-test("failed approved fill remains retryable and MCP shares REST approval without owner tools", async ({
-  api,
-}) => {
-  const account = await setup(api);
-  const failure = { method: "Input.insertText", message: "synthetic failure" };
-  const browser = await fakeCdp({ protocolError: failure });
-  const mcp = await client(api, account.key.api_key);
-  const args = {
-    inboxId,
-    credentialId: account.credential.credential_id,
-    cdp_endpoint: browser.endpoint,
-    selector: "#password",
-    field: "password",
-    idempotencyKey: "mcp-use",
-  };
-  try {
-    expect(
-      (await mcp.list()).tools.some((tool) => /use.requests|approve|reject/.test(tool.name)),
-    ).toBe(false);
-    expect((await mcp.call("fill_credential", args)).structuredContent).toMatchObject({
-      code: "approval_required",
+for (const kind of ["fill", "capture"] as const)
+  test(`failed approved ${kind} remains retryable and MCP shares REST approval without owner tools`, async ({
+    api,
+  }) => {
+    const account = await setup(api);
+    const failure = {
+      method: kind === "fill" ? "Input.insertText" : "Runtime.callFunctionOn",
+      message: "synthetic failure",
+    };
+    const browser = await fakeCdp({ protocolError: failure });
+    await api.request("/v0/owner/vault/settings", {
+      method: "PUT",
+      body: { cdp_endpoints: [browser.endpoint] },
     });
-    const row = await first(api);
-    await decision(api, row.request_id, "approve");
-    expect((await mcp.call("fill_credential", args)).structuredContent).toMatchObject({
-      code: "service_unavailable",
-    });
-    expect((await first(api)).state).toBe("approved");
-    failure.method = "never";
-    expect((await mcp.call("fill_credential", args)).isError).not.toBe(true);
-    expect((await first(api)).state).toBe("consumed");
-    expect(
-      browser.messages.filter((message) => message.method === "Input.insertText"),
-    ).toHaveLength(2);
-  } finally {
-    await browser.close();
-  }
-});
+    const mcp = await client(api, account.key.api_key);
+    const args = {
+      inboxId,
+      credentialId: account.credential.credential_id,
+      cdp_endpoint: browser.endpoint,
+      selector: "#password",
+      field: "password",
+      idempotencyKey: "mcp-use",
+    };
+    try {
+      expect(
+        (await mcp.list()).tools.some((tool) => /use.requests|approve|reject/.test(tool.name)),
+      ).toBe(false);
+      expect((await mcp.call(`${kind}_credential`, args)).structuredContent).toMatchObject({
+        code: "approval_required",
+      });
+      const row = await first(api);
+      await decision(api, row.request_id, "approve");
+      expect((await mcp.call(`${kind}_credential`, args)).structuredContent).toMatchObject({
+        code: "service_unavailable",
+      });
+      expect((await first(api)).state).toBe("approved");
+      failure.method = "never";
+      expect((await mcp.call(`${kind}_credential`, args)).isError).not.toBe(true);
+      expect((await first(api)).state).toBe("consumed");
+      expect(
+        browser.messages.filter(
+          (message) =>
+            message.method === (kind === "fill" ? "Input.insertText" : "Runtime.callFunctionOn"),
+        ),
+      ).toHaveLength(2);
+    } finally {
+      await browser.close();
+    }
+  });
 
 test("owner and direct grants bypass approval and migrations preserve effective key policies", async ({
   api,
 }) => {
   const account = await setup(api, "direct");
   const browser = await fakeCdp();
+  await api.request("/v0/owner/vault/settings", {
+    method: "PUT",
+    body: { cdp_endpoints: [browser.endpoint] },
+  });
   try {
     const path = `/v0/inboxes/${inboxId}/credentials/${account.credential.credential_id}/fill`;
     const body = { cdp_endpoint: browser.endpoint, selector: "#password", field: "password" };
     for (const token of [account.key.api_key, api.token]) {
       expect((await api.request(path, { token, method: "POST", body })).status).toBe(200);
+      expect(
+        (await api.request(path.replace(/fill$/, "capture"), { token, method: "POST", body }))
+          .status,
+      ).toBe(200);
       expect(
         (
           await api.request("/v0/credentials/resolve", {
@@ -407,7 +479,7 @@ test("owner and direct grants bypass approval and migrations preserve effective 
   }
 });
 
-test("missing principal policy is safe, capture stays ungated and failed event writes roll back requests and decisions", async ({
+test("missing principal policy gates capture and failed event writes roll back requests and decisions", async ({
   api,
 }) => {
   const account = await setup(api);
@@ -416,7 +488,11 @@ test("missing principal policy is safe, capture stays ungated and failed event w
   if (authenticated?.kind !== "agent") throw new Error("Expected agent");
   const { use_policy: _policy, ...grant } = authenticated.grant;
   const principal = { ...authenticated, grant };
-  const browser = await fakeCdp({ value: "captured-without-approval" });
+  const browser = await fakeCdp({ value: "synthetic-captured-value" });
+  await api.request("/v0/owner/vault/settings", {
+    method: "PUT",
+    body: { cdp_endpoints: [browser.endpoint] },
+  });
   const input = { cdp_endpoint: browser.endpoint, selector: "#password", field: "password" };
   const run = <A, E>(effect: Effect.Effect<A, E, CurrentPrincipal>) =>
     api.run(effect.pipe(Effect.provideService(CurrentPrincipal, principal)));
@@ -428,8 +504,8 @@ test("missing principal policy is safe, capture stays ungated and failed event w
       failure: { code: "validation_error" },
     });
     expect(
-      (await run(vault.capture(account.credential.credential_id, input, inboxId))).credential_id,
-    ).toBe(account.credential.credential_id);
+      await run(Effect.result(vault.capture(account.credential.credential_id, input, inboxId))),
+    ).toMatchObject({ failure: { code: "validation_error" } });
     expect((await requests(api)).count).toBe(0);
     await api.run(
       api.store.use((db) =>
@@ -543,5 +619,87 @@ test("multi-inbox approval events keep their original scopes even when a credent
     } satisfies Principal;
     expect(eventVisible(event, scoped)).toBe(event.inbox_id === inboxId);
     expect(JSON.stringify(event.payload)).not.toContain("foreign-test-secret");
+  }
+});
+
+test("browser approval metadata never persists connect credentials, paths or query tokens", async ({
+  api,
+}) => {
+  const account = await setup(api);
+  for (const kind of ["fill", "capture"] as const) {
+    const endpoint =
+      "wss://synthetic-user:synthetic-password@browser.test:9443/private-connect?token=synthetic-provider-token#fragment";
+    const response = await api.request(
+      `/v0/inboxes/${inboxId}/credentials/${account.credential.credential_id}/${kind}`,
+      {
+        token: account.key.api_key,
+        method: "POST",
+        headers: { "idempotency-key": `metadata-${kind}` },
+        body: { cdp_endpoint: endpoint, selector: "#password", field: "password" },
+      },
+    );
+    await error(response, "approval_required");
+    const row = (await requests(api)).requests.find((request) => request.kind === kind);
+    expect(row?.browser).toEqual({ endpoint: "wss://browser.test:9443", selector: "#password" });
+  }
+  const stored = await api.run(
+    api.store.use((db) => db.prepare("SELECT * FROM credential_use_requests").all()),
+  );
+  for (const value of [stored, await requests(api)])
+    for (const concealed of [
+      "synthetic-user",
+      "synthetic-password",
+      "synthetic-provider-token",
+      "private-connect",
+      "fragment",
+    ])
+      expect(JSON.stringify(value)).not.toContain(concealed);
+});
+
+test("capture consumes its approval atomically with the captured value and event", async ({
+  api,
+}) => {
+  const account = await setup(api);
+  const browser = await fakeCdp({ value: "atomic-capture-value" });
+  try {
+    await api.request("/v0/owner/vault/settings", {
+      method: "PUT",
+      body: { cdp_endpoints: [browser.endpoint] },
+    });
+    const use = () =>
+      api.request(
+        `/v0/inboxes/${inboxId}/credentials/${account.credential.credential_id}/capture`,
+        {
+          token: account.key.api_key,
+          method: "POST",
+          headers: { "idempotency-key": "atomic-capture" },
+          body: { cdp_endpoint: browser.endpoint, selector: "#password", field: "password" },
+        },
+      );
+    await error(await use(), "approval_required");
+    await decision(api, (await first(api)).request_id, "approve");
+    await api.run(
+      api.store.use((db) =>
+        db.exec(
+          "CREATE TRIGGER fail_capture_commit BEFORE INSERT ON event_log WHEN NEW.event_type = 'credential.captured' BEGIN SELECT RAISE(ABORT, 'synthetic failure'); END",
+        ),
+      ),
+    );
+    await error(await use(), "service_unavailable");
+    expect((await first(api)).state).toBe("approved");
+    const vault = makeVault(api.store);
+    const run = <A, E>(effect: Effect.Effect<A, E, CurrentPrincipal>) =>
+      api.run(effect.pipe(Effect.provideService(CurrentPrincipal, { kind: "owner" })));
+    expect(
+      (await run(vault.reveal(account.credential.credential_id, inboxId))).fields.password,
+    ).toBe(secret);
+    await api.run(api.store.use((db) => db.exec("DROP TRIGGER fail_capture_commit")));
+    expect((await use()).status).toBe(200);
+    expect((await first(api)).state).toBe("consumed");
+    expect(
+      (await run(vault.reveal(account.credential.credential_id, inboxId))).fields.password,
+    ).toBe("atomic-capture-value");
+  } finally {
+    await browser.close();
   }
 });

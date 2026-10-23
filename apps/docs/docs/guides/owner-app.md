@@ -64,14 +64,15 @@ Enable or disable the tunnel for a hostname, after confirming the connector down
 
 ## Settings
 
-| Section               | What it does                                                                                                                            |
-| --------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
-| Appearance            | System, light or dark theme, stored in this browser                                                                                     |
-| Mail transport        | Create, verify, save and clear the Cloudflare token. See [Mail transport](/guides/transport).                                           |
-| Allow and block lists | Manage global and inbox lists, and review rejected mail. See [Allow and block lists](/guides/lists).                                    |
-| Quarantine            | Review inbound mail that could not be processed, retry buffer objects and delete them permanently. See [Quarantine](#quarantine).       |
-| Webhooks              | Create webhooks, copy the one-time secret, see failures, enable, disable and delete. See [Webhooks and events](/guides/webhooks).       |
-| Remote browser hosts  | Hosts that remote agents may have Inbot fill passwords into. An empty list disables remote fill. See [Credential vault](/guides/vault). |
+| Section               | What it does                                                                                                                                                                                                                           |
+| --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Appearance            | System, light or dark theme, stored in this browser                                                                                                                                                                                    |
+| Mail transport        | Create, verify, save and clear the Cloudflare token. See [Mail transport](/guides/transport).                                                                                                                                          |
+| Allow and block lists | Manage global and inbox lists, and review rejected mail. See [Allow and block lists](/guides/lists).                                                                                                                                   |
+| Quarantine            | Review inbound mail that could not be processed, retry buffer objects and delete them permanently. See [Quarantine](#quarantine).                                                                                                      |
+| Webhooks              | Create webhooks, copy the one-time secret, see failures, enable, disable and delete. See [Webhooks and events](/guides/webhooks).                                                                                                      |
+| Trusted browsers      | Browser origins, such as `http://127.0.0.1:9222`, that Inbot may connect to for local fill and capture. Empty by default, which refuses all local fill. See [Credential vault](/guides/vault#trusted-browsers-and-the-host-allowlist). |
+| Remote browser hosts  | Hosts that remote agents may have Inbot fill passwords into. An empty list disables remote fill. See [Credential vault](/guides/vault).                                                                                                |
 
 ## Quarantine
 

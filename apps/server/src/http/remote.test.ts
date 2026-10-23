@@ -1122,6 +1122,10 @@ test("guards tunnel CDP in REST and each MCP invocation while keeping vault sett
 }) => {
   await f.run(f.remote.enable({ hostname }));
   const browser = await fakeCdp();
+  await f.request("/v0/owner/vault/settings", {
+    method: "PUT",
+    body: { cdp_endpoints: [browser.endpoint] },
+  });
   try {
     const created = Schema.decodeUnknownSync(Credential)(
       await (

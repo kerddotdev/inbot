@@ -67,9 +67,9 @@ The owner can sign in to the web app over the tunnel. The session cookie becomes
 The [credential vault](/guides/vault) splits by whether a route carries a plaintext value.
 
 - **Reachable:** agent credential routes (metadata, generation, TOTP, fill and capture), credential requests from agents, and the owner decisions that carry no value: listing and approving or rejecting credential use, and declining a credential request. Owner decisions need a browser session, like draft approval.
-- **Blocked:** revealing values, import, export, fulfilling requests and `inbot run` resolution. Cloudflare terminates TLS for the tunnel, so values must not cross it in plaintext. Fulfill and reveal from the Inbot host. The browser host allowlist lives under `/v0/owner/vault/settings`, which is also local only.
+- **Blocked:** revealing values, import, export, fulfilling requests and `inbot run` resolution. Cloudflare terminates TLS for the tunnel, so values must not cross it in plaintext. Fulfill and reveal from the Inbot host. The trusted browser list and host allowlist live under `/v0/owner/vault/settings`, which is also local only.
 
-Fill and capture through the tunnel add rules for the browser endpoint. It must be HTTPS or WSS, on a host in the owner's `remote_cdp_hosts` list, and resolve only to public addresses. With the default empty list, remote fill and capture are off. Approval still applies first when the key's `use_policy` is `approval`.
+Fill and capture through the tunnel add rules for the browser endpoint. It must be HTTPS or WSS, on a host in the owner's `remote_cdp_hosts` list, and resolve only to public addresses. With the default empty list, remote fill and capture are off. The owner's `cdp_endpoints` list does not apply to tunnel requests. Approval still applies first when the key's `use_policy` is `approval`.
 
 ## Connect a cloud agent
 
