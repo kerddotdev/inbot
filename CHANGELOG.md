@@ -2,6 +2,16 @@
 
 Published changes are recorded in [GitHub releases](https://github.com/kerddotdev/inbot/releases), with notes generated from merged pull requests. This file summarizes each release.
 
+## 0.2.1 - 2026-10-22
+
+- Breaking: browser fill and capture now connect only to browsers the owner trusts. Register a local browser under Settings > Trusted browsers or with `inbot vault settings set --cdp-endpoints http://127.0.0.1:9222`; until then local fill and capture fail with `missing_permission`. Loopback is no longer trusted by default. Remote browsers still need an allowlisted HTTPS or WSS host.
+- Credential use approvals show the browser endpoint and field selector, and capture now needs approval and serializes with fill like any other credential use.
+- Inbot still cannot authenticate a CDP peer: a process that takes over a registered browser's port while that browser is stopped can receive fills. Keep registered browsers running and remove stale entries.
+- With trusted authserv-ids, only the topmost trusted `Authentication-Results` header decides the `unauthenticated` label. The label still relies on the receiving provider adding its own header and stripping forged ones.
+- Release archives ship Node.js 24.22.1, verified against SHA-256 pins in the packaging script.
+- On Windows, the updater extracts releases with the system `tar.exe` instead of the first `tar` on PATH.
+- Release updates are still verified by checksums published beside the archive and, on macOS, the Node signature. There is no independent publisher signature yet.
+
 ## 0.2.0 - 2026-10-15
 
 - A credential vault stores logins for each inbox in the encrypted database. Agents see names and `inbot://credentials/<id>/<field>` references, never values, and every use is authorized again against the key's `credential_*` permissions and inbox scope.
