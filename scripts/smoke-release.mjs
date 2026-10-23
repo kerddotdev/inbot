@@ -36,12 +36,11 @@ let output = "";
 let failure = "";
 let ready = false;
 try {
-  await exec(windows ? "tar.exe" : "tar", [
-    windows ? "-xf" : "-xzf",
-    join(directory, archive),
-    "-C",
-    temporary,
-  ]);
+  // A PATH lookup on Windows can find GNU tar, which cannot read zip archives or drive paths.
+  await exec(
+    windows ? join(process.env.SystemRoot ?? "C:\\Windows", "System32", "tar.exe") : "tar",
+    [windows ? "-xf" : "-xzf", join(directory, archive), "-C", temporary],
+  );
   const bundle = join(temporary, "inbot");
   assert.equal(
     await readFile(join(bundle, "LICENSE"), "utf8"),
@@ -61,7 +60,9 @@ try {
   );
   const launcher = join(bundle, windows ? "inbot.cmd" : "inbot");
   const home = join(temporary, "home");
-  const helpEnv = { ...bundledEnv, INBOT_HOME: home, INBOT_TEST_SHIM: launcher };
+  // PowerShell 7 exports its own module path, which stops Windows PowerShell from loading its cmdlets.
+  const { PSModulePath: _, ...shellEnv } = bundledEnv;
+  const helpEnv = { ...shellEnv, INBOT_HOME: home, INBOT_TEST_SHIM: launcher };
   const help = windows
     ? await exec(
         "powershell.exe",
